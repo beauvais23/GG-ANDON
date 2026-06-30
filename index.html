@@ -1,33 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>G&G ANDON</title>
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/main.css">
 
-<title>G&G ANDON</title>
-
-<link rel="manifest" href="manifest.json">
-
-<link rel="stylesheet" href="css/main.css">
-<link rel="stylesheet" href="css/buttons.css">
-<link rel="stylesheet" href="css/responsive.css">
-
-<meta name="theme-color" content="#1B75BC">
-
+    <meta name="theme-color" content="#1B75BC">
 </head>
 
 <body>
 
-<header class="header">
+<header class="top-bar">
 
-    <img src="assets/logo.png" class="logo">
+    <div class="brand">
 
-    <div class="title">
+        <img src="assets/logo.png" alt="G&G Logo" class="logo">
 
-        <h1>G&G ANDON</h1>
+        <div>
+            <h1>G&G ANDON</h1>
+            <p>Production Response System</p>
+        </div>
 
-        <p>Production Response System</p>
+    </div>
+
+    <div class="system-status">
+
+        <div class="status-pill ready">
+            ● READY
+        </div>
+
+        <div id="clock" class="clock">
+            12:00 PM
+        </div>
 
     </div>
 
@@ -35,91 +41,81 @@
 
 <main>
 
-<div class="button quality">
+    <div class="button-grid">
 
-🔴
+        <button class="andon quality">
+            <span class="title">QUALITY ISSUE</span>
+            <span class="subtitle">
+                Immediate Quality Assistance
+            </span>
+        </button>
 
-<span>QUALITY ALERT</span>
+        <button class="andon maintenance">
+            <span class="title">MAINTENANCE NEEDED</span>
+            <span class="subtitle">
+                Machine or Equipment Problem
+            </span>
+        </button>
 
-</div>
+        <button class="andon material">
+            <span class="title">MATERIAL NEEDED</span>
+            <span class="subtitle">
+                Material Shortage
+            </span>
+        </button>
 
-<div class="button maintenance">
+        <button class="andon supervisor">
+            <span class="title">SUPERVISOR NEEDED</span>
+            <span class="subtitle">
+                Operator Assistance
+            </span>
+        </button>
 
-🟠
+        <button class="andon resume">
+            <span class="title">PRODUCTION RESUMED</span>
+            <span class="subtitle">
+                Resume Normal Operation
+            </span>
+        </button>
 
-<span>MAINTENANCE</span>
-
-</div>
-
-<div class="button material">
-
-🟡
-
-<span>MATERIAL SHORTAGE</span>
-
-</div>
-
-<div class="button supervisor">
-
-🔵
-
-<span>SUPERVISOR NEEDED</span>
-
-</div>
-
-<div class="button resume">
-
-🟢
-
-<span>PRODUCTION RESUMED</span>
-
-</div>
+    </div>
 
 </main>
 
 <footer>
 
-<div class="status">
+<div class="footer-grid">
 
 <div>
+<b>Plant</b><br>
+G&G Industrial Lighting
+</div>
 
+<div>
+<b>Department</b><br>
+Production
+</div>
+
+<div>
+<b>Line</b><br>
+LED Assembly
+</div>
+
+<div>
 <b>Station</b><br>
-
-<span id="stationName">End of Line 1</span>
-
+End of Line Inspection
 </div>
 
 <div>
-
-<b>Status</b><br>
-
-<span id="status">READY</span>
-
-</div>
-
-<div>
-
-<b>Network</b><br>
-
-<span id="networkStatus">🟢 ONLINE</span>
-
-</div>
-
-<div>
-
-<b>Time</b><br>
-
-<span id="clock"></span>
-
+<b>Last Alert</b><br>
+None
 </div>
 
 </div>
 
 </footer>
 
-<script src="js/config.js"></script>
 <script src="js/app.js"></script>
-<script src="js/alerts.js"></script>
 
 </body>
 </html>

@@ -1,0 +1,160 @@
+/* -----------------------------
+   G&G ANDON v1.0
+   Main Styles
+------------------------------*/
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:"Segoe UI", Arial, sans-serif;
+}
+
+body{
+    background:#eef2f6;
+    color:#1d1d1d;
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+}
+
+/* ===== HEADER ===== */
+
+.top-bar{
+    background:linear-gradient(90deg,#0b5ea8,#1B75BC);
+    color:white;
+    padding:10px 24px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    box-shadow:0 4px 10px rgba(0,0,0,.20);
+}
+
+.brand{
+    display:flex;
+    align-items:center;
+    gap:24px;
+}
+
+.logo{
+    height:72px;
+    width:auto;
+}
+
+.brand h1{
+    font-size:2.2rem;
+    font-weight:700;
+}
+
+.brand p{
+    font-size:1rem;
+    opacity:.9;
+}
+
+/* ===== STATUS ===== */
+
+.system-status{
+    text-align:right;
+}
+
+.status-pill{
+    display:inline-block;
+    background:#1f9d55;
+    color:white;
+    padding:10px 18px;
+    border-radius:30px;
+    font-weight:700;
+    margin-bottom:10px;
+}
+
+.clock{
+    font-size:2rem;
+    font-weight:700;
+}
+
+/* ===== MAIN ===== */
+
+main{
+    flex:1;
+    padding:25px;
+}
+
+.button-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:28px;
+}
+
+.andon{
+    border:none;
+    border-radius:18px;
+    color:white;
+    cursor:pointer;
+    padding:28px;
+    min-height:175px;
+    text-align:left;
+    transition:all .18s ease;
+    box-shadow:0 5px 12px rgba(0,0,0,.18);
+}
+
+.andon:hover{
+    transform:translateY(-4px);
+}
+
+.andon:active{
+    transform:scale(.98);
+}
+
+.title{
+    display:block;
+    font-size:2.3rem;
+    font-weight:700;
+    margin-bottom:18px;
+}
+
+.subtitle{
+    font-size:1.25rem;
+    opacity:.95;
+}
+
+.quality{
+    background:#d62828;
+}
+
+.maintenance{
+    background:#ef7d00;
+}
+
+.material{
+    background:#e0b600;
+    color:#222;
+}
+
+.supervisor{
+    background:#1565c0;
+}
+
+.resume{
+    background:#2e8b57;
+    grid-column:1 / span 2;
+}
+
+/* ===== FOOTER ===== */
+
+footer{
+    background:white;
+    border-top:1px solid #d7d7d7;
+    padding:18px 24px;
+}
+
+.footer-grid{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:18px;
+}
+
+.footer-grid b{
+    color:#666;
+    display:block;
+    margin-bottom:6px;
+}
