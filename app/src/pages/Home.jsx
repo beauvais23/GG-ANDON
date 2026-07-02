@@ -1,25 +1,50 @@
-import { Box, Typography } from "@mui/material";
+import { useState } from "react";
+import { Box } from "@mui/material";
+
+import Header from "../components/Header";
+import Footer from "../components/Footer";
+import StatusBanner from "../components/StatusBanner";
+import ButtonGrid from "../components/ButtonGrid";
+import AlertScreen from "../components/AlertScreen";
+
+import useClock from "../hooks/useClock";
 
 export default function Home() {
+
+  const time = useClock();
+
+  const [activeAlert, setActiveAlert] = useState(null);
+
+  function handleAlert(alert) {
+    setActiveAlert(alert);
+  }
+
+  function handleResolve() {
+    setActiveAlert(null);
+  }
+
   return (
     <Box
       sx={{
-        height: "100vh",
-        bgcolor: "#f2f4f7",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
+        minHeight: "100vh",
+        background: "#ECEFF1"
       }}
     >
-      <Typography
-        variant="h2"
-        sx={{
-          color: "#005BAA",
-          fontWeight: 700,
-        }}
-      >
-        G&amp;G ANDON
-      </Typography>
+      <Header time={time} />
+
+      {activeAlert ? (
+        <AlertScreen
+          alert={activeAlert}
+          onResolve={handleResolve}
+        />
+      ) : (
+        <>
+          <StatusBanner />
+          <ButtonGrid onAlert={handleAlert} />
+          <Footer />
+        </>
+      )}
+
     </Box>
   );
 }
