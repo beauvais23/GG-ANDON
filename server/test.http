@@ -1,0 +1,9 @@
+POST https://cautious-spork-qvv7j7rw46xghwrx-3001.app.github.dev/alerts
+Content-Type: application/json
+
+{
+    "facility":"Malta",
+    "productionLine":"Gigabay",
+    "workCenter":"Final Test",
+    "type":"QUALITY"
+}

@@ -1,0 +1,26 @@
+{
+  "name": "gg-andon-server",
+  "version": "1.0.0",
+  "description": "Backend API for the G&G Andon System",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "andon",
+    "manufacturing",
+    "express",
+    "sqlite"
+  ],
+  "author": "Bill Beauvais",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}

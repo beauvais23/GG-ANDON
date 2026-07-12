@@ -1,65 +1,81 @@
-import {
-  Box,
-  Typography,
-  Chip,
-  Stack
-} from "@mui/material";
+import { Box, Button, Chip, Typography } from "@mui/material";
+
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import TvIcon from "@mui/icons-material/Tv";
+
+import { useNavigate } from "react-router-dom";
 
 export default function Footer() {
+
+  const navigate = useNavigate();
+
   return (
+
     <Box
       sx={{
-        mt: "auto",
-        px: 3,
-        py: 1.5,
-        borderTop: "1px solid #d9d9d9",
-        backgroundColor: "#ffffff"
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        px: 2,
+        py: 1,
+        bgcolor: "#ECEFF1",
+        borderTop: "1px solid #CFD8DC",
+        flexWrap: "wrap"
       }}
     >
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        flexWrap="wrap"
+
+      <Typography
+        fontWeight="bold"
+        fontSize={15}
       >
-        <Typography
-          variant="body2"
-          color="text.secondary"
-        >
-          <strong>G&G ManufacturingOS</strong> &nbsp; Version 4.1.0
-        </Typography>
+        G&G ManufacturingOS
+      </Typography>
 
-        <Typography
-          variant="body2"
-          color="text.secondary"
-        >
-          Gigabay Production Line • Final Test Work Center
-        </Typography>
+      <Typography
+        fontSize={13}
+        color="text.secondary"
+      >
+        Version 5.2
+      </Typography>
 
-        <Stack
-          direction="row"
-          spacing={1}
-        >
-          <Chip
-            size="small"
-            color="success"
-            label="API Connected"
-          />
+      <Button
+        size="small"
+        variant="contained"
+        startIcon={<DashboardIcon />}
+        onClick={() => navigate("/supervisor")}
+      >
+        Production Manager Dashboard
+      </Button>
 
-          <Chip
-            size="small"
-            color="success"
-            label="SQLite Connected"
-          />
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<TvIcon />}
+        onClick={() => navigate("/wallboard")}
+      >
+        TV Wallboard
+      </Button>
 
-          <Chip
-            size="small"
-            color="warning"
-            label="Google Chat Pending"
-          />
-        </Stack>
+      <Chip
+        size="small"
+        color="success"
+        label="API Connected"
+      />
 
-      </Stack>
+      <Chip
+        size="small"
+        color="success"
+        label="SQLite Connected"
+      />
+
+      <Chip
+        size="small"
+        color="warning"
+        label="Google Chat Pending"
+      />
+
     </Box>
+
   );
+
 }

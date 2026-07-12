@@ -1,92 +1,143 @@
+import { useEffect, useState } from "react";
+
 import {
   Box,
-  Typography,
-  Paper
+  Paper,
+  Typography
 } from "@mui/material";
 
+import Header from "../components/Header";
+import AlertList from "../components/AlertList";
+import DashboardStats from "../components/DashboardStats";
+
+import {
+  getActiveAlerts,
+  resolveAlert,
+  acknowledgeAlert
+} from "../services/api";
+
 import useClock from "../hooks/useClock";
-import { useAlert } from "../context/AlertContext";
 
 export default function Dashboard() {
 
   const time = useClock();
 
-  const { activeAlert } = useAlert();
+  const [alerts, setAlerts] = useState([]);
+
+  async function loadAlerts() {
+
+    try {
+
+      const data = await getActiveAlerts();
+
+      setAlerts(data);
+
+    } catch (err) {
+
+      console.error(err);
+
+    }
+
+  }
+
+  useEffect(() => {
+
+    loadAlerts();
+
+    const timer = setInterval(loadAlerts, 1000);
+
+    return () => clearInterval(timer);
+
+  }, []);
+
+  async function handleResolve(id) {
+
+    await resolveAlert(id);
+
+    loadAlerts();
+
+  }
+
+  async function handleAcknowledge(id) {
+
+    await acknowledgeAlert(id);
+
+    loadAlerts();
+
+  }
 
   return (
 
     <Box
       sx={{
-        p: 4,
-        background: "#ECEFF1",
-        minHeight: "100vh"
+        minHeight: "100vh",
+        background: "#ECEFF1"
       }}
     >
 
-      <Typography
-        variant="h3"
-        fontWeight="bold"
-      >
-        Supervisor Dashboard
-      </Typography>
-
-      <Typography
-        variant="h6"
-        color="text.secondary"
-        sx={{ mb: 4 }}
-      >
-        {time}
-      </Typography>
+      <Header time={time} />
 
       <Paper
-        elevation={5}
+        elevation={2}
         sx={{
           p: 4,
-          borderRadius: 3
+          m: 3,
+          borderRadius: 4
         }}
       >
 
-        {activeAlert ? (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 4
+          }}
+        >
 
-          <>
+          <Box>
 
-            <Typography variant="h4">
-              Active Alert
+            <Typography
+              variant="h3"
+              fontWeight="bold"
+            >
+              Production Response Center
             </Typography>
 
             <Typography
-              variant="h2"
-              color="error"
-              sx={{ mt: 3 }}
+              variant="h6"
+              color="text.secondary"
             >
-              {activeAlert.type}
+              Live Manufacturing Alerts
             </Typography>
 
-            <Typography variant="h5" sx={{ mt: 2 }}>
-              Facility: {activeAlert.facility}
+          </Box>
+
+          <Box textAlign="right">
+
+            <Typography
+              variant="h2"
+              color="error.main"
+              fontWeight="bold"
+            >
+              {alerts.length}
             </Typography>
 
-            <Typography variant="h5">
-              Production Line: {activeAlert.productionLine}
+            <Typography color="text.secondary">
+              Active Alerts
             </Typography>
 
-            <Typography variant="h5">
-              Work Center: {activeAlert.workCenter}
-            </Typography>
+          </Box>
 
-            <Typography variant="h5">
-              Status: {activeAlert.status}
-            </Typography>
+        </Box>
 
-          </>
+        <DashboardStats alerts={alerts} />
 
-        ) : (
-
-          <Typography variant="h4">
-            No Active Alerts
-          </Typography>
-
-        )}
+        <AlertList
+          alerts={alerts}
+          onResolve={handleResolve}
+          onAcknowledge={handleAcknowledge}
+        />
 
       </Paper>
 

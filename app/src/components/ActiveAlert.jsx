@@ -1,6 +1,6 @@
 const config = {
 
-  facility: "Menands",
+  facility: "Malta",
 
   productionLine: "Gigabay",
 

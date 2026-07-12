@@ -1,22 +1,14 @@
 const config = {
-  company: {
-    name: "G&G Industrial Lighting",
-    shortName: "G&G"
-  },
+  company: "G&G Industrial Lighting",
 
-  api: {
-    baseUrl: "http://localhost:3001"
-  },
+  facility: "Malta",
 
-  dashboard: {
-    refreshInterval: 5000
-  },
+  productionLine: "Gigabay",
 
-  workCenter: {
-    id: "FINAL_TEST",
-    name: "Final Test",
-    line: "Gigabay"
-  }
+  workCenter: "Final Test",
+
+  // IMPORTANT: No trailing slash
+  apiBaseUrl: "https://cautious-spork-qvv7j7rw46xghwrx-3001.app.github.dev"
 };
 
 export default config;

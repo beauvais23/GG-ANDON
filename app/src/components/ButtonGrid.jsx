@@ -4,54 +4,52 @@ import SearchIcon from "@mui/icons-material/Search";
 import HandymanIcon from "@mui/icons-material/Handyman";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import GroupsIcon from "@mui/icons-material/Groups";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-
-import { useNavigate } from "react-router-dom";
+import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
 
 import AlertButton from "./AlertButton";
 
 import { createAlert } from "../services/api";
 import { useAlert } from "../context/AlertContext";
+import { useProductionLine } from "../context/ProductionLineContext";
+import config from "../config/config";
 
-export default function ButtonGrid({ onAlert }) {
+export default function ButtonGrid() {
 
-  const navigate = useNavigate();
   const { startAlert } = useAlert();
+
+  const {
+    productionLine
+  } = useProductionLine();
 
   async function handleAlert(type) {
 
-    console.log("================================");
-    console.log("Button pressed:", type);
-
     try {
 
-      const response = await createAlert(type);
+      const response = await createAlert({
 
-      console.log("Server response:", response);
+        facility: config.facility,
+
+        productionLine,
+
+        workCenter: config.workCenter,
+
+        type,
+
+        priority: "NORMAL"
+
+      });
 
       if (response.success) {
 
-        console.log("Starting alert...");
-
         startAlert(response.alert);
-
-        if (onAlert) {
-          onAlert(response.alert);
-        }
-
-        console.log("Navigating to /active");
-
-        navigate("/active");
-
-      } else {
-
-        console.error("Server returned success = false");
 
       }
 
-    } catch (error) {
+    }
 
-      console.error("Unable to create alert:", error);
+    catch (error) {
+
+      console.error(error);
 
     }
 
@@ -61,16 +59,20 @@ export default function ButtonGrid({ onAlert }) {
 
     <Grid
       container
-      spacing={3}
+      spacing={2}
       sx={{
-        mt: 2,
-        px: 4
+        px: 2,
+        py: 2,
+        background: "#263238",
+        borderRadius: 3,
+        mx: 2,
+        mb: 2
       }}
     >
 
-      <Grid size={{ xs: 12, md: 6 }}>
+      <Grid size={{ xs: 12 }}>
         <AlertButton
-          color="#d32f2f"
+          color="#D32F2F"
           icon={<SearchIcon sx={{ fontSize: 60 }} />}
           title="QUALITY"
           subtitle="Quality Assistance"
@@ -80,7 +82,7 @@ export default function ButtonGrid({ onAlert }) {
 
       <Grid size={{ xs: 12, md: 6 }}>
         <AlertButton
-          color="#f57c00"
+          color="#F57C00"
           icon={<HandymanIcon sx={{ fontSize: 60 }} />}
           title="MAINTENANCE"
           subtitle="Equipment Assistance"
@@ -90,7 +92,7 @@ export default function ButtonGrid({ onAlert }) {
 
       <Grid size={{ xs: 12, md: 6 }}>
         <AlertButton
-          color="#fbc02d"
+          color="#FBC02D"
           icon={<Inventory2Icon sx={{ fontSize: 60 }} />}
           title="MATERIAL"
           subtitle="Material Needed"
@@ -100,7 +102,7 @@ export default function ButtonGrid({ onAlert }) {
 
       <Grid size={{ xs: 12, md: 6 }}>
         <AlertButton
-          color="#1976d2"
+          color="#1976D2"
           icon={<GroupsIcon sx={{ fontSize: 60 }} />}
           title="SUPERVISOR"
           subtitle="Supervisor Assistance"
@@ -108,13 +110,13 @@ export default function ButtonGrid({ onAlert }) {
         />
       </Grid>
 
-      <Grid size={{ xs: 12 }}>
+      <Grid size={{ xs: 12, md: 6 }}>
         <AlertButton
-          color="#2e7d32"
-          icon={<CheckCircleIcon sx={{ fontSize: 60 }} />}
-          title="CLEAR ALERT"
-          subtitle="Return System to Ready"
-          onClick={() => handleAlert("CLEAR")}
+          color="#2E7D32"
+          icon={<HealthAndSafetyIcon sx={{ fontSize: 60 }} />}
+          title="SAFETY"
+          subtitle="Safety Assistance"
+          onClick={() => handleAlert("SAFETY")}
         />
       </Grid>
 

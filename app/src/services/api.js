@@ -1,17 +1,18 @@
 import config from "../config/config";
 
-const API = config.api.baseUrl;
+//------------------------------------------------------
+// API Base URL
+//------------------------------------------------------
 
-export async function createAlert(type) {
+const API_URL = config.apiBaseUrl;
 
-  const alert = {
-    type,
-    facility: config.facility,
-    productionLine: config.productionLine,
-    workCenter: config.workCenter
-  };
+//----------------------------------------------------
+// Create Alert
+//----------------------------------------------------
 
-  const response = await fetch(`${API}/alerts`, {
+export async function createAlert(alert) {
+
+  const response = await fetch(`${API_URL}/alerts`, {
 
     method: "POST",
 
@@ -23,38 +24,130 @@ export async function createAlert(type) {
 
   });
 
-  return await response.json();
+  return response.json();
 
 }
 
-export async function getAlerts() {
-
-  const response = await fetch(`${API}/alerts`);
-
-  return await response.json();
-
-}
+//------------------------------------------------------
+// Get Active Alerts
+//------------------------------------------------------
 
 export async function getActiveAlerts() {
 
-  const response = await fetch(`${API}/alerts/active`);
+  const response = await fetch(
+    `${API_URL}/alerts/active`
+  );
 
-  return await response.json();
+  return response.json();
 
 }
 
-export async function resolveAlert(id) {
+//------------------------------------------------------
+// Get All Alerts
+//------------------------------------------------------
+
+export async function getAllAlerts() {
+
+  const response = await fetch(
+    `${API_URL}/alerts`
+  );
+
+  return response.json();
+
+}
+
+//------------------------------------------------------
+// Acknowledge Alert
+//------------------------------------------------------
+
+export async function acknowledgeAlert(id, acknowledgedBy) {
 
   const response = await fetch(
 
-    `${API}/alerts/${id}/resolve`,
+    `${API_URL}/alerts/${id}/acknowledge`,
 
     {
-      method: "PATCH"
+
+      method: "PATCH",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+
+        acknowledgedBy
+
+      })
+
     }
 
   );
 
-  return await response.json();
+  return response.json();
+
+}
+
+//------------------------------------------------------
+// Resolve Alert
+//------------------------------------------------------
+
+export async function resolveAlert(
+
+  id,
+
+  resolvedBy,
+
+  resolutionNotes = ""
+
+) {
+
+  const response = await fetch(
+
+    `${API_URL}/alerts/${id}/resolve`,
+
+    {
+
+      method: "PATCH",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+
+        resolvedBy,
+
+        resolutionNotes
+
+      })
+
+    }
+
+  );
+
+  return response.json();
+
+}
+
+//------------------------------------------------------
+// Cancel Alert
+//------------------------------------------------------
+
+export async function cancelAlert(id) {
+
+  const response = await fetch(
+
+    `${API_URL}/alerts/${id}/cancel`,
+
+    {
+
+      method: "PATCH"
+
+    }
+
+  );
+
+  return response.json();
 
 }

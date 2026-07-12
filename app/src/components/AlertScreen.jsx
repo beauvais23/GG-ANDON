@@ -1,157 +1,219 @@
-import { Paper, Typography, Button, Stack, Box } from "@mui/material";
+import { useEffect, useState } from "react";
 
-import SearchIcon from "@mui/icons-material/Search";
-import HandymanIcon from "@mui/icons-material/Handyman";
-import Inventory2Icon from "@mui/icons-material/Inventory2";
-import GroupsIcon from "@mui/icons-material/Groups";
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  Chip,
+  Stack
+} from "@mui/material";
+
+import CancelIcon from "@mui/icons-material/Cancel";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import PersonIcon from "@mui/icons-material/Person";
 
-import useElapsedTime from "../hooks/useElapsedTime";
+import {
+  cancelAlert,
+  getActiveAlerts
+} from "../services/api";
 
-const alertTypes = {
-  QUALITY: {
-    color: "#d62828",
-    title: "QUALITY ALERT",
-    icon: <SearchIcon sx={{ fontSize: 90 }} />
-  },
+export default function AlertScreen({
 
-  MAINTENANCE: {
-    color: "#f57c00",
-    title: "MAINTENANCE ALERT",
-    icon: <HandymanIcon sx={{ fontSize: 90 }} />
-  },
+  alert,
+  onResolve
 
-  MATERIAL: {
-    color: "#f9c74f",
-    title: "MATERIAL ALERT",
-    icon: <Inventory2Icon sx={{ fontSize: 90, color: "#222" }} />
-  },
+}) {
 
-  SUPERVISOR: {
-    color: "#1565c0",
-    title: "SUPERVISOR REQUEST",
-    icon: <GroupsIcon sx={{ fontSize: 90 }} />
-  },
+  const [currentAlert, setCurrentAlert] = useState(alert);
 
-  PRODUCTION: {
-    color: "#2e7d32",
-    title: "PRODUCTION RESUMED",
-    icon: <CheckCircleIcon sx={{ fontSize: 90 }} />
+  useEffect(() => {
+
+    const timer = setInterval(async () => {
+
+      try {
+
+        const alerts = await getActiveAlerts();
+
+        const updated = alerts.find(a => a.id === alert.id);
+
+        if (!updated) {
+
+          onResolve();
+          return;
+
+        }
+
+        setCurrentAlert(updated);
+
+      }
+
+      catch (err) {
+
+        console.error(err);
+
+      }
+
+    }, 1000);
+
+    return () => clearInterval(timer);
+
+  }, [alert.id, onResolve]);
+
+  async function handleCancel() {
+
+    await cancelAlert(currentAlert.id);
+
+    onResolve();
+
   }
-};
 
-export default function AlertScreen({ alert, onResolve }) {
-
-  const elapsed = useElapsedTime();
-
-  const theme = alertTypes[alert.type];
+  const acknowledged =
+    currentAlert.status === "ACKNOWLEDGED";
 
   return (
-    <Paper
-      elevation={8}
+
+    <Box
       sx={{
-        width: 900,
-        maxWidth: "95%",
-        mx: "auto",
-        mt: 4,
-        borderRadius: 4,
-        overflow: "hidden"
+        p: 5,
+        display: "flex",
+        justifyContent: "center"
       }}
     >
-      {/* Header Banner */}
-      <Box
-        sx={{
-          backgroundColor: theme.color,
-          color: "white",
-          py: 2,
-          textAlign: "center"
-        }}
-      >
-        <Typography
-          variant="h4"
-          fontWeight="bold"
-          letterSpacing={2}
-        >
-          {theme.title}
-        </Typography>
-      </Box>
 
-      {/* Main Content */}
-      <Box
+      <Paper
+        elevation={8}
         sx={{
-          p: 5,
+          width: "100%",
+          maxWidth: 900,
+          p: 6,
+          borderRadius: 4,
           textAlign: "center"
         }}
       >
-        {theme.icon}
 
         <Typography
           variant="h2"
           fontWeight="bold"
-          sx={{ mt: 2 }}
+          color={acknowledged ? "primary.main" : "error.main"}
         >
-          {alert.type}
+
+          {currentAlert.type} ALERT
+
         </Typography>
 
-        <Stack spacing={3} sx={{ mt: 5 }}>
+        <Typography
+          variant="h5"
+          sx={{
+            mt: 2,
+            fontWeight: 500
+          }}
+        >
 
-          <Box>
-            <Typography variant="h6" color="text.secondary">
-              Station
-            </Typography>
+          {acknowledged
+            ? "Help Is On The Way"
+            : "Assistance Requested"}
 
-            <Typography variant="h4" fontWeight="bold">
-              {alert.station}
-            </Typography>
-          </Box>
+        </Typography>
 
-          <Box>
-            <Typography variant="h6" color="text.secondary">
-              Operator
-            </Typography>
+        <Chip
+          sx={{
+            mt: 3,
+            height: 48,
+            fontSize: 18,
+            px: 2
+          }}
+          color={acknowledged ? "primary" : "error"}
+          icon={
+            acknowledged
+              ? <CheckCircleIcon />
+              : undefined
+          }
+          label={
+            acknowledged
+              ? "ACKNOWLEDGED"
+              : "WAITING FOR RESPONSE"
+          }
+        />
 
-            <Typography variant="h4" fontWeight="bold">
-              {alert.operator}
-            </Typography>
-          </Box>
+        {acknowledged && (
 
-          <Box>
-            <Typography variant="h6" color="text.secondary">
-              Elapsed Time
+          <Stack
+            spacing={1}
+            alignItems="center"
+            sx={{
+              mt: 5
+            }}
+          >
+
+            <PersonIcon
+              color="primary"
+              sx={{
+                fontSize: 42
+              }}
+            />
+
+            <Typography
+              variant="overline"
+              color="text.secondary"
+            >
+
+              RESPONDING
+
             </Typography>
 
             <Typography
-              variant="h2"
-              sx={{
-                color: theme.color,
-                fontWeight: "bold",
-                fontFamily: "monospace"
-              }}
+              variant="h4"
+              color="primary"
+              fontWeight="bold"
             >
-              {elapsed}
-            </Typography>
-          </Box>
 
-        </Stack>
+              {currentAlert.acknowledged_by}
+
+            </Typography>
+
+          </Stack>
+
+        )}
+
+        <Typography
+          sx={{
+            mt: 5,
+            fontSize: 22,
+            color: "text.secondary",
+            lineHeight: 1.6
+          }}
+        >
+
+          {acknowledged
+            ? `${currentAlert.acknowledged_by} has acknowledged your request. Please remain at your workstation.`
+            : "Your request has been sent. Please remain at your workstation while a responder is notified."}
+
+        </Typography>
 
         <Button
           variant="contained"
-          color="success"
+          color="error"
           size="large"
-          onClick={onResolve}
+          startIcon={<CancelIcon />}
           sx={{
             mt: 6,
             px: 8,
             py: 2,
-            fontSize: 24,
-            borderRadius: 3
+            fontSize: 20,
+            fontWeight: "bold"
           }}
+          onClick={handleCancel}
         >
-          RESOLVE ALERT
+
+          CANCEL REQUEST
+
         </Button>
 
-      </Box>
+      </Paper>
 
-    </Paper>
+    </Box>
+
   );
+
 }

@@ -1,59 +1,107 @@
-import { Paper, Typography, Box } from "@mui/material";
+import {
+  Paper,
+  Box,
+  Typography
+} from "@mui/material";
 
 export default function AlertButton({
+
   color,
   icon,
   title,
   subtitle,
-  textColor = "white",
   onClick
+
 }) {
+
   return (
+
     <Paper
-      elevation={6}
+      elevation={5}
       onClick={onClick}
       sx={{
-        backgroundColor: color,
-        color: textColor,
-        borderRadius: 4,
+        borderRadius: 3,
         cursor: "pointer",
-        height: 240,
-
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-
-        transition: "all .2s ease",
+        transition: "0.2s",
 
         "&:hover": {
-          transform: "translateY(-4px)",
+          transform: "translateY(-3px)",
           boxShadow: 10
-        },
-
-        "&:active": {
-          transform: "scale(.98)"
         }
       }}
     >
-      <Box sx={{ mb: 2 }}>
-        {icon}
+
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+
+          height: 125,
+
+          px: 5,
+
+          background: "#FFFFFF",
+
+          borderLeft: `12px solid ${color}`,
+
+          borderRadius: 3
+        }}
+      >
+
+        {/* LEFT ICON */}
+
+        <Box
+          sx={{
+            color: color,
+            mr: 4,
+
+            display: "flex",
+            alignItems: "center",
+
+            "& svg": {
+              fontSize: 72
+            }
+          }}
+        >
+          {icon}
+        </Box>
+
+        {/* CENTERED TEXT */}
+
+        <Box
+          sx={{
+            flex: 1,
+            textAlign: "center"
+          }}
+        >
+
+          <Typography
+            sx={{
+              fontWeight: 800,
+              fontSize: 26,
+              letterSpacing: 1
+            }}
+          >
+            {title}
+          </Typography>
+
+          <Typography
+            sx={{
+              color: "text.secondary",
+              fontSize: 16,
+              mt: .5
+            }}
+          >
+            {subtitle}
+          </Typography>
+
+        </Box>
+
       </Box>
 
-      <Typography
-        variant="h3"
-        fontWeight="bold"
-      >
-        {title}
-      </Typography>
-
-      <Typography
-        variant="h6"
-        sx={{ mt: 1 }}
-      >
-        {subtitle}
-      </Typography>
-
     </Paper>
+
   );
+
 }
