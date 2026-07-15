@@ -1,232 +1,262 @@
 import {
-  Paper,
-  Box,
+  Card,
+  CardContent,
   Typography,
   Stack,
   Chip,
-  Button
+  Button,
+  Box,
+  Divider
+  
 } from "@mui/material";
 
+import SearchIcon from "@mui/icons-material/Search";
+import HandymanIcon from "@mui/icons-material/Handyman";
+import Inventory2Icon from "@mui/icons-material/Inventory2";
+import GroupsIcon from "@mui/icons-material/Groups";
+import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
-import alertTypes from "../config/alertTypes";
-import productionLines from "../config/productionLines";
+
+
+const alertTheme = {
+
+  QUALITY: {
+    color: "#D32F2F",
+    title: "QUALITY ALERT",
+    icon: <SearchIcon sx={{ fontSize: 34 }} />
+  },
+
+  MAINTENANCE: {
+    color: "#F57C00",
+    title: "MAINTENANCE ALERT",
+    icon: <HandymanIcon sx={{ fontSize: 34 }} />
+  },
+
+  MATERIAL: {
+    color: "#FBC02D",
+    title: "MATERIAL ALERT",
+    icon: <Inventory2Icon sx={{ fontSize: 34 }} />
+  },
+
+  SUPERVISOR: {
+    color: "#1976D2",
+    title: "SUPERVISOR ALERT",
+    icon: <GroupsIcon sx={{ fontSize: 34 }} />
+  },
+
+  SAFETY: {
+    color: "#2E7D32",
+    title: "SAFETY ALERT",
+    icon: <HealthAndSafetyIcon sx={{ fontSize: 34 }} />
+  }
+
+};
 
 export default function ActiveAlertCard({
 
   alert,
   elapsed,
-  responder,
   onAcknowledge,
   onResolve
 
 }) {
 
-  const theme =
+  const theme = alertTheme[alert.type];
 
-    alertTypes[alert.type] || {
-
-      color: "#546E7A",
-
-      icon: null
-
-    };
-
-  const line =
-
-    productionLines.find(
-
-      p =>
-        p.id === alert.production_line ||
-        p.name === alert.production_line
-
+  const ageSeconds =
+    Math.floor(
+      (Date.now() - Number(alert.requested)) / 1000
     );
 
-  const lineColor = line?.color || "#607D8B";
+  const isCritical =
+    alert.status === "ACTIVE" &&
+    ageSeconds >= 600;
 
-  const acknowledged =
-    alert.status === "ACKNOWLEDGED";
+  
 
   return (
 
-    <Paper
-      elevation={5}
-      sx={{
-        overflow: "hidden",
-        borderRadius: 3
-      }}
+  <Card
+    elevation={isCritical ? 8 : 2}
+    sx={{
+      borderRadius: 3,
+      overflow: "hidden",
+      border: isCritical
+        ? "2px solid #D32F2F"
+        : "1px solid #D9D9D9"
+    }}
+  >
+
+    {/* HEADER */}
+
+<Box
+  sx={{
+    bgcolor: theme.color,
+    color: "white",
+    px: 3,
+    py: 1.5
+  }}
+>
+
+  <Stack
+    direction="row"
+    justifyContent="space-between"
+    alignItems="center"
+  >
+
+    {/* Left Side */}
+
+    <Stack
+      direction="row"
+      spacing={2}
+      alignItems="center"
     >
 
-      {/* Header */}
+      <Box sx={{ display: "flex", alignItems: "center" }}>
+        {theme.icon}
+      </Box>
 
-      <Box
+      <Typography
         sx={{
-          background: theme.color,
-          color: "white",
-          px: 3,
-          py: 2
+          fontSize: 34,
+          fontWeight: 800,
+          letterSpacing: .5
         }}
       >
+        {theme.title}
+      </Typography>
 
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-        >
+      <Chip
+        size="small"
+        icon={
+          alert.status === "ACTIVE"
+            ? <RadioButtonUncheckedIcon />
+            : <CheckCircleIcon />
+        }
+        label={alert.status}
+        sx={{
+          bgcolor: "white",
+          color: theme.color,
+          fontWeight: 700,
+          ml: 1
+        }}
+      />
 
-          <Stack
-            direction="row"
-            spacing={2}
-            alignItems="center"
-          >
+    </Stack>
 
-            {theme.icon}
+    {/* Right Side */}
 
-            <Typography
-              variant="h5"
-              fontWeight={700}
-            >
+    <Stack
+      direction="row"
+      spacing={1}
+      alignItems="center"
+    >
 
-              {alert.type} ALERT
+      <AccessTimeIcon
+        sx={{
+          fontSize: 32
+        }}
+      />
 
-            </Typography>
+      <Typography
+        sx={{
+          fontFamily: "monospace",
+          fontSize: 48,
+          fontWeight: 800,
+          letterSpacing: 1
+        }}
+      >
+        {elapsed}
+      </Typography>
 
-          </Stack>
+    </Stack>
 
-          <Chip
+  </Stack>
 
-            label={alert.status}
+</Box>
 
-            sx={{
-              bgcolor: "rgba(255,255,255,.18)",
-              color: "white",
-              fontWeight: 700
-            }}
+          <CardContent
+  sx={{
+    py: 2,
+    px: 3
+  }}
+>
 
-          />
+  <Stack
+    direction="row"
+    justifyContent="space-between"
+    alignItems="center"
+    spacing={3}
+  >
 
-        </Stack>
+    {/* Location */}
 
-      </Box>
+    <Typography
+      sx={{
+        fontSize: 20,
+        fontWeight: 600,
+        flex: 1
+      }}
+    >
+      {alert.facility}
+      {" • "}
+      {alert.production_line}
+      {" • "}
+      {alert.work_center}
+    </Typography>
 
-      {/* Body */}
+    {/* Right Side */}
 
-      <Box sx={{ p: 3 }}>
+    <Stack
+      direction="row"
+      spacing={2}
+      alignItems="center"
+    >
 
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="flex-start"
-        >
+      {isCritical && (
+        <Chip
+          icon={<WarningAmberIcon />}
+          label="ESCALATION REQUIRED"
+          color="error"
+        />
+      )}
 
-          <Box>
+      <Button
+        variant="contained"
+        disabled={alert.status === "ACKNOWLEDGED"}
+        onClick={() => onAcknowledge(alert.id)}
+        sx={{
+          width: 180,
+          fontWeight: 700
+        }}
+      >
+        ACKNOWLEDGE
+      </Button>
 
-            <Typography
-              variant="h5"
-              fontWeight={700}
-            >
-              {alert.work_center}
-            </Typography>
+      <Button
+        variant="contained"
+        color="success"
+        onClick={() => onResolve(alert.id)}
+        sx={{
+          width: 180,
+          fontWeight: 700
+        }}
+      >
+        RESOLVE
+      </Button>
 
-            <Chip
-              label={alert.production_line}
-              sx={{
-                mt: 1,
-                bgcolor: lineColor,
-                color: "white",
-                fontWeight: 700
-              }}
-            />
+    </Stack>
 
-          </Box>
+  </Stack>
 
-          <Box textAlign="right">
+</CardContent>
 
-            <Typography
-              color="text.secondary"
-            >
-              Elapsed
-            </Typography>
-
-            <Typography
-              sx={{
-                fontSize: 36,
-                fontWeight: 700,
-                fontFamily: "Roboto Mono"
-              }}
-            >
-              {elapsed}
-            </Typography>
-
-          </Box>
-
-        </Stack>
-
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ mt: 3 }}
-        >
-
-          <Typography
-            color="text.secondary"
-          >
-            Responder:
-          </Typography>
-
-          <Typography
-            fontWeight={700}
-          >
-            {responder}
-          </Typography>
-
-        </Stack>
-
-        <Stack
-          direction="row"
-          spacing={2}
-          sx={{ mt: 4 }}
-        >
-
-          {!acknowledged && (
-
-            <Button
-              fullWidth
-              size="large"
-              variant="contained"
-              color="primary"
-              startIcon={
-                <CheckCircleIcon />
-              }
-              onClick={onAcknowledge}
-            >
-
-              ACKNOWLEDGE
-
-            </Button>
-
-          )}
-
-          <Button
-            fullWidth
-            size="large"
-            variant="contained"
-            color="success"
-            startIcon={<TaskAltIcon />}
-            onClick={onResolve}
-          >
-
-            RESOLVE
-
-          </Button>
-
-        </Stack>
-
-      </Box>
-
-    </Paper>
+</Card>
 
   );
 
-}
+}              

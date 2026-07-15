@@ -5,7 +5,8 @@ import {
   Stack,
   Chip,
   Button,
-  Box
+  Box,
+  Divider
 } from "@mui/material";
 
 import SearchIcon from "@mui/icons-material/Search";
@@ -13,32 +14,36 @@ import HandymanIcon from "@mui/icons-material/Handyman";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import GroupsIcon from "@mui/icons-material/Groups";
 import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 
 const alertTheme = {
 
   QUALITY: {
-    color: "#d32f2f",
-    icon: <SearchIcon sx={{ fontSize: 42 }} />
+    color: "#D32F2F",
+    icon: <SearchIcon sx={{ fontSize: 54 }} />
   },
 
   MAINTENANCE: {
-    color: "#f57c00",
-    icon: <HandymanIcon sx={{ fontSize: 42 }} />
+    color: "#F57C00",
+    icon: <HandymanIcon sx={{ fontSize: 54 }} />
   },
 
   MATERIAL: {
-    color: "#fbc02d",
-    icon: <Inventory2Icon sx={{ fontSize: 42 }} />
+    color: "#FBC02D",
+    icon: <Inventory2Icon sx={{ fontSize: 54 }} />
   },
 
   SUPERVISOR: {
-    color: "#1976d2",
-    icon: <GroupsIcon sx={{ fontSize: 42 }} />
+    color: "#1976D2",
+    icon: <GroupsIcon sx={{ fontSize: 54 }} />
   },
 
   SAFETY: {
-    color: "#2e7d32",
-    icon: <HealthAndSafetyIcon sx={{ fontSize: 42 }} />
+    color: "#2E7D32",
+    icon: <HealthAndSafetyIcon sx={{ fontSize: 54 }} />
   }
 
 };
@@ -46,6 +51,8 @@ const alertTheme = {
 export default function ActiveAlertCard({
 
   alert,
+  elapsed,
+  isCritical,
   onAcknowledge,
   onResolve
 
@@ -56,12 +63,37 @@ export default function ActiveAlertCard({
   return (
 
     <Card
-      elevation={8}
+
+      elevation={isCritical ? 14 : 5}
+
       sx={{
+
         borderLeft: `10px solid ${theme.color}`,
+
+        border: isCritical
+          ? "3px solid #D32F2F"
+          : "1px solid rgba(0,0,0,.08)",
+
         borderRadius: 3,
-        mb: 2
+
+        background: isCritical
+          ? "#FFF7F7"
+          : "#FFFFFF",
+
+        transition: ".25s",
+
+        "&:hover": {
+
+          transform: "translateY(-2px)",
+
+          boxShadow: isCritical
+            ? "0 0 30px rgba(211,47,47,.35)"
+            : "0 10px 22px rgba(0,0,0,.12)"
+
+        }
+
       }}
+
     >
 
       <CardContent>
@@ -69,13 +101,15 @@ export default function ActiveAlertCard({
         <Stack
           direction="row"
           justifyContent="space-between"
-          alignItems="center"
+          alignItems="flex-start"
         >
+
+          {/* LEFT SIDE */}
 
           <Stack
             direction="row"
-            spacing={2}
-            alignItems="center"
+            spacing={3}
+            flex={1}
           >
 
             <Box sx={{ color: theme.color }}>
@@ -84,63 +118,220 @@ export default function ActiveAlertCard({
 
             <Box>
 
-              <Typography
-                variant="h5"
-                fontWeight="bold"
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                mb={1}
               >
-                {alert.type}
+
+                <Typography
+                  variant="h5"
+                  fontWeight={800}
+                >
+                  {alert.type}
+                </Typography>
+
+                {isCritical && (
+
+                  <Chip
+
+                    icon={<WarningAmberIcon />}
+
+                    label="CRITICAL"
+
+                    color="error"
+
+                    sx={{
+                      fontWeight: 700
+                    }}
+
+                  />
+
+                )}
+
+              </Stack>
+
+              <Stack spacing={0.5}>
+
+                <Typography variant="caption" color="text.secondary">
+                  FACILITY
+                </Typography>
+
+                <Typography fontWeight={700}>
+                  {alert.facility}
+                </Typography>
+
+                <Typography variant="caption" color="text.secondary">
+                  PRODUCTION LINE
+                </Typography>
+
+                <Typography fontWeight={700}>
+                  {alert.production_line}
+                </Typography>
+
+                <Typography variant="caption" color="text.secondary">
+                  WORK CENTER
+                </Typography>
+
+                <Typography fontWeight={700}>
+                  {alert.work_center}
+                </Typography>
+
+              </Stack>
+
+            </Box>
+
+          </Stack>
+
+          {/* RIGHT SIDE */}
+
+          <Stack
+            spacing={2}
+            alignItems="flex-end"
+            sx={{ minWidth: 240 }}
+          >
+
+            <Chip
+
+              icon={
+                alert.status === "ACTIVE"
+                  ? <RadioButtonUncheckedIcon />
+                  : <CheckCircleIcon />
+              }
+
+              label={alert.status}
+
+              color={
+                alert.status === "ACTIVE"
+                  ? "error"
+                  : "success"
+              }
+
+              sx={{
+                fontWeight: 700,
+                minWidth: 155
+              }}
+
+            />
+
+            <Divider flexItem />
+
+            <Box textAlign="right">
+
+              <Typography
+                variant="caption"
+                color="text.secondary"
+              >
+                RESPONDER
               </Typography>
 
-              <Typography color="text.secondary">
-                {alert.facility}
+              <Typography
+                fontWeight={700}
+              >
+                {alert.responder || "Unassigned"}
               </Typography>
 
-              <Typography color="text.secondary">
-                {alert.production_line}
-              </Typography>
+            </Box>
 
-              <Typography color="text.secondary">
-                {alert.work_center}
+            <Box textAlign="right">
+
+              <Stack
+                direction="row"
+                spacing={1}
+                justifyContent="flex-end"
+                alignItems="center"
+              >
+
+                <AccessTimeIcon
+                  color={
+                    isCritical
+                      ? "error"
+                      : "action"
+                  }
+                />
+
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                >
+                  TIME OPEN
+                </Typography>
+
+              </Stack>
+
+              <Typography
+
+                sx={{
+
+                  fontSize: 42,
+
+                  fontWeight: 800,
+
+                  fontFamily: "monospace",
+
+                  color: isCritical
+                    ? "#D32F2F"
+                    : "#263238"
+
+                }}
+
+              >
+                {elapsed}
               </Typography>
 
             </Box>
 
           </Stack>
 
-          <Stack
-            spacing={2}
-            alignItems="flex-end"
+        </Stack>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Stack
+          direction="row"
+          spacing={2}
+        >
+
+          <Button
+
+            fullWidth
+
+            variant="contained"
+
+            color="primary"
+
+            disabled={alert.status === "ACKNOWLEDGED"}
+
+            onClick={() => onAcknowledge(alert.id)}
+
+            sx={{
+              height: 48,
+              fontWeight: 700
+            }}
+
           >
+            ACKNOWLEDGE
+          </Button>
 
-            <Chip
-              label={alert.status}
-              color="error"
-            />
+          <Button
 
-            <Stack
-              direction="row"
-              spacing={1}
-            >
+            fullWidth
 
-              <Button
-                variant="contained"
-                color="warning"
-                onClick={() => onAcknowledge(alert.id)}
-              >
-                ACKNOWLEDGE
-              </Button>
+            variant="contained"
 
-              <Button
-                variant="contained"
-                color="success"
-                onClick={() => onResolve(alert.id)}
-              >
-                RESOLVE
-              </Button>
+            color="success"
 
-            </Stack>
+            onClick={() => onResolve(alert.id)}
 
-          </Stack>
+            sx={{
+              height: 48,
+              fontWeight: 700
+            }}
+
+          >
+            RESOLVE
+          </Button>
 
         </Stack>
 

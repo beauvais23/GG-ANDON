@@ -58,14 +58,20 @@ export default function Wallboard() {
         ? response
         : response.alerts || [];
 
-      data.sort(
+      data.sort((a, b) => {
 
-        (a, b) =>
+  // ACTIVE alerts always appear first
+  if (a.status !== b.status) {
 
-          Number(a.requested) -
-          Number(b.requested)
+    if (a.status === "ACTIVE") return -1;
+    if (b.status === "ACTIVE") return 1;
 
-      );
+  }
+
+  // Then sort by oldest request first
+  return Number(a.requested) - Number(b.requested);
+
+});
 
       setAlerts(data);
 
@@ -188,6 +194,18 @@ export default function Wallboard() {
     );
 
   }
+  function timerColor(requested) {
+
+  const minutes =
+    (Date.now() - Number(requested)) / 60000;
+
+  if (minutes >= 10) return "#EF4444"; // Red
+
+  if (minutes >= 5) return "#F59E0B"; // Amber
+
+  return "#22C55E"; // Green
+
+}
 
   //--------------------------------------------------
   // Dashboard Totals
@@ -338,74 +356,102 @@ export default function Wallboard() {
         </Box>
 
         <Stack
-          direction="row"
-          spacing={3}
-          sx={{
-            mb: 4
-          }}
-        >
+  direction="row"
+  spacing={3}
+  sx={{ mb: 4 }}
+>
 
-          {[
-            {
-              title: "ACTIVE",
-              value: alerts.length,
-              color: "#EF4444"
-            },
-            {
-              title: "WAITING",
-              value: waiting,
-              color: "#F59E0B"
-            },
-            {
-              title: "ACKNOWLEDGED",
-              value: acknowledged,
-              color: "#22C55E"
-            },
-            {
-              title: "CURRENT TIME",
-              value: time,
-              color: "#3B82F6"
-            }
+  {[
+    {
+      title: "ACTIVE ALERTS",
+      value: alerts.length,
+      color: "#EF4444",
+      subtitle: "Open Requests"
+    },
+    {
+      title: "WAITING",
+      value: waiting,
+      color: "#F59E0B",
+      subtitle: "Needs Response"
+    },
+    {
+      title: "ACKNOWLEDGED",
+      value: acknowledged,
+      color: "#22C55E",
+      subtitle: "Supervisor Assigned"
+    },
+    {
+      title: "CURRENT TIME",
+      value: time,
+      color: "#60A5FA",
+      subtitle: "Facility Time"
+    }
 
-          ].map(card => (
+  ].map(card => (
 
-            <Paper
-              key={card.title}
-              elevation={8}
-              sx={{
-                flex: 1,
-                p: 3,
-                borderRadius: 4,
-                bgcolor: "#1B2536"
-              }}
-            >
+    <Paper
+      key={card.title}
+      elevation={10}
+      sx={{
+        flex: 1,
+        p: 3,
+        borderRadius: 4,
 
-              <Typography
-                sx={{
-                  color: "#94A3B8",
-                  fontWeight: 700,
-                  letterSpacing: 1
-                }}
-              >
-                {card.title}
-              </Typography>
+        background:
+          "linear-gradient(180deg,#243247 0%,#1A2435 100%)",
 
-              <Typography
-                sx={{
-                  mt: 1,
-                  fontSize: 42,
-                  fontWeight: 800,
-                  color: card.color
-                }}
-              >
-                {card.value}
-              </Typography>
+        border:
+          "1px solid rgba(255,255,255,.05)",
 
-            </Paper>
+        transition: ".25s",
 
-          ))}
+        "&:hover": {
 
-        </Stack>
+          transform: "translateY(-4px)",
+
+          boxShadow:
+            "0 14px 30px rgba(0,0,0,.35)"
+        }
+      }}
+    >
+
+      <Typography
+        sx={{
+          color: "#94A3B8",
+          fontWeight: 700,
+          letterSpacing: 1.5,
+          fontSize: 13
+        }}
+      >
+        {card.title}
+      </Typography>
+
+      <Typography
+        sx={{
+          mt: 2,
+          fontSize: 46,
+          fontWeight: 800,
+          color: card.color
+        }}
+      >
+        {card.value}
+      </Typography>
+
+      <Typography
+        sx={{
+          mt: .5,
+          color: "#64748B",
+          fontSize: 14
+        }}
+      >
+        {card.subtitle}
+      </Typography>
+
+    </Paper>
+
+  ))}
+
+</Stack>
 
         <Paper
           elevation={10}
@@ -416,121 +462,188 @@ export default function Wallboard() {
           }}
         >
           <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: "2.4fr 1.3fr 2fr 1.5fr 1.3fr",
-              bgcolor: "#243042",
-              px: 4,
-              py: 2.5
-            }}
-          >
+  sx={{
+    display: "grid",
+    gridTemplateColumns: "2.4fr 1.3fr 2fr 1.5fr 1.3fr",
+    bgcolor: "#2A384E",
+    px: 4,
+    py: 3,
+    borderBottom: "1px solid rgba(255,255,255,.08)"
+  }}
+>
 
-            <Typography fontWeight={700}>
-              ALERT TYPE
-            </Typography>
+  <Typography
+    sx={{
+      color: "#F8FAFC",
+      fontWeight: 800,
+      fontSize: 17,
+      letterSpacing: 1.3
+    }}
+  >
+    🚨 ALERT TYPE
+  </Typography>
 
-            <Typography fontWeight={700}>
-              LINE
-            </Typography>
+  <Typography
+    sx={{
+      color: "#F8FAFC",
+      fontWeight: 800,
+      fontSize: 17,
+      letterSpacing: 1.3
+    }}
+  >
+    🏭 LINE
+  </Typography>
 
-            <Typography fontWeight={700}>
-              WORK CENTER
-            </Typography>
+  <Typography
+    sx={{
+      color: "#F8FAFC",
+      fontWeight: 800,
+      fontSize: 17,
+      letterSpacing: 1.3
+    }}
+  >
+    📍 WORK CENTER
+  </Typography>
 
-            <Typography
-              fontWeight={700}
-              textAlign="center"
-            >
-              STATUS
-            </Typography>
+  <Typography
+    textAlign="center"
+    sx={{
+      color: "#F8FAFC",
+      fontWeight: 800,
+      fontSize: 17,
+      letterSpacing: 1.3
+    }}
+  >
+    ✔ STATUS
+  </Typography>
 
-            <Typography
-              fontWeight={700}
-              textAlign="right"
-            >
-              ELAPSED
-            </Typography>
+  <Typography
+    textAlign="right"
+    sx={{
+      color: "#F8FAFC",
+      fontWeight: 800,
+      fontSize: 17,
+      letterSpacing: 1.3
+    }}
+  >
+    ⏱ ELAPSED
+  </Typography>
 
-          </Box>
+</Box>
 
           <Divider />
 
           {alerts.map((alert, index) => {
 
             const theme = alertTypes[alert.type];
+            const highestPriority =
+  alert.status === "ACTIVE" &&
+  index === 0;
 
             return (
 
               <Box
-                key={alert.id}
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "2.4fr 1.3fr 2fr 1.5fr 1.3fr",
+  key={alert.id}
+  sx={{
+    position: "relative",
 
-                  alignItems: "center",
+    display: "grid",
 
-                  px: 4,
+    gridTemplateColumns:
+      "2.4fr 1.3fr 2fr 1.5fr 1.3fr",
 
-                  py: 2.4,
+    alignItems: "center",
 
-                  bgcolor:
-                    index % 2 === 0
-                      ? "#1C2737"
-                      : "#172131",
+    px: 4,
 
-                  transition: ".2s",
+    py: 2.4,
 
-                  "&:hover": {
-                    bgcolor: "#243247"
-                  },
+    bgcolor: highestPriority
+  ? "#25344B"
+  : index % 2 === 0
+    ? "#1C2737"
+    : "#172131",
+    border: highestPriority
+  ? "2px solid rgba(239,68,68,.45)"
+  : "none",
 
-                  borderBottom:
-                    "1px solid rgba(255,255,255,.06)"
-                }}
-              >
+boxShadow: highestPriority
+  ? "0 0 18px rgba(239,68,68,.18)"
+  : "none",
 
-                {/* Alert Type */}
+    transition: ".2s",
 
-                <Stack
-                  direction="row"
-                  spacing={2}
-                  alignItems="center"
-                >
+    "&:hover": {
+      bgcolor: "#243247"
+    },
 
-                  <Avatar
-                    sx={{
-                      bgcolor: theme.color,
-                      width: 52,
-                      height: 52
-                    }}
-                  >
-                    {theme.icon}
-                  </Avatar>
+    borderBottom:
+      "1px solid rgba(255,255,255,.06)"
+  }}
+>
 
-                  <Box>
+  {/* Priority Color Strip */}
 
-                    <Typography
-                      sx={{
-                        fontSize: 22,
-                        fontWeight: 800
-                      }}
-                    >
-                      {theme.label}
-                    </Typography>
+  <Box
+    sx={{
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 8,
+      bgcolor: theme.color,
+      borderTopLeftRadius: 16,
+      borderBottomLeftRadius: 16
+    }}
+  />
 
-                    <Typography
-                      sx={{
-                        color: "#94A3B8",
-                        fontSize: 14
-                      }}
-                    >
-                      Alert #{alert.id}
-                    </Typography>
+  {/* Alert Type */}
 
-                  </Box>
+<Stack
+  direction="row"
+  spacing={2.5}
+  alignItems="center"
+>
 
-                </Stack>
+  <Avatar
+    sx={{
+      bgcolor: theme.color,
+      width: 58,
+      height: 58,
+      boxShadow: `0 0 18px ${theme.color}55`
+    }}
+  >
+    {theme.icon}
+  </Avatar>
+
+  <Box>
+
+  <Typography
+    sx={{
+      fontSize: 30,
+      fontWeight: 900,
+      color: "#FFFFFF",
+      letterSpacing: 1,
+      lineHeight: 1
+    }}
+  >
+    {theme.label.toUpperCase()}
+  </Typography>
+
+  <Typography
+    sx={{
+      mt: 1,
+      color: "#CBD5E1",
+      fontSize: 17,
+      fontWeight: 600
+    }}
+  >
+    Alert #{alert.id}
+  </Typography>
+
+</Box>
+
+</Stack>
 
                 {/* Production Line */}
 
@@ -552,54 +665,79 @@ export default function Wallboard() {
                 {/* Work Center */}
 
                 <Typography
-                  sx={{
-                    fontSize: 21,
-                    fontWeight: 600
-                  }}
-                >
-                  {alert.work_center}
-                </Typography>
+  sx={{
+    fontSize: 24,
+    fontWeight: 700,
+    color: "#F8FAFC",
+    letterSpacing: .3
+  }}
+>
+  {alert.work_center}
+</Typography>
 
                 {/* Status */}
 
                 <Chip
-                  label={alert.status}
-                  sx={{
-                    bgcolor: statusColor(
-                      alert.status
-                    ),
-                    color: "white",
-                    fontWeight: 700,
-                    width: 160,
-                    fontSize: 15
-                  }}
-                />
+  label={alert.status}
+  sx={{
+    bgcolor: statusColor(alert.status),
+
+    color: "#FFFFFF",
+
+    fontWeight: 800,
+
+    fontSize: 15,
+
+    width: 170,
+
+    height: 42,
+
+    borderRadius: "10px",
+
+    letterSpacing: 1,
+
+    boxShadow:
+      alert.status === "ACTIVE"
+        ? "0 0 14px rgba(239,68,68,.45)"
+        : "0 0 14px rgba(34,197,94,.35)",
+
+    "& .MuiChip-label": {
+      px: 2
+    }
+  }}
+/>
 
                 {/* Timer */}
 
                 <Typography
-                  textAlign="right"
-                  sx={{
-                    fontFamily: "Roboto Mono",
-                    fontWeight: 800,
-                    fontSize: 38,
-                    letterSpacing: 2,
+  textAlign="right"
+  sx={{
+    fontFamily: "Roboto Mono",
 
-                    color:
-                      isOverdue(alert.requested)
-                        ? "#FB7185"
-                        : "white",
+    fontWeight: 900,
 
-                    animation:
-                      isOverdue(alert.requested)
-                        ? "blinker 1s linear infinite"
-                        : "none"
-                  }}
-                >
+    fontSize: 44,
 
-                  {elapsed(alert.requested)}
+    letterSpacing: 2,
 
-                </Typography>
+    color:
+      isOverdue(alert.requested)
+        ? "#FF5252"
+        : "#FFFFFF",
+
+    textShadow:
+      isOverdue(alert.requested)
+        ? "0 0 16px rgba(255,82,82,.8)"
+        : "0 0 8px rgba(255,255,255,.15)",
+
+    animation:
+      isOverdue(alert.requested)
+        ? "blinker .8s linear infinite"
+        : "none"
+  }}
+>
+  {elapsed(alert.requested)}
+</Typography>
 
               </Box>
 
@@ -629,7 +767,7 @@ export default function Wallboard() {
             fontSize: 15
           }}
         >
-          ManufacturingOS v6.1
+          ManufacturingOS v6.2
         </Typography>
 
         <Typography

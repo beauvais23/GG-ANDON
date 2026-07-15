@@ -12,6 +12,7 @@ import {
 import Header from "../components/Header";
 import DashboardStats from "../components/DashboardStats";
 import ActiveAlertCard from "../components/ActiveAlertCard";
+import ResponderSelector from "../components/ResponderSelector";
 
 import useClock from "../hooks/useClock";
 
@@ -64,11 +65,29 @@ export default function ProductionResponseCenter() {
 
       const data = await getActiveAlerts();
 
-      data.sort(
-        (a, b) =>
-          Number(a.requested) -
-          Number(b.requested)
-      );
+    data.sort((a, b) => {
+
+  const aCritical = isCritical(a.requested);
+  const bCritical = isCritical(b.requested);
+
+  // Critical alerts first
+  if (aCritical !== bCritical) {
+    return aCritical ? -1 : 1;
+  }
+
+  // ACTIVE before ACKNOWLEDGED
+  if (a.status !== b.status) {
+
+    if (a.status === "ACTIVE") return -1;
+
+    if (b.status === "ACTIVE") return 1;
+
+  }
+
+  // Then oldest first
+  return Number(a.requested) - Number(b.requested);
+
+});  
 
       setAlerts(data);
 
@@ -133,6 +152,13 @@ export default function ProductionResponseCenter() {
       .padStart(2, "0")}`;
 
   }
+  function isCritical(requested) {
+
+  return (
+    (Date.now() - Number(requested)) / 1000 >= 600
+  );
+
+}
 
   const filteredAlerts = useMemo(() => {
 
@@ -239,45 +265,65 @@ export default function ProductionResponseCenter() {
 
       <Box sx={{ p: 3 }}>
 
+        <Box mb={3}>
+
+  <Typography
+    variant="h3"
+    fontWeight={700}
+  >
+    Production Response Center
+  </Typography>
+
+  <Typography
+    color="text.secondary"
+    sx={{ mt: 0.5, mb: 3 }}
+  >
+    Live Manufacturing Alerts
+  </Typography>
+
+  
+
+</Box>
+
         <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={3}
-        >
+  direction="row"
+  spacing={2}
+  alignItems="stretch"
+  sx={{ mt: 3 }}
+>
 
-          <Box>
+  <Box sx={{ flex: 1 }}>
 
-            <Typography
-              variant="h3"
-              fontWeight={700}
-            >
-              Production Response Center
-            </Typography>
+    <DashboardStats
+      active={activeCount}
+      waiting={waitingCount}
+      acknowledged={acknowledgedCount}
+      oldest={oldestAlert}
+      average={averageAge}
+    />
 
-            <Typography color="text.secondary">
+  </Box>
 
-              Live Manufacturing Alerts
+  <Paper
+    elevation={3}
+    sx={{
+      width: 320,
+      p: 2.5,
+      borderRadius: 3,
+      display: "flex",
+      alignItems: "center"
+    }}
+  >
 
-            </Typography>
+    <ResponderSelector
+      responder={selectedResponder}
+      setResponder={setSelectedResponder}
+      responseTeam={responseTeam}
+    />
 
-          </Box>
+  </Paper>
 
-        </Stack>
-
-        <DashboardStats
-
-          active={activeCount}
-
-          waiting={waitingCount}
-
-          acknowledged={acknowledgedCount}
-
-          oldest={oldestAlert}
-
-          average={averageAge}
-
-        />
+</Stack>
 
         <Paper
           elevation={3}
@@ -299,39 +345,49 @@ export default function ProductionResponseCenter() {
           </Typography>
 
           <Stack
-            direction="row"
-            spacing={1}
-            flexWrap="wrap"
-          >
+  direction="row"
+  spacing={1}
+  useFlexGap
+  flexWrap="wrap"
+>
 
-            {[
-              "ALL",
-              ...Object.keys(alertTypes)
-            ].map(type => (
+  {[
+    "ALL",
+    ...Object.keys(alertTypes)
+  ].map(type => (
 
-              <Chip
+    <Chip
+      key={type}
+      label={type}
 
-                key={type}
+      clickable
 
-                label={type}
+      size="small"
 
-                clickable
+      color={
+        selectedType === type
+          ? "primary"
+          : "default"
+      }
 
-                color={
-                  selectedType === type
-                    ? "primary"
-                    : "default"
-                }
+      onClick={() =>
+        setSelectedType(type)
+      }
 
-                onClick={() =>
-                  setSelectedType(type)
-                }
+      sx={{
+        height: 32,
+        fontWeight: 700,
+        fontSize: 12,
+        px: 0.5,
+        borderRadius: 2
+      }}
+    />
 
-              />
+  ))}
 
-            ))}
+</Stack>
 
-          </Stack>
+            
 
         </Paper>
 
@@ -375,23 +431,25 @@ export default function ProductionResponseCenter() {
 
                 <ActiveAlertCard
 
-                  key={alert.id}
+  key={alert.id}
 
-                  alert={alert}
+  alert={alert}
 
-                  elapsed={elapsed(alert.requested)}
+  elapsed={elapsed(alert.requested)}
 
-                  responder={selectedResponder}
+  isCritical={isCritical(alert.requested)}
 
-                  onAcknowledge={() =>
-                    handleAcknowledge(alert.id)
-                  }
+  responder={selectedResponder}
 
-                  onResolve={() =>
-                    handleResolve(alert.id)
-                  }
+  onAcknowledge={() =>
+    handleAcknowledge(alert.id)
+  }
 
-                />
+  onResolve={() =>
+    handleResolve(alert.id)
+  }
+
+/>
 
               ))}
 
@@ -403,73 +461,7 @@ export default function ProductionResponseCenter() {
 
         <Divider sx={{ my: 3 }} />
 
-        <Paper
-  elevation={3}
-  sx={{
-    mt: 3,
-    p: 3,
-    borderRadius: 3
-  }}
->
-
-  <Typography
-    variant="h5"
-    fontWeight={700}
-    gutterBottom
-  >
-    Response Team
-  </Typography>
-
-  <Typography
-    color="text.secondary"
-    sx={{ mb: 3 }}
-  >
-    Select the person currently responding to production calls.
-  </Typography>
-
-  <Stack
-    direction="row"
-    spacing={2}
-    flexWrap="wrap"
-    useFlexGap
-  >
-
-    {responseTeam.map((person) => (
-
-      <Chip
-
-        key={person.name}
-
-        label={person.name}
-
-        clickable
-
-        size="medium"
-
-        color={
-          selectedResponder === person.name
-            ? "primary"
-            : "default"
-        }
-
-        sx={{
-          fontWeight: 700,
-          fontSize: 15,
-          px: 1,
-          height: 42
-        }}
-
-        onClick={() =>
-          setSelectedResponder(person.name)
-        }
-
-      />
-
-    ))}
-
-  </Stack>
-
-</Paper>    
+           
       </Box>
 
             <Paper
