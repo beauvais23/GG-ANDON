@@ -2,7 +2,6 @@ const { supervisorUrl } = require("../config");
 
 const {
     alertIcons,
-    statusIcons,
     getElapsed,
     formatDate
 } = require("./alertFormatter");
@@ -61,13 +60,14 @@ ______________________________
 
     switch (status) {
 
-        case "CREATED":
+    case "CREATED":
+    case "ACTIVE":
 
-            message += `
+        message += `
 🚨 <b>ACTIVE</b>
 `;
 
-            break;
+        break;
 
         case "ACKNOWLEDGED":
 
