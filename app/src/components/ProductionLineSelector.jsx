@@ -6,7 +6,8 @@ import {
   Stack
 } from "@mui/material";
 
-import productionLines from "../config/productionLines";
+import { useEffect, useState } from "react";
+import { getProductionLines } from "../api/productionLines";
 import { useProductionLine } from "../context/ProductionLineContext";
 
 export default function ProductionLineSelector() {
@@ -15,6 +16,34 @@ export default function ProductionLineSelector() {
     productionLine,
     changeProductionLine
   } = useProductionLine();
+
+  const [productionLines, setProductionLines] = useState([]);
+
+  useEffect(() => {
+
+    async function loadProductionLines() {
+
+      try {
+
+        const lines = await getProductionLines();
+
+        setProductionLines(
+          lines
+            .filter(line => line.active)
+            .sort((a, b) => a.display_order - b.display_order)
+        );
+
+      } catch (err) {
+
+        console.error(err);
+
+      }
+
+    }
+
+    loadProductionLines();
+
+  }, []);
 
   function handleChange(event, newValue) {
 
@@ -25,7 +54,6 @@ export default function ProductionLineSelector() {
   }
 
   return (
-
     <Paper
       elevation={3}
       sx={{
@@ -38,17 +66,20 @@ export default function ProductionLineSelector() {
 
       <Typography
         variant="h5"
-        fontWeight="bold"
         gutterBottom
+        sx={{
+          fontWeight: "bold"
+        }}
       >
         Production Line
       </Typography>
 
       <Typography
-        color="text.secondary"
-        sx={{ mb: 2 }}
-      >
-        Select the production line currently running Final Test.
+        sx={{
+          color: "text.secondary",
+          mb: 2
+        }}>
+        Select the production line
       </Typography>
 
       <ToggleButtonGroup
@@ -89,13 +120,16 @@ export default function ProductionLineSelector() {
 
       <Stack
         direction="row"
-        justifyContent="center"
-        sx={{ mt: 2 }}
-      >
+        sx={{
+          justifyContent: "center",
+          mt: 2
+        }}>
 
         <Typography
           color="primary"
-          fontWeight="bold"
+          sx={{
+            fontWeight: "bold"
+          }}
         >
           Current Line: {productionLine}
         </Typography>
@@ -103,7 +137,6 @@ export default function ProductionLineSelector() {
       </Stack>
 
     </Paper>
-
   );
 
 }

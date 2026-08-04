@@ -17,7 +17,9 @@ import {
   resolveAlert
 } from "../services/api";
 
-export default function ActiveAlertList({ responseTeamMember }) {
+export default function ActiveAlertList({
+  responseTeamMember
+}) {
 
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,21 +29,29 @@ export default function ActiveAlertList({ responseTeamMember }) {
 
     try {
 
-      const response = await getActiveAlerts();
+      const response =
+        await getActiveAlerts();
 
-      const data = Array.isArray(response)
-        ? response
-        : (response.alerts || []);
+      const data =
+        Array.isArray(response)
+          ? response
+          : (response.alerts || []);
 
       data.sort(
-        (a, b) => Number(a.requested) - Number(b.requested)
+        (a, b) =>
+          Number(a.requested) -
+          Number(b.requested)
       );
 
       setAlerts(data);
 
     } catch (err) {
 
-      console.error("Error loading alerts:", err);
+      console.error(
+        "Error loading alerts:",
+        err
+      );
+
       setAlerts([]);
 
     } finally {
@@ -56,9 +66,14 @@ export default function ActiveAlertList({ responseTeamMember }) {
 
     loadAlerts();
 
-    const timer = setInterval(loadAlerts, 2000);
+    const timer =
+      setInterval(
+        loadAlerts,
+        2000
+      );
 
-    return () => clearInterval(timer);
+    return () =>
+      clearInterval(timer);
 
   }, []);
 
@@ -66,13 +81,43 @@ export default function ActiveAlertList({ responseTeamMember }) {
 
     try {
 
-      await acknowledgeAlert(id, responseTeamMember);
+      if (!responseTeamMember) {
+
+        console.error(
+          "No response team member selected."
+        );
+
+        return;
+
+      }
+
+      const response =
+        await acknowledgeAlert(
+          id,
+          responseTeamMember
+        );
+
+      
+
+      if (!response.success) {
+
+        console.error(
+          "Acknowledge failed:",
+          response.message
+        );
+
+        return;
+
+      }
 
       await loadAlerts();
 
     } catch (err) {
 
-      console.error(err);
+      console.error(
+        "Acknowledge Alert Error:",
+        err
+      );
 
     }
 
@@ -82,17 +127,44 @@ export default function ActiveAlertList({ responseTeamMember }) {
 
     try {
 
-      await resolveAlert(
-        id,
-        responseTeamMember,
-        ""
-      );
+      if (!responseTeamMember) {
+
+        console.error(
+          "No response team member selected."
+        );
+
+        return;
+
+      }
+
+      const response =
+        await resolveAlert(
+          id,
+          responseTeamMember,
+          "Resolved"
+        );
+
+      
+
+      if (!response.success) {
+
+        console.error(
+          "Resolve failed:",
+          response.message
+        );
+
+        return;
+
+      }
 
       await loadAlerts();
 
     } catch (err) {
 
-      console.error(err);
+      console.error(
+        "Resolve Alert Error:",
+        err
+      );
 
     }
 
@@ -101,7 +173,10 @@ export default function ActiveAlertList({ responseTeamMember }) {
   const filteredAlerts =
     filter === "ALL"
       ? alerts
-      : alerts.filter(alert => alert.type === filter);
+      : alerts.filter(
+          alert =>
+            alert.type === filter
+        );
 
   if (loading) {
 
@@ -114,9 +189,15 @@ export default function ActiveAlertList({ responseTeamMember }) {
         }}
       >
 
-        <CircularProgress size={70} />
+        <CircularProgress
+          size={70}
+        />
 
-        <Typography sx={{ mt: 2 }}>
+        <Typography
+          sx={{
+            mt: 2
+          }}
+        >
           Loading Active Alerts...
         </Typography>
 
@@ -127,23 +208,26 @@ export default function ActiveAlertList({ responseTeamMember }) {
   }
 
   return (
-
     <Box>
 
-      <DashboardStats alerts={alerts} />
+      <DashboardStats
+        alerts={alerts}
+      />
 
       <ToggleButtonGroup
         value={filter}
         exclusive
-        onChange={(event, value) => {
+        onChange={
+          (event, value) => {
 
-          if (value) {
+            if (value) {
 
-            setFilter(value);
+              setFilter(value);
+
+            }
 
           }
-
-        }}
+        }
         sx={{
           mb: 4,
           flexWrap: "wrap"
@@ -180,30 +264,38 @@ export default function ActiveAlertList({ responseTeamMember }) {
 
         <Typography
           variant="h5"
-          color="text.secondary"
-          sx={{ mt: 4 }}
-        >
+          sx={{
+            color: "text.secondary",
+            mt: 4
+          }}>
           No Active Alerts
         </Typography>
 
       ) : (
 
-        filteredAlerts.map((alert) => (
+        filteredAlerts.map(
+          alert => (
 
-          <ActiveAlertCard
-            key={alert.id}
-            alert={alert}
-            responseTeamMember={responseTeamMember}
-            onAcknowledge={handleAcknowledge}
-            onResolve={handleResolve}
-          />
+            <ActiveAlertCard
+              key={alert.id}
+              alert={alert}
+              responseTeamMember={
+                responseTeamMember
+              }
+              onAcknowledge={
+                handleAcknowledge
+              }
+              onResolve={
+                handleResolve
+              }
+            />
 
-        ))
+          )
+        )
 
       )}
 
     </Box>
-
   );
 
 }

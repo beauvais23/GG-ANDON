@@ -15,7 +15,6 @@ export default function HomeBanner() {
   const { productionLine } = useProductionLine();
 
   return (
-
     <Paper
       elevation={4}
       sx={{
@@ -43,9 +42,10 @@ export default function HomeBanner() {
 
           <Typography
             variant="h4"
-            fontWeight={700}
-            sx={{ mb: 0.5 }}
-          >
+            sx={{
+              fontWeight: 700,
+              mb: 0.5
+            }}>
             Operator Assistance Station
           </Typography>
 
@@ -90,7 +90,6 @@ export default function HomeBanner() {
       </Box>
 
     </Paper>
-
   );
 
 }

@@ -1,27 +1,43 @@
 import {
   createContext,
   useContext,
-  useState,
-  useEffect
+  useEffect,
+  useState
 } from "react";
 
 const ProductionLineContext = createContext();
 
 export function ProductionLineProvider({ children }) {
 
-  const [productionLine, setProductionLine] = useState("Gigabay");
+  const [productionLine, setProductionLine] =
+    useState("Gigabay");
+
+  //------------------------------------------------------
+  // Restore Saved Production Line
+  //------------------------------------------------------
 
   useEffect(() => {
 
-    const saved = localStorage.getItem("productionLine");
+    const saved =
+      localStorage.getItem("productionLine");
 
     if (saved) {
+
       setProductionLine(saved);
+
     }
 
   }, []);
 
+  //------------------------------------------------------
+  // Change Production Line
+  //------------------------------------------------------
+
   function changeProductionLine(line) {
+
+    if (!line) {
+      return;
+    }
 
     localStorage.setItem(
       "productionLine",
@@ -31,6 +47,10 @@ export function ProductionLineProvider({ children }) {
     setProductionLine(line);
 
   }
+
+  //------------------------------------------------------
+  // Context
+  //------------------------------------------------------
 
   return (
 

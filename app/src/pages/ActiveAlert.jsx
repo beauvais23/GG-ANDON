@@ -34,7 +34,6 @@ export default function ActiveAlert() {
       .padStart(2, "0")}`;
 
   return (
-
     <Box
       sx={{
         p: 5
@@ -66,9 +65,10 @@ export default function ActiveAlert() {
 
         <Typography
           variant="h5"
-          color="text.secondary"
-          sx={{ mt: 2 }}
-        >
+          sx={{
+            color: "text.secondary",
+            mt: 2
+          }}>
           Final Test Work Center
         </Typography>
 
@@ -94,7 +94,9 @@ export default function ActiveAlert() {
 
         <Typography
           variant="h6"
-          color="text.secondary"
+          sx={{
+            color: "text.secondary"
+          }}
         >
           Elapsed Time
         </Typography>
@@ -117,7 +119,6 @@ export default function ActiveAlert() {
       </Paper>
 
     </Box>
-
   );
 
 }

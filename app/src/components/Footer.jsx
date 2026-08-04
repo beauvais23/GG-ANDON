@@ -2,15 +2,15 @@ import { Box, Button, Chip, Typography } from "@mui/material";
 
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import TvIcon from "@mui/icons-material/Tv";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import InsightsIcon from "@mui/icons-material/Insights";
 
 import { useNavigate } from "react-router-dom";
 
 export default function Footer() {
-
   const navigate = useNavigate();
 
   return (
-
     <Box
       sx={{
         display: "flex",
@@ -23,19 +23,14 @@ export default function Footer() {
         flexWrap: "wrap"
       }}
     >
-
       <Typography
-        fontWeight="bold"
-        fontSize={15}
+        sx={{
+          fontWeight: "bold",
+          fontSize: 15,
+          mr: 1
+        }}
       >
         G&G ManufacturingOS
-      </Typography>
-
-      <Typography
-        fontSize={13}
-        color="text.secondary"
-      >
-        Version 5.2
       </Typography>
 
       <Button
@@ -56,6 +51,24 @@ export default function Footer() {
         TV Wallboard
       </Button>
 
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<InsightsIcon />}
+        onClick={() => navigate("/executive")}
+      >
+        Executive Dashboard
+      </Button>
+
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<AdminPanelSettingsIcon />}
+        onClick={() => navigate("/admin")}
+      >
+        Administration
+      </Button>
+
       <Chip
         size="small"
         color="success"
@@ -68,14 +81,7 @@ export default function Footer() {
         label="SQLite Connected"
       />
 
-      <Chip
-        size="small"
-        color="warning"
-        label="Google Chat Pending"
-      />
-
+      
     </Box>
-
   );
-
 }

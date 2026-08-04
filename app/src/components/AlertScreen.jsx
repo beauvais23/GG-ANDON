@@ -72,7 +72,6 @@ export default function AlertScreen({
     currentAlert.status === "ACKNOWLEDGED";
 
   return (
-
     <Box
       sx={{
         p: 5,
@@ -94,8 +93,10 @@ export default function AlertScreen({
 
         <Typography
           variant="h2"
-          fontWeight="bold"
           color={acknowledged ? "primary.main" : "error.main"}
+          sx={{
+            fontWeight: "bold"
+          }}
         >
 
           {currentAlert.type} ALERT
@@ -140,11 +141,10 @@ export default function AlertScreen({
 
           <Stack
             spacing={1}
-            alignItems="center"
             sx={{
+              alignItems: "center",
               mt: 5
-            }}
-          >
+            }}>
 
             <PersonIcon
               color="primary"
@@ -155,7 +155,9 @@ export default function AlertScreen({
 
             <Typography
               variant="overline"
-              color="text.secondary"
+              sx={{
+                color: "text.secondary"
+              }}
             >
 
               RESPONDING
@@ -165,7 +167,9 @@ export default function AlertScreen({
             <Typography
               variant="h4"
               color="primary"
-              fontWeight="bold"
+              sx={{
+                fontWeight: "bold"
+              }}
             >
 
               {currentAlert.acknowledged_by}
@@ -213,7 +217,6 @@ export default function AlertScreen({
       </Paper>
 
     </Box>
-
   );
 
 }

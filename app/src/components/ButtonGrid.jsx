@@ -11,7 +11,8 @@ import AlertButton from "./AlertButton";
 import { createAlert } from "../services/api";
 import { useAlert } from "../context/AlertContext";
 import { useProductionLine } from "../context/ProductionLineContext";
-import config from "../config/config";
+import { useWorkCenter } from "../context/WorkCenterContext";
+
 
 export default function ButtonGrid() {
 
@@ -21,39 +22,41 @@ export default function ButtonGrid() {
     productionLine
   } = useProductionLine();
 
+  const {
+  workCenter
+} = useWorkCenter();
+
   async function handleAlert(type) {
 
-    try {
+  try {
 
-      const response = await createAlert({
+    const response = await createAlert({
 
-        facility: config.facility,
+      productionLine,
 
-        productionLine,
+      workCenter,
 
-        workCenter: config.workCenter,
+      type,
 
-        type,
+      priority: "NORMAL"
 
-        priority: "NORMAL"
+    });
 
-      });
+    if (response.success) {
 
-      if (response.success) {
-
-        startAlert(response.alert);
-
-      }
-
-    }
-
-    catch (error) {
-
-      console.error(error);
+      startAlert(response.alert);
 
     }
 
   }
+
+  catch (error) {
+
+    console.error(error);
+
+  }
+
+}
 
   return (
 

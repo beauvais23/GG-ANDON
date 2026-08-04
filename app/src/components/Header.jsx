@@ -82,7 +82,7 @@ export default function Header({ time }) {
                 mt: .6
               }}
             >
-              Malta • Production • Final Test
+              Malta • Production
             </Typography>
 
           </Box>

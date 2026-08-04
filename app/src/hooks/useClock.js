@@ -1,26 +1,44 @@
 import { useState, useEffect } from "react";
 
 export default function useClock() {
-  const [time, setTime] = useState("");
 
-  useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
+    const [clock, setClock] = useState({
+        time: "",
+        date: ""
+    });
 
-      setTime(
-        now.toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit"
-        })
-      );
-    };
+    useEffect(() => {
 
-    updateClock();
+        function updateClock() {
 
-    const timer = setInterval(updateClock, 1000);
+            const now = new Date();
 
-    return () => clearInterval(timer);
-  }, []);
+            setClock({
 
-  return time;
+                time: now.toLocaleTimeString([],{
+                    hour:"numeric",
+                    minute:"2-digit"
+                }),
+
+                date: now.toLocaleDateString([],{
+                    weekday:"long",
+                    month:"long",
+                    day:"numeric",
+                    year:"numeric"
+                })
+
+            });
+
+        }
+
+        updateClock();
+
+        const timer = setInterval(updateClock,1000);
+
+        return () => clearInterval(timer);
+
+    },[]);
+
+    return clock;
+
 }

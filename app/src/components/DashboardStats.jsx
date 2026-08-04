@@ -2,7 +2,8 @@ import {
   Grid,
   Paper,
   Typography,
-  Stack
+  Stack,
+  Box
 } from "@mui/material";
 
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
@@ -15,56 +16,107 @@ function StatCard({
 
   title,
   value,
+  subtitle,
   icon,
   color
 
 }) {
 
   return (
-
     <Paper
       elevation={3}
       sx={{
-        p: 2.5,
+        overflow: "hidden",
         borderRadius: 3,
-        height: "100%"
+        transition: "all .25s",
+
+        "&:hover": {
+          transform: "translateY(-3px)",
+          boxShadow: 8
+        }
       }}
     >
 
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-      >
+      {/* Colored Accent */}
 
-        <Typography
-          color="text.secondary"
-          fontWeight={600}
-        >
-          {title}
-        </Typography>
-
-        {icon}
-
-      </Stack>
-
-      <Typography
+      <Box
         sx={{
-          mt: 2,
-          fontSize: 36,
-          fontWeight: 700,
-          color
+          height: 6,
+          bgcolor: color
+        }}
+      />
+
+      <Box
+        sx={{
+          p: 2.5
         }}
       >
-        {value}
-      </Typography>
+
+        <Stack
+          direction="row"
+          sx={{
+            justifyContent: "space-between",
+            alignItems: "flex-start"
+          }}>
+
+          <Box>
+
+            <Typography
+              sx={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: "text.secondary",
+                letterSpacing: 1
+              }}
+            >
+              {title}
+            </Typography>
+
+            <Typography
+              sx={{
+                mt: .5,
+                fontSize: 40,
+                fontWeight: 800,
+                lineHeight: 1,
+                color
+              }}
+            >
+              {value}
+            </Typography>
+
+            <Typography
+              sx={{
+                mt: .5,
+                fontSize: 13,
+                color: "text.secondary"
+              }}
+            >
+              {subtitle}
+            </Typography>
+
+          </Box>
+
+          <Box
+            sx={{
+              bgcolor: `${color}15`,
+              color,
+              borderRadius: 2,
+              p: 1.25
+            }}
+          >
+
+            {icon}
+
+          </Box>
+
+        </Stack>
+
+      </Box>
 
     </Paper>
-
   );
 
 }
-
 export default function DashboardStats({
 
   active,
@@ -82,90 +134,80 @@ export default function DashboardStats({
       spacing={2}
     >
 
-      <Grid size={{ xs: 12, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
 
         <StatCard
-          title="ACTIVE"
+          title="ACTIVE ALERTS"
           value={active}
+          subtitle="Live Incidents"
           color="#D32F2F"
           icon={
             <NotificationsActiveIcon
-              sx={{
-                color: "#D32F2F",
-                fontSize: 34
-              }}
+              sx={{ fontSize: 34 }}
             />
           }
         />
 
       </Grid>
 
-      <Grid size={{ xs: 12, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
 
         <StatCard
           title="WAITING"
           value={waiting}
-          color="#EF6C00"
+          subtitle="Awaiting Response"
+          color="#F57C00"
           icon={
             <HourglassTopIcon
-              sx={{
-                color: "#EF6C00",
-                fontSize: 34
-              }}
+              sx={{ fontSize: 34 }}
             />
           }
         />
 
       </Grid>
 
-      <Grid size={{ xs: 12, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
 
         <StatCard
           title="ACKNOWLEDGED"
           value={acknowledged}
+          subtitle="Being Worked"
           color="#2E7D32"
           icon={
             <CheckCircleIcon
-              sx={{
-                color: "#2E7D32",
-                fontSize: 34
-              }}
+              sx={{ fontSize: 34 }}
             />
           }
         />
 
       </Grid>
 
-      <Grid size={{ xs: 12, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
 
         <StatCard
-          title="OLDEST"
+          title="OLDEST ALERT"
           value={oldest}
+          subtitle="Current Maximum Age"
           color="#1565C0"
           icon={
             <ScheduleIcon
-              sx={{
-                color: "#1565C0",
-                fontSize: 34
-              }}
+              sx={{ fontSize: 34 }}
             />
           }
         />
 
       </Grid>
 
-      <Grid size={{ xs: 12, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, lg: 2.4 }}>
 
         <StatCard
-          title="AVERAGE"
+          title="AVERAGE AGE"
           value={average}
+          subtitle="Average Response Time"
           color="#6A1B9A"
           icon={
             <TimerIcon
-              sx={{
-                color: "#6A1B9A",
-                fontSize: 34
-              }}
+              sx={{ fontSize: 34 }}
             />
           }
         />

@@ -44,7 +44,6 @@ export default function ConfirmAlert({
   const theme = themes[alert.type];
 
   return (
-
     <Paper
       elevation={8}
       sx={{
@@ -62,12 +61,11 @@ export default function ConfirmAlert({
 
       <Typography
         variant="h3"
-        fontWeight="bold"
         sx={{
+          fontWeight: "bold",
           mt: 2,
           color: theme.color
-        }}
-      >
+        }}>
         {alert.type} REQUEST
       </Typography>
 
@@ -75,7 +73,9 @@ export default function ConfirmAlert({
 
         <Box>
 
-          <Typography color="text.secondary">
+          <Typography sx={{
+            color: "text.secondary"
+          }}>
             Station
           </Typography>
 
@@ -87,7 +87,9 @@ export default function ConfirmAlert({
 
         <Box>
 
-          <Typography color="text.secondary">
+          <Typography sx={{
+            color: "text.secondary"
+          }}>
             Operator
           </Typography>
 
@@ -114,7 +116,9 @@ export default function ConfirmAlert({
       <Stack
         direction="row"
         spacing={3}
-        justifyContent="center"
+        sx={{
+          justifyContent: "center"
+        }}
       >
 
         <Button
@@ -139,7 +143,6 @@ export default function ConfirmAlert({
       </Stack>
 
     </Paper>
-
   );
 
 }

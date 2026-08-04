@@ -6,7 +6,8 @@ import {
   Stack
 } from "@mui/material";
 
-import productionLines from "../config/productionLines";
+import { useEffect, useState } from "react";
+import { getProductionLines } from "../api/productionLines";
 import { useProductionLine } from "../context/ProductionLineContext";
 
 export default function ProductionLineToolbar() {
@@ -16,16 +17,61 @@ export default function ProductionLineToolbar() {
     changeProductionLine
   } = useProductionLine();
 
+  const [productionLines, setProductionLines] = useState([]);
+
+  //------------------------------------------------------
+  // Load Production Lines
+  //------------------------------------------------------
+
+  useEffect(() => {
+
+    async function loadProductionLines() {
+
+      try {
+
+        const lines = await getProductionLines();
+
+        setProductionLines(
+
+          lines
+            .filter(line => line.active)
+            .sort((a, b) => a.display_order - b.display_order)
+
+        );
+
+      }
+
+      catch (err) {
+
+        console.error(err);
+
+      }
+
+    }
+
+    loadProductionLines();
+
+  }, []);
+
+  //------------------------------------------------------
+  // Change Production Line
+  //------------------------------------------------------
+
   function handleChange(event, newLine) {
 
     if (newLine) {
+
       changeProductionLine(newLine);
+
     }
 
   }
 
-  return (
+  //------------------------------------------------------
+  // Render
+  //------------------------------------------------------
 
+  return (
     <Paper
       elevation={2}
       sx={{
@@ -44,25 +90,23 @@ export default function ProductionLineToolbar() {
           lg: "row"
         }}
         spacing={3}
-        alignItems="center"
-        justifyContent="space-between"
-      >
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}>
 
         <Stack spacing={0}>
 
           <Typography
             variant="h6"
-            fontWeight="bold"
+            sx={{
+              fontWeight: "bold"
+            }}
           >
             Production Line
           </Typography>
 
-          <Typography
-            variant="body2"
-            color="text.secondary"
-          >
-            Currently running Final Test
-          </Typography>
+          
 
         </Stack>
 
@@ -77,11 +121,20 @@ export default function ProductionLineToolbar() {
 
             <ToggleButton
               key={line.id}
-              value={line.id}
+              value={line.name}
               sx={{
                 px: 4,
                 fontWeight: 700,
-                textTransform: "none"
+                textTransform: "none",
+
+                "&.Mui-selected": {
+                  backgroundColor: line.color,
+                  color: "#fff",
+
+                  "&:hover": {
+                    backgroundColor: line.color
+                  }
+                }
               }}
             >
               {line.name}
@@ -94,7 +147,6 @@ export default function ProductionLineToolbar() {
       </Stack>
 
     </Paper>
-
   );
 
 }

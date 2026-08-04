@@ -151,3 +151,35 @@ export async function cancelAlert(id) {
   return response.json();
 
 }
+
+//------------------------------------------------------
+// Work Centers
+//------------------------------------------------------
+
+export async function getWorkCentersByProductionLine(productionLine) {
+
+  const response = await fetch(
+
+    `${API_URL}/work-centers/line/${encodeURIComponent(productionLine)}`
+
+  );
+
+  return response.json();
+
+}
+
+//------------------------------------------------------
+// Executive Dashboard
+//------------------------------------------------------
+
+export async function getExecutiveDashboard() {
+
+    const response = await fetch(
+
+        `${API_URL}/dashboard/executive`
+
+    );
+
+    return response.json();
+
+}

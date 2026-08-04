@@ -61,7 +61,6 @@ export default function ActiveAlertCard({
   const theme = alertTheme[alert.type];
 
   return (
-
     <Card
 
       elevation={isCritical ? 14 : 5}
@@ -100,16 +99,19 @@ export default function ActiveAlertCard({
 
         <Stack
           direction="row"
-          justifyContent="space-between"
-          alignItems="flex-start"
-        >
+          sx={{
+            justifyContent: "space-between",
+            alignItems: "flex-start"
+          }}>
 
           {/* LEFT SIDE */}
 
           <Stack
             direction="row"
             spacing={3}
-            flex={1}
+            sx={{
+              flex: 1
+            }}
           >
 
             <Box sx={{ color: theme.color }}>
@@ -121,13 +123,16 @@ export default function ActiveAlertCard({
               <Stack
                 direction="row"
                 spacing={1}
-                alignItems="center"
-                mb={1}
-              >
+                sx={{
+                  alignItems: "center",
+                  mb: 1
+                }}>
 
                 <Typography
                   variant="h5"
-                  fontWeight={800}
+                  sx={{
+                    fontWeight: 800
+                  }}
                 >
                   {alert.type}
                 </Typography>
@@ -154,31 +159,31 @@ export default function ActiveAlertCard({
 
               <Stack spacing={0.5}>
 
-                <Typography variant="caption" color="text.secondary">
-                  FACILITY
-                </Typography>
+  <Typography variant="caption" sx={{
+    color: "text.secondary"
+  }}>
+    PRODUCTION LINE
+  </Typography>
 
-                <Typography fontWeight={700}>
-                  {alert.facility}
-                </Typography>
+  <Typography sx={{
+    fontWeight: 700
+  }}>
+    {alert.production_line}
+  </Typography>
 
-                <Typography variant="caption" color="text.secondary">
-                  PRODUCTION LINE
-                </Typography>
+  <Typography variant="caption" sx={{
+    color: "text.secondary"
+  }}>
+    WORK CENTER
+  </Typography>
 
-                <Typography fontWeight={700}>
-                  {alert.production_line}
-                </Typography>
+  <Typography sx={{
+    fontWeight: 700
+  }}>
+    {alert.work_center}
+  </Typography>
 
-                <Typography variant="caption" color="text.secondary">
-                  WORK CENTER
-                </Typography>
-
-                <Typography fontWeight={700}>
-                  {alert.work_center}
-                </Typography>
-
-              </Stack>
+</Stack>
 
             </Box>
 
@@ -188,9 +193,10 @@ export default function ActiveAlertCard({
 
           <Stack
             spacing={2}
-            alignItems="flex-end"
-            sx={{ minWidth: 240 }}
-          >
+            sx={{
+              alignItems: "flex-end",
+              minWidth: 240
+            }}>
 
             <Chip
 
@@ -217,31 +223,40 @@ export default function ActiveAlertCard({
 
             <Divider flexItem />
 
-            <Box textAlign="right">
+            <Box sx={{
+              textAlign: "right"
+            }}>
 
               <Typography
                 variant="caption"
-                color="text.secondary"
+                sx={{
+                  color: "text.secondary"
+                }}
               >
                 RESPONDER
               </Typography>
 
               <Typography
-                fontWeight={700}
+                sx={{
+                  fontWeight: 700
+                }}
               >
                 {alert.responder || "Unassigned"}
               </Typography>
 
             </Box>
 
-            <Box textAlign="right">
+            <Box sx={{
+              textAlign: "right"
+            }}>
 
               <Stack
                 direction="row"
                 spacing={1}
-                justifyContent="flex-end"
-                alignItems="center"
-              >
+                sx={{
+                  justifyContent: "flex-end",
+                  alignItems: "center"
+                }}>
 
                 <AccessTimeIcon
                   color={
@@ -253,7 +268,9 @@ export default function ActiveAlertCard({
 
                 <Typography
                   variant="caption"
-                  color="text.secondary"
+                  sx={{
+                    color: "text.secondary"
+                  }}
                 >
                   TIME OPEN
                 </Typography>
@@ -338,7 +355,6 @@ export default function ActiveAlertCard({
       </CardContent>
 
     </Card>
-
   );
 
 }

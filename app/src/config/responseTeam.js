@@ -1,41 +1,107 @@
-const responseTeam = [
+const API = "http://localhost:3001";
 
-  {
-    name: "Steve Vielleux"
-  },
+//------------------------------------------------------
+// Get Response Team
+//------------------------------------------------------
 
-  {
-    name: "Bill Beauvais"
-  },
+export async function getResponseTeam() {
 
-  {
-    name: "Caleb Peterson"
-  },
+    const response = await fetch(`${API}/response-team`);
 
-  {
-    name: "Gavin Klami"
-  },
+    if (!response.ok) {
 
-  {
-    name: "Jason Baright"
-  },
+        throw new Error("Failed to load response team");
 
-  {
-    name: "Dariel Rosa"
-  },
+    }
 
-  {
-    name: "Jonathan Burroughs"
-  },
+    return response.json();
 
-  {
-    name: "Jason Lewis"
-  },
+}
 
-  {
-    name: "Jeremy Kolner"
-  }
+//------------------------------------------------------
+// Create Responder
+//------------------------------------------------------
 
-];
+export async function createResponder(responder) {
 
-export default responseTeam;
+    const response = await fetch(`${API}/response-team`, {
+
+        method: "POST",
+
+        headers: {
+
+            "Content-Type": "application/json"
+
+        },
+
+        body: JSON.stringify(responder)
+
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+
+        throw new Error(data.message);
+
+    }
+
+    return data;
+
+}
+
+//------------------------------------------------------
+// Update Responder
+//------------------------------------------------------
+
+export async function updateResponder(id, responder) {
+
+    const response = await fetch(`${API}/response-team/${id}`, {
+
+        method: "PUT",
+
+        headers: {
+
+            "Content-Type": "application/json"
+
+        },
+
+        body: JSON.stringify(responder)
+
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+
+        throw new Error(data.message);
+
+    }
+
+    return data;
+
+}
+
+//------------------------------------------------------
+// Delete Responder
+//------------------------------------------------------
+
+export async function deleteResponder(id) {
+
+    const response = await fetch(`${API}/response-team/${id}`, {
+
+        method: "DELETE"
+
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+
+        throw new Error(data.message);
+
+    }
+
+    return data;
+
+}

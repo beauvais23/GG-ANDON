@@ -17,13 +17,22 @@ import useClock from "../hooks/useClock";
 import { getActiveAlerts } from "../services/api";
 
 import alertTypes from "../config/alertTypes";
-import productionLines from "../config/productionLines";
+
+import { getProductionLines } from "../api/productionLines";
+
+import Button from "@mui/material/Button";
+import { Link } from "react-router-dom";
+
+
+
 
 export default function Wallboard() {
 
-  const time = useClock();
+  const clock = useClock();
 
   const [alerts, setAlerts] = useState([]);
+
+  const [productionLines, setProductionLines] = useState([]);
 
   // Used only to refresh elapsed timers every second
   const [, forceRefresh] = useState(0);
@@ -88,18 +97,43 @@ export default function Wallboard() {
   useEffect(() => {
 
     loadAlerts();
+    loadProductionLines();
 
-    const timer = setInterval(
+    const timer = setInterval(() => {
 
-      loadAlerts,
+        loadAlerts();
 
-      5000
-
-    );
+    }, 5000);
 
     return () => clearInterval(timer);
 
-  }, []);
+}, []);
+
+//--------------------------------------------------
+// Load Production Lines
+//--------------------------------------------------
+
+async function loadProductionLines() {
+
+    try {
+
+        const lines = await getProductionLines();
+
+        lines.sort(
+            (a, b) => a.display_order - b.display_order
+        );
+
+        setProductionLines(lines);
+
+    }
+
+    catch (err) {
+
+        console.error(err);
+
+    }
+
+}
 
   //--------------------------------------------------
   // Helper Functions
@@ -238,14 +272,13 @@ export default function Wallboard() {
     [alerts]
 
   );
-   //--------------------------------------------------
+  //--------------------------------------------------
   // No Active Alerts
   //--------------------------------------------------
 
   if (alerts.length === 0) {
 
     return (
-
       <Box
         sx={{
           minHeight: "100vh",
@@ -261,7 +294,7 @@ export default function Wallboard() {
         }}
       >
 
-        <Header time={time} />
+        <Header time={clock.time} />
 
         <Box
           sx={{
@@ -283,7 +316,9 @@ export default function Wallboard() {
 
           <Typography
             variant="h2"
-            fontWeight={800}
+            sx={{
+              fontWeight: 800
+            }}
           >
             ALL SYSTEMS NORMAL
           </Typography>
@@ -301,7 +336,6 @@ export default function Wallboard() {
         </Box>
 
       </Box>
-
     );
 
   }
@@ -311,7 +345,6 @@ export default function Wallboard() {
   //--------------------------------------------------
 
   return (
-
     <Box
       sx={{
         minHeight: "100vh",
@@ -327,33 +360,79 @@ export default function Wallboard() {
       }}
     >
 
-      <Header time={time} />
+      <Header time={clock.time} />
 
       <Box sx={{ p: 4 }}>
 
-        <Box sx={{ mb: 4 }}>
+        <Stack
+          direction="row"
+          sx={{
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 4
+          }}>
 
-          <Typography
-            variant="h3"
-            fontWeight={800}
-            sx={{
-              letterSpacing: 2
-            }}
-          >
-            MANUFACTURING OPERATIONS CENTER
-          </Typography>
+  <Box>
 
-          <Typography
-            sx={{
-              mt: 1,
-              fontSize: 22,
-              color: "#94A3B8"
-            }}
-          >
-            G&G Industrial Lighting • Live Production Response Dashboard
-          </Typography>
+    <Typography
+      variant="h3"
+      sx={{
+        fontWeight: 800,
+        letterSpacing: 2
+      }}>
+      MANUFACTURING OPERATIONS CENTER
+    </Typography>
 
-        </Box>
+    <Typography
+      sx={{
+        mt: 1,
+        fontSize: 22,
+        color: "#94A3B8"
+      }}
+    >
+      G&G Industrial Lighting • Live Production Response Dashboard
+    </Typography>
+
+  </Box>
+
+  <Stack
+    direction="row"
+    spacing={2}
+  >
+
+    <Button
+      component={Link}
+      to="/supervisor"
+      variant="contained"
+      color="primary"
+      size="large"
+      sx={{
+        fontWeight: 700,
+        px: 3,
+        borderRadius: 3
+      }}
+    >
+      PRODUCTION RESPONSE CENTER
+    </Button>
+
+    <Button
+      component={Link}
+      to="/"
+      variant="contained"
+      color="warning"
+      size="large"
+      sx={{
+        fontWeight: 700,
+        px: 3,
+        borderRadius: 3
+      }}
+    >
+      OPERATOR ASSISTANCE STATION
+    </Button>
+
+  </Stack>
+
+</Stack>
 
         <Stack
   direction="row"
@@ -380,12 +459,7 @@ export default function Wallboard() {
       color: "#22C55E",
       subtitle: "Supervisor Assigned"
     },
-    {
-      title: "CURRENT TIME",
-      value: time,
-      color: "#60A5FA",
-      subtitle: "Facility Time"
-    }
+    
 
   ].map(card => (
 
@@ -506,26 +580,24 @@ export default function Wallboard() {
   </Typography>
 
   <Typography
-    textAlign="center"
     sx={{
+      textAlign: "center",
       color: "#F8FAFC",
       fontWeight: 800,
       fontSize: 17,
       letterSpacing: 1.3
-    }}
-  >
+    }}>
     ✔ STATUS
   </Typography>
 
   <Typography
-    textAlign="right"
     sx={{
+      textAlign: "right",
       color: "#F8FAFC",
       fontWeight: 800,
       fontSize: 17,
       letterSpacing: 1.3
-    }}
-  >
+    }}>
     ⏱ ELAPSED
   </Typography>
 
@@ -541,7 +613,6 @@ export default function Wallboard() {
   index === 0;
 
             return (
-
               <Box
   key={alert.id}
   sx={{
@@ -582,68 +653,70 @@ boxShadow: highestPriority
   }}
 >
 
-  {/* Priority Color Strip */}
+                {/* Priority Color Strip */}
 
-  <Box
-    sx={{
-      position: "absolute",
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 8,
-      bgcolor: theme.color,
-      borderTopLeftRadius: 16,
-      borderBottomLeftRadius: 16
-    }}
-  />
+                <Box
+                  sx={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 8,
+                    bgcolor: theme.color,
+                    borderTopLeftRadius: 16,
+                    borderBottomLeftRadius: 16
+                  }}
+                />
 
-  {/* Alert Type */}
+                {/* Alert Type */}
 
-<Stack
-  direction="row"
-  spacing={2.5}
-  alignItems="center"
->
+                <Stack
+                  direction="row"
+                  spacing={2.5}
+                  sx={{
+                    alignItems: "center"
+                  }}
+                >
 
-  <Avatar
-    sx={{
-      bgcolor: theme.color,
-      width: 58,
-      height: 58,
-      boxShadow: `0 0 18px ${theme.color}55`
-    }}
-  >
-    {theme.icon}
-  </Avatar>
+                  <Avatar
+                    sx={{
+                      bgcolor: theme.color,
+                      width: 58,
+                      height: 58,
+                      boxShadow: `0 0 18px ${theme.color}55`
+                    }}
+                  >
+                    {theme.icon}
+                  </Avatar>
 
-  <Box>
+                  <Box>
 
-  <Typography
-    sx={{
-      fontSize: 30,
-      fontWeight: 900,
-      color: "#FFFFFF",
-      letterSpacing: 1,
-      lineHeight: 1
-    }}
-  >
-    {theme.label.toUpperCase()}
-  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: 30,
+                      fontWeight: 900,
+                      color: "#FFFFFF",
+                      letterSpacing: 1,
+                      lineHeight: 1
+                    }}
+                  >
+                    {theme.label.toUpperCase()}
+                  </Typography>
 
-  <Typography
-    sx={{
-      mt: 1,
-      color: "#CBD5E1",
-      fontSize: 17,
-      fontWeight: 600
-    }}
-  >
-    Alert #{alert.id}
-  </Typography>
+                  <Typography
+                    sx={{
+                      mt: 1,
+                      color: "#CBD5E1",
+                      fontSize: 17,
+                      fontWeight: 600
+                    }}
+                  >
+                    Alert #{alert.id}
+                  </Typography>
 
-</Box>
+                </Box>
 
-</Stack>
+                </Stack>
 
                 {/* Production Line */}
 
@@ -710,37 +783,32 @@ boxShadow: highestPriority
                 {/* Timer */}
 
                 <Typography
-  textAlign="right"
-  sx={{
-    fontFamily: "Roboto Mono",
+                  sx={{
+                    textAlign: "right",
+                    fontFamily: "Roboto Mono",
+                    fontWeight: 900,
+                    fontSize: 44,
+                    letterSpacing: 2,
 
-    fontWeight: 900,
+                    color:
+                      isOverdue(alert.requested)
+                        ? "#FF5252"
+                        : "#FFFFFF",
 
-    fontSize: 44,
+                    textShadow:
+                      isOverdue(alert.requested)
+                        ? "0 0 16px rgba(255,82,82,.8)"
+                        : "0 0 8px rgba(255,255,255,.15)",
 
-    letterSpacing: 2,
-
-    color:
-      isOverdue(alert.requested)
-        ? "#FF5252"
-        : "#FFFFFF",
-
-    textShadow:
-      isOverdue(alert.requested)
-        ? "0 0 16px rgba(255,82,82,.8)"
-        : "0 0 8px rgba(255,255,255,.15)",
-
-    animation:
-      isOverdue(alert.requested)
-        ? "blinker .8s linear infinite"
-        : "none"
-  }}
->
+                    animation:
+                      isOverdue(alert.requested)
+                        ? "blinker .8s linear infinite"
+                        : "none"
+                  }}>
   {elapsed(alert.requested)}
 </Typography>
 
               </Box>
-
             );
 
           })}  
@@ -792,7 +860,6 @@ boxShadow: highestPriority
       </style>
 
     </Box>
-
   );
 
 }

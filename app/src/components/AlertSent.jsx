@@ -5,7 +5,6 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 export default function AlertSent({ alert }) {
 
   return (
-
     <Paper
       elevation={8}
       sx={{
@@ -28,9 +27,10 @@ export default function AlertSent({ alert }) {
 
       <Typography
         variant="h3"
-        fontWeight="bold"
-        sx={{ mt: 3 }}
-      >
+        sx={{
+          fontWeight: "bold",
+          mt: 3
+        }}>
         {alert.type} ALERT SENT
       </Typography>
 
@@ -49,7 +49,6 @@ export default function AlertSent({ alert }) {
       </Box>
 
     </Paper>
-
   );
 
 }

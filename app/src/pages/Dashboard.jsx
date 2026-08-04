@@ -17,57 +17,199 @@ import {
 } from "../services/api";
 
 import useClock from "../hooks/useClock";
+import { getResponseTeam } from "../api/responseTeam";
 
 export default function Dashboard() {
 
-  const time = useClock();
+  const clock = useClock();
 
   const [alerts, setAlerts] = useState([]);
+
+  const [responseTeam, setResponseTeam] = useState([]);
+
+  const [selectedResponder, setSelectedResponder] =
+    useState("");
+
+
+  //------------------------------------------------------
+  // Load Response Team
+  //------------------------------------------------------
+
+  useEffect(() => {
+
+    async function loadResponseTeam() {
+
+      try {
+
+        const team =
+          await getResponseTeam();
+
+        setResponseTeam(team);
+
+        if (
+          team.length > 0 &&
+          !selectedResponder
+        ) {
+
+          setSelectedResponder(
+            team[0].name
+          );
+
+        }
+
+      }
+
+      catch (err) {
+
+        console.error(
+          "Failed to load response team:",
+          err
+        );
+
+      }
+
+    }
+
+    loadResponseTeam();
+
+  }, [selectedResponder]);
+
+
+  //------------------------------------------------------
+  // Load Alerts
+  //------------------------------------------------------
 
   async function loadAlerts() {
 
     try {
 
-      const data = await getActiveAlerts();
+      const data =
+        await getActiveAlerts();
 
-      setAlerts(data);
+      setAlerts(
+        Array.isArray(data)
+          ? data
+          : (data.alerts || [])
+      );
 
-    } catch (err) {
+    }
 
-      console.error(err);
+    catch (err) {
+
+      console.error(
+        "Failed to load alerts:",
+        err
+      );
 
     }
 
   }
 
+
+  //------------------------------------------------------
+  // Auto Refresh
+  //------------------------------------------------------
+
   useEffect(() => {
 
     loadAlerts();
 
-    const timer = setInterval(loadAlerts, 1000);
+    const timer =
+      setInterval(
+        loadAlerts,
+        1000
+      );
 
-    return () => clearInterval(timer);
+    return () =>
+      clearInterval(timer);
 
   }, []);
 
-  async function handleResolve(id) {
 
-    await resolveAlert(id);
-
-    loadAlerts();
-
-  }
+  //------------------------------------------------------
+  // Acknowledge Alert
+  //------------------------------------------------------
 
   async function handleAcknowledge(id) {
 
-    await acknowledgeAlert(id);
+    try {
 
-    loadAlerts();
+      if (!selectedResponder) {
+
+        console.error(
+          "No responder selected."
+        );
+
+        return;
+
+      }
+
+      await acknowledgeAlert(
+        id,
+        selectedResponder
+      );
+
+      await loadAlerts();
+
+    }
+
+    catch (err) {
+
+      console.error(
+        "Dashboard acknowledge error:",
+        err
+      );
+
+    }
 
   }
 
-  return (
 
+  //------------------------------------------------------
+  // Resolve Alert
+  //------------------------------------------------------
+
+  async function handleResolve(id) {
+
+    try {
+
+      if (!selectedResponder) {
+
+        console.error(
+          "No responder selected."
+        );
+
+        return;
+
+      }
+
+      await resolveAlert(
+        id,
+        selectedResponder,
+        "Resolved"
+      );
+
+      await loadAlerts();
+
+    }
+
+    catch (err) {
+
+      console.error(
+        "Dashboard resolve error:",
+        err
+      );
+
+    }
+
+  }
+
+
+  //------------------------------------------------------
+  // Render
+  //------------------------------------------------------
+
+  return (
     <Box
       sx={{
         minHeight: "100vh",
@@ -75,7 +217,9 @@ export default function Dashboard() {
       }}
     >
 
-      <Header time={time} />
+      <Header
+        time={clock.time}
+      />
 
       <Paper
         elevation={2}
@@ -85,6 +229,11 @@ export default function Dashboard() {
           borderRadius: 4
         }}
       >
+
+
+        {/*================================================*/}
+        {/* PAGE HEADER */}
+        {/*================================================*/}
 
         <Box
           sx={{
@@ -99,31 +248,45 @@ export default function Dashboard() {
 
             <Typography
               variant="h3"
-              fontWeight="bold"
+              sx={{
+                fontWeight: "bold"
+              }}
             >
               Production Response Center
             </Typography>
 
             <Typography
               variant="h6"
-              color="text.secondary"
+              sx={{
+                color: "text.secondary"
+              }}
             >
               Live Manufacturing Alerts
             </Typography>
 
           </Box>
 
-          <Box textAlign="right">
+
+          <Box
+            sx={{
+              textAlign: "right"
+            }}
+          >
 
             <Typography
               variant="h2"
-              color="error.main"
-              fontWeight="bold"
-            >
+              sx={{
+                color: "error.main",
+                fontWeight: "bold"
+              }}>
               {alerts.length}
             </Typography>
 
-            <Typography color="text.secondary">
+            <Typography
+              sx={{
+                color: "text.secondary"
+              }}
+            >
               Active Alerts
             </Typography>
 
@@ -131,18 +294,32 @@ export default function Dashboard() {
 
         </Box>
 
-        <DashboardStats alerts={alerts} />
+
+        {/*================================================*/}
+        {/* DASHBOARD STATS */}
+        {/*================================================*/}
+
+        <DashboardStats
+          alerts={alerts}
+        />
+
+
+        {/*================================================*/}
+        {/* ALERT LIST */}
+        {/*================================================*/}
 
         <AlertList
           alerts={alerts}
+          responseTeamMember={selectedResponder}
+          responseTeam={responseTeam}
           onResolve={handleResolve}
           onAcknowledge={handleAcknowledge}
         />
 
+
       </Paper>
 
     </Box>
-
   );
 
 }

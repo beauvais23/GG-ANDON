@@ -10,6 +10,8 @@ import { ProductionLineProvider } from "./context/ProductionLineContext";
 
 import "./index.css";
 
+import { WorkCenterProvider } from "./context/WorkCenterContext";
+
 ReactDOM.createRoot(document.getElementById("root")).render(
 
   <React.StrictMode>
@@ -17,14 +19,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
 
       <ProductionLineProvider>
-
+    <WorkCenterProvider>
         <AlertProvider>
-
-          <App />
-
+            <App />
         </AlertProvider>
-
-      </ProductionLineProvider>
+    </WorkCenterProvider>
+</ProductionLineProvider>
 
     </BrowserRouter>
 

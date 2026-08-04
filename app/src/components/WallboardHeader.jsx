@@ -13,7 +13,6 @@ export default function WallboardHeader({
 }) {
 
   return (
-
     <Paper
       elevation={8}
       sx={{
@@ -25,13 +24,17 @@ export default function WallboardHeader({
       }}
     >
 
-      <Grid container spacing={2} alignItems="center">
+      <Grid container spacing={2} sx={{
+        alignItems: "center"
+      }}>
 
         <Grid size={{ xs:12, md:6 }}>
 
           <Typography
             variant="h3"
-            fontWeight="bold"
+            sx={{
+              fontWeight: "bold"
+            }}
           >
             G&G Production Response System
           </Typography>
@@ -55,7 +58,9 @@ export default function WallboardHeader({
 
           <Typography
             variant="h3"
-            fontFamily="Roboto Mono"
+            sx={{
+              fontFamily: "Roboto Mono"
+            }}
           >
             {time}
           </Typography>
@@ -85,7 +90,9 @@ export default function WallboardHeader({
           <Typography
             variant="h2"
             color="error"
-            fontWeight="bold"
+            sx={{
+              fontWeight: "bold"
+            }}
           >
             {activeAlerts}
           </Typography>
@@ -118,7 +125,9 @@ export default function WallboardHeader({
 
           <Typography
             variant="h4"
-            color="#4CAF50"
+            sx={{
+              color: "#4CAF50"
+            }}
           >
             ● ONLINE
           </Typography>
@@ -128,7 +137,6 @@ export default function WallboardHeader({
       </Box>
 
     </Paper>
-
   );
 
 }

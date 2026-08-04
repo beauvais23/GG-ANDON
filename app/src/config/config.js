@@ -3,8 +3,6 @@ const config = {
 
   facility: "Malta",
 
-  productionLine: "Gigabay",
-
   workCenter: "Final Test",
 
   // IMPORTANT: No trailing slash

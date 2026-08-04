@@ -6,13 +6,14 @@ import HomeBanner from "../components/HomeBanner";
 import ButtonGrid from "../components/ButtonGrid";
 import AlertScreen from "../components/AlertScreen";
 import ProductionLineToolbar from "../components/ProductionLineToolbar";
+import WorkCenterToolbar from "../components/WorkCenterToolbar";
 
 import useClock from "../hooks/useClock";
 import { useAlert } from "../context/AlertContext";
 
 export default function Home() {
 
-  const time = useClock();
+  const clock = useClock();
 
   const {
     activeAlert,
@@ -28,7 +29,7 @@ export default function Home() {
       }}
     >
 
-      <Header time={time} />
+      <Header time={clock.time} />
 
       {activeAlert ? (
 
@@ -43,9 +44,11 @@ export default function Home() {
 
           <HomeBanner />
 
-          <ProductionLineToolbar />
+<ProductionLineToolbar />
 
-          <ButtonGrid />
+<WorkCenterToolbar />
+
+<ButtonGrid />
 
           <Footer />
 
