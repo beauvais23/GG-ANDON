@@ -1,8 +1,6 @@
 .env
-
 node_modules
-
+andon.db
 andon.db-shm
 andon.db-wal
-
 .DS_Store
