@@ -408,6 +408,17 @@ const statements = {
         WHERE id = ?
     `),
 
+        getDuplicateActiveAlert: db.prepare(`
+        SELECT *
+        FROM alerts
+        WHERE production_line = ?
+          AND work_center = ?
+          AND type = ?
+          AND status IN ('ACTIVE', 'ACKNOWLEDGED')
+        ORDER BY requested ASC
+        LIMIT 1
+    `),
+
     getAllAlerts: db.prepare(`
         SELECT *
         FROM alerts

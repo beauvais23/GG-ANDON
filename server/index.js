@@ -3,6 +3,8 @@ require("dotenv").config();
 console.log(
     "BOT TOKEN:",
     process.env.TELEGRAM_BOT_TOKEN
+        ? "✓ Telegram bot token loaded"
+        : "✗ Telegram bot token NOT loaded"
 );
 
 const express = require("express");
@@ -156,9 +158,39 @@ app.post("/alerts", async (req, res) => {
             validWorkCenter.facility;
 
         //--------------------------------------------------
+        // Prevent Duplicate Active Alerts
+        //--------------------------------------------------
+
+        const existingAlert =
+            statements.getDuplicateActiveAlert.get(
+                validatedProductionLine,
+                validatedWorkCenter,
+                type
+            );
+
+        if (existingAlert) {
+
+            return res.status(409).json({
+
+                success: false,
+
+                duplicate: true,
+
+                message:
+                    `An active ${type} alert already exists for ` +
+                    `${validatedProductionLine} / ${validatedWorkCenter}.`,
+
+                alert: existingAlert
+
+            });
+
+        }
+        
+        //--------------------------------------------------
         // Create Alert
         //--------------------------------------------------
 
+             
         const now = Date.now();
 
         const result =
