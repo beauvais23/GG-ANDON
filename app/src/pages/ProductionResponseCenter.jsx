@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Box,
@@ -33,129 +33,93 @@ export default function ProductionResponseCenter() {
   const clock = useClock();
 
   const [alerts, setAlerts] = useState([]);
-  const [responseTeam, setResponseTeam] = useState([]);
-  const [selectedResponder, setSelectedResponder] = useState("");
-  const [selectedType, setSelectedType] = useState("ALL");
-  const [, refresh] = useState(0);
+const [responseTeam, setResponseTeam] = useState([]);
+const [selectedResponder, setSelectedResponder] = useState("");
+const [selectedType, setSelectedType] = useState("ALL");
 
-  //--------------------------------------------------------
-  // Live Clock
-  //--------------------------------------------------------
+const previousAlertIds = useRef(new Set());
+const audioContextRef = useRef(null);
 
-  useEffect(() => {
+const soundEnabledRef = useRef(false);
+const alarmSilencedRef = useRef(false);
 
-    const timer = setInterval(() => {
+const alertsInitializedRef = useRef(false);
 
-      refresh(v => v + 1);
+//--------------------------------------------------------
+// Alarm / Connection State
+//--------------------------------------------------------
 
-    }, 1000);
+const [alarmSilenced, setAlarmSilenced] = useState(false);
+const [soundEnabled, setSoundEnabled] = useState(false);
+const [serverOnline, setServerOnline] = useState(true);
 
-    return () => clearInterval(timer);
+// Keep refs synchronized with the React state.
+// This allows the polling function to always see the
+// current sound/silence settings.
 
-  }, []);
+useEffect(() => {
 
-  //--------------------------------------------------------
-  // Response Team
-  //--------------------------------------------------------
+  soundEnabledRef.current = soundEnabled;
 
-  useEffect(() => {
+}, [soundEnabled]);
 
-    async function loadTeam() {
+useEffect(() => {
 
-      try {
+  alarmSilencedRef.current = alarmSilenced;
 
-        const team = await getResponseTeam();
+}, [alarmSilenced]);
 
-        setResponseTeam(team);
+//--------------------------------------------------------
+// Alert Polling
+//--------------------------------------------------------
 
-        if (team.length > 0) {
+useEffect(() => {
 
-          setSelectedResponder(team[0].name);
+  loadAlerts();
 
-        }
+  const timer =
+    setInterval(loadAlerts, 5000);
 
-      } catch (err) {
+  return () =>
+    clearInterval(timer);
 
-        console.error(err);
+}, []);
 
-      }
+//--------------------------------------------------------
+// Live Timer Refresh
+//--------------------------------------------------------
 
-    }
+useEffect(() => {
 
-    loadTeam();
+  const timer = setInterval(() => {
 
-  }, []);
+    setAlerts(current => [...current]);
 
-  //--------------------------------------------------------
-  // Helpers
-  //--------------------------------------------------------
+  }, 1000);
 
-  function elapsed(requested) {
+  return () => clearInterval(timer);
 
-    const seconds = Math.max(
-      0,
-      Math.floor((Date.now() - Number(requested)) / 1000)
-    );
+}, []);
 
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
+//--------------------------------------------------------
+// Response Team
+//--------------------------------------------------------
 
-    if (h > 0) {
+useEffect(() => {
 
-      return `${h}:${m.toString().padStart(2, "0")}:${s
-        .toString()
-        .padStart(2, "0")}`;
-
-    }
-
-    return `${m.toString().padStart(2, "0")}:${s
-      .toString()
-      .padStart(2, "0")}`;
-
-  }
-
-  function isCritical(requested) {
-
-    return (
-      (Date.now() - Number(requested)) / 1000 >= 600
-    );
-
-  }
-
-  //--------------------------------------------------------
-  // Load Alerts
-  //--------------------------------------------------------
-
-  async function loadAlerts() {
+  async function loadTeam() {
 
     try {
 
-      const data = await getActiveAlerts();
+      const team = await getResponseTeam();
 
-      data.sort((a, b) => {
+      setResponseTeam(team);
 
-        const aCritical = isCritical(a.requested);
-        const bCritical = isCritical(b.requested);
+      if (team.length > 0) {
 
-        if (aCritical !== bCritical) {
+        setSelectedResponder(team[0].name);
 
-          return aCritical ? -1 : 1;
-
-        }
-
-        if (a.status !== b.status) {
-
-          if (a.status === "ACTIVE") return -1;
-          if (b.status === "ACTIVE") return 1;
-
-        }
-
-        return Number(a.requested) - Number(b.requested);
-
-      });
-
-      setAlerts(data);
+      }
 
     } catch (err) {
 
@@ -165,15 +129,347 @@ export default function ProductionResponseCenter() {
 
   }
 
-  useEffect(() => {
+  loadTeam();
 
+}, []);
+
+//--------------------------------------------------------
+// Browser Offline Detection
+//--------------------------------------------------------
+
+useEffect(() => {
+
+  function handleOnline() {
+
+    setServerOnline(true);
     loadAlerts();
 
-    const timer = setInterval(loadAlerts, 5000);
+  }
 
-    return () => clearInterval(timer);
+  function handleOffline() {
 
-  }, []);
+    setServerOnline(false);
+
+  }
+
+  window.addEventListener(
+    "online",
+    handleOnline
+  );
+
+  window.addEventListener(
+    "offline",
+    handleOffline
+  );
+
+  if (!navigator.onLine) {
+
+    setServerOnline(false);
+
+  }
+
+  return () => {
+
+    window.removeEventListener(
+      "online",
+      handleOnline
+    );
+
+    window.removeEventListener(
+      "offline",
+      handleOffline
+    );
+
+  };
+
+}, []);
+
+//--------------------------------------------------------
+// Helpers
+//--------------------------------------------------------
+
+function elapsed(requested) {
+
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - Number(requested)) / 1000)
+  );
+
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+
+  if (h > 0) {
+
+    return `${h}:${m.toString().padStart(2, "0")}:${s
+      .toString()
+      .padStart(2, "0")}`;
+
+  }
+
+  return `${m.toString().padStart(2, "0")}:${s
+    .toString()
+    .padStart(2, "0")}`;
+
+}
+
+//--------------------------------------------------------
+// Critical Alert Helper
+//--------------------------------------------------------
+
+function isCritical(requested) {
+
+  return (
+    (Date.now() - Number(requested)) / 1000 >= 600
+  );
+
+}
+
+//--------------------------------------------------------
+// Audible Alarm
+//--------------------------------------------------------
+
+function enableSound() {
+
+  try {
+
+    const AudioContext =
+      window.AudioContext ||
+      window.webkitAudioContext;
+
+    if (!AudioContext) {
+
+      console.error(
+        "Web Audio API not supported"
+      );
+
+      return;
+
+    }
+
+    if (!audioContextRef.current) {
+
+      audioContextRef.current =
+        new AudioContext();
+
+    }
+
+    if (
+      audioContextRef.current.state === "suspended"
+    ) {
+
+      audioContextRef.current.resume();
+
+    }
+
+    soundEnabledRef.current = true;
+
+    setSoundEnabled(true);
+
+  }
+
+  catch (err) {
+
+    console.error(
+      "Unable to enable sound:",
+      err
+    );
+
+  }
+
+}
+
+function playAlarm() {
+
+  if (
+    !soundEnabledRef.current ||
+    alarmSilencedRef.current
+  ) {
+    return;
+  }
+
+  try {
+
+    const context = audioContextRef.current;
+
+    if (!context) {
+      console.warn("Audio context not initialized");
+      return;
+    }
+
+    if (context.state === "suspended") {
+      context.resume();
+    }
+
+    const now = context.currentTime;
+
+    const toneDuration = 0.25;
+    const gap = 0.075;
+
+    const frequencies = [
+      660,
+      880,
+      660,
+      880
+    ];
+
+    frequencies.forEach((frequency, index) => {
+
+      const start =
+        now + index * (toneDuration + gap);
+
+      const oscillator =
+        context.createOscillator();
+
+      const gain =
+        context.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(
+        frequency,
+        start
+      );
+
+      // Smooth attack
+      gain.gain.setValueAtTime(
+        0.001,
+        start
+      );
+
+      gain.gain.exponentialRampToValueAtTime(
+        0.18,
+        start + 0.025
+      );
+
+      // Smooth decay
+      gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        start + toneDuration
+      );
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+
+      oscillator.start(start);
+      oscillator.stop(start + toneDuration);
+
+    });
+
+  }
+
+  catch (err) {
+
+    console.error(
+      "Alarm error:",
+      err
+    );
+
+  }
+
+}
+
+//--------------------------------------------------------
+// Load Alerts
+//--------------------------------------------------------
+
+async function loadAlerts() {
+
+  try {
+
+    const data = await getActiveAlerts();
+
+    //----------------------------------------------------
+    // Server is responding
+    //----------------------------------------------------
+
+    setServerOnline(true);
+
+    //----------------------------------------------------
+    // Sort alerts
+    //----------------------------------------------------
+
+    data.sort((a, b) => {
+
+      const aCritical = isCritical(a.requested);
+      const bCritical = isCritical(b.requested);
+
+      if (aCritical !== bCritical) {
+
+        return aCritical ? -1 : 1;
+
+      }
+
+      if (a.status !== b.status) {
+
+        if (a.status === "ACTIVE") return -1;
+        if (b.status === "ACTIVE") return 1;
+
+      }
+
+      return Number(a.requested) - Number(b.requested);
+
+    });
+
+    //----------------------------------------------------
+    // Detect NEW active alerts
+    //----------------------------------------------------
+
+    const currentIds =
+      new Set(data.map(alert => alert.id));
+
+    const hasNewAlert =
+      alertsInitializedRef.current &&
+      data.some(alert =>
+        !previousAlertIds.current.has(alert.id) &&
+        alert.status === "ACTIVE"
+      );
+
+    if (hasNewAlert) {
+
+      console.log(
+        "🚨 NEW ACTIVE ALERT DETECTED"
+      );
+
+      // New alert automatically unsilences the alarm
+      setAlarmSilenced(false);
+      alarmSilencedRef.current = false;
+
+      playAlarm();
+
+    }
+
+    //----------------------------------------------------
+    // Save alert IDs for next poll
+    //----------------------------------------------------
+
+    previousAlertIds.current = currentIds;
+
+    //----------------------------------------------------
+    // First successful poll is now complete
+    //----------------------------------------------------
+
+    alertsInitializedRef.current = true;
+
+    //----------------------------------------------------
+    // Update screen
+    //----------------------------------------------------
+
+    setAlerts(data);
+
+  }
+
+  catch (err) {
+
+    console.error(
+      "Alert polling error:",
+      err
+    );
+
+    setServerOnline(false);
+
+  }
+
+}
 
   //--------------------------------------------------------
   // Dashboard Stats
@@ -330,13 +626,73 @@ export default function ProductionResponseCenter() {
         }}
       >
 
-        <Chip
-          color="success"
-          label="SYSTEM ONLINE"
-          sx={{
-            fontWeight: 700
-          }}
-        />
+        <Stack
+  direction="row"
+  spacing={1}
+  sx={{
+    alignItems: "center"
+  }}
+>
+
+  <Chip
+    color={serverOnline ? "success" : "error"}
+    label={
+      serverOnline
+        ? "SYSTEM ONLINE"
+        : "SERVER OFFLINE"
+    }
+    sx={{
+      fontWeight: 700
+    }}
+  />
+
+  {!soundEnabled && (
+
+    <Button
+      variant="contained"
+      color="warning"
+      size="small"
+      onClick={enableSound}
+      sx={{
+        fontWeight: 700
+      }}
+    >
+      ENABLE SOUND
+    </Button>
+
+  )}
+
+  {soundEnabled && (
+
+    <Button
+      variant="outlined"
+      color="inherit"
+      size="small"
+      onClick={() => {
+
+  const newValue = !alarmSilenced;
+
+  alarmSilencedRef.current = newValue;
+
+  setAlarmSilenced(newValue);
+
+}}
+      sx={{
+        fontWeight: 700,
+        borderColor: "rgba(255,255,255,.5)",
+        color: "white"
+      }}
+    >
+      {alarmSilenced
+        ? "🔇 ALARM SILENCED"
+        : "🔊 SILENCE ALARM"}
+    </Button>
+
+  )}
+
+  
+
+</Stack>
 
         <Stack
           direction="row"

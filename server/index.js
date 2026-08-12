@@ -1,12 +1,8 @@
 require("dotenv").config();
 
-console.log(
-    "BOT TOKEN:",
-    process.env.TELEGRAM_BOT_TOKEN
-        ? "✓ Telegram bot token loaded"
-        : "✗ Telegram bot token NOT loaded"
-);
+const authenticateToken = require("./middleware/auth");
 
+const jwt = require("jsonwebtoken");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -44,6 +40,88 @@ app.use(cors());
 
 app.use(express.json());
 
+//------------------------------------------------------
+// Authentication
+//------------------------------------------------------
+
+app.post("/auth/login", (req, res) => {
+
+    try {
+
+        const {
+            username,
+            password
+        } = req.body;
+
+        //--------------------------------------------------
+        // Validate credentials
+        //--------------------------------------------------
+
+        if (
+            username !== process.env.APP_USERNAME ||
+            password !== process.env.APP_PASSWORD
+        ) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid username or password."
+
+            });
+
+        }
+
+        //--------------------------------------------------
+        // Create authentication token
+        //--------------------------------------------------
+
+        const token = jwt.sign(
+
+            {
+                username
+            },
+
+            process.env.AUTH_SECRET,
+
+            {
+                expiresIn: "8h"
+            }
+
+        );
+
+        //--------------------------------------------------
+        // Login successful
+        //--------------------------------------------------
+
+        res.json({
+
+            success: true,
+
+            token
+
+        });
+
+    }
+
+    catch (err) {
+
+        console.error(
+            "Authentication Error:",
+            err.message
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message: "Authentication failed."
+
+        });
+
+    }
+
+});
 
 //------------------------------------------------------
 // Root
@@ -65,6 +143,7 @@ app.get("/", (req, res) => {
     });
 
 });
+
 
 
 //------------------------------------------------------
@@ -90,7 +169,7 @@ app.get("/health", (req, res) => {
 // Create Alert
 //------------------------------------------------------
 
-app.post("/alerts", async (req, res) => {
+app.post("/alerts", authenticateToken, async (req, res) => {
 
     try {
 
@@ -291,6 +370,7 @@ app.post("/alerts", async (req, res) => {
 
 app.get(
     "/alerts/active",
+    authenticateToken,
     (req, res) => {
 
         try {
@@ -335,8 +415,9 @@ app.get(
 //------------------------------------------------------
 
 app.get(
-    "/alerts",
-    (req, res) => {
+"/alerts",
+authenticateToken,
+(req, res) => {
 
         try {
 
@@ -378,7 +459,10 @@ app.get(
 // Executive Dashboard
 //------------------------------------------------------
 
-app.get("/dashboard/executive", (req, res) => {
+app.get(
+    "/dashboard/executive",
+    authenticateToken,
+    (req, res) => {
 
     try {
 
@@ -431,7 +515,7 @@ app.get("/dashboard/executive", (req, res) => {
 // Get Response Team
 //------------------------------------------------------
 
-app.get("/response-team", (req, res) => {
+app.get("/response-team", authenticateToken, (req, res) => {
 
     try {
 
@@ -458,7 +542,7 @@ app.get("/response-team", (req, res) => {
 // Get Production Lines
 //------------------------------------------------------
 
-app.get("/production-lines", (req, res) => {
+app.get("/production-lines", authenticateToken, (req, res) => {
 
     try {
 
@@ -486,7 +570,7 @@ app.get("/production-lines", (req, res) => {
 // Create Production Line
 //------------------------------------------------------
 
-app.post("/production-lines", (req, res) => {
+app.post("/production-lines", authenticateToken, (req, res) => {
 
     try {
 
@@ -546,7 +630,7 @@ app.post("/production-lines", (req, res) => {
 // Update Production Line Order
 //------------------------------------------------------
 
-app.put("/production-lines/order", (req, res) => {
+app.put("/production-lines/order", authenticateToken, (req, res) => {
 
     try {
 
@@ -593,7 +677,7 @@ app.put("/production-lines/order", (req, res) => {
 // Update Production Line
 //------------------------------------------------------
 
-app.put("/production-lines/:id", (req, res) => {
+app.put("/production-lines/:id", authenticateToken, (req, res) => {
 
     try {
 
@@ -644,7 +728,7 @@ app.put("/production-lines/:id", (req, res) => {
 // Delete Production Line
 //------------------------------------------------------
 
-app.delete("/production-lines/:id", (req, res) => {
+app.delete("/production-lines/:id", authenticateToken, (req, res) => {
 
     try {
 
@@ -675,7 +759,7 @@ app.delete("/production-lines/:id", (req, res) => {
 // Get Work Centers
 //------------------------------------------------------
 
-app.get("/work-centers", (req, res) => {
+app.get("/work-centers", authenticateToken, (req, res) => {
 
     try {
 
@@ -703,7 +787,7 @@ app.get("/work-centers", (req, res) => {
 // Get Active Work Centers
 //------------------------------------------------------
 
-app.get("/work-centers/active", (req, res) => {
+app.get("/work-centers/active", authenticateToken, (req, res) => {
 
     try {
 
@@ -731,7 +815,7 @@ app.get("/work-centers/active", (req, res) => {
 // Get Work Centers for Production Line
 //------------------------------------------------------
 
-app.get("/work-centers/line/:productionLine", (req, res) => {
+app.get("/work-centers/line/:productionLine", authenticateToken, (req, res) => {
 
     try {
 
@@ -761,7 +845,7 @@ app.get("/work-centers/line/:productionLine", (req, res) => {
 // Create Work Center
 //------------------------------------------------------
 
-app.post("/work-centers", (req, res) => {
+app.post("/work-centers", authenticateToken, (req, res) => {
 
     try {
 
@@ -828,7 +912,7 @@ statements.insertWorkCenter.run(
 // Update Work Center Order
 //------------------------------------------------------
 
-app.put("/work-centers/order", (req, res) => {
+app.put("/work-centers/order", authenticateToken, (req, res) => {
 
     try {
 
@@ -875,7 +959,7 @@ app.put("/work-centers/order", (req, res) => {
 // Update Work Center
 //------------------------------------------------------
 
-app.put("/work-centers/:id", (req, res) => {
+app.put("/work-centers/:id", authenticateToken, (req, res) => {
 
     try {
 
@@ -929,7 +1013,7 @@ app.put("/work-centers/:id", (req, res) => {
 //------------------------------------------------------
 
 app.patch(
-    "/alerts/:id/acknowledge",
+    "/alerts/:id/acknowledge", authenticateToken,
     async (req, res) => {
 
         try {
@@ -1150,7 +1234,7 @@ app.patch(
 //------------------------------------------------------
 
 app.patch(
-    "/alerts/:id/resolve",
+    "/alerts/:id/resolve", authenticateToken,
     async (req, res) => {
 
         try {
@@ -1374,7 +1458,7 @@ app.patch(
 //------------------------------------------------------
 
 app.patch(
-    "/alerts/:id/cancel",
+    "/alerts/:id/cancel", authenticateToken,
     async (req, res) => {
 
         try {
@@ -1544,7 +1628,7 @@ app.patch(
 // Dashboard KPI Summary
 //------------------------------------------------------
 
-app.get("/dashboard/kpis", (req, res) => {
+app.get("/dashboard/kpis", authenticateToken, (req, res) => {
 
     try {
 
@@ -1608,7 +1692,7 @@ app.get("/dashboard/kpis", (req, res) => {
 
 
 
-app.post("/response-team", (req, res) => {
+app.post("/response-team", authenticateToken, (req, res) => {
 
     try {
 
@@ -1727,7 +1811,7 @@ if (!cleanDepartment) {
 // Update Responder
 //------------------------------------------------------
 
-app.put("/response-team/:id", (req, res) => {
+app.put("/response-team/:id", authenticateToken, (req, res) => {
 
     try {
 
@@ -1846,7 +1930,7 @@ if (!cleanDepartment) {
 // Delete Responder
 //------------------------------------------------------
 
-app.delete("/response-team/:id", (req, res) => {
+app.delete("/response-team/:id", authenticateToken, (req, res) => {
 
     try {
 

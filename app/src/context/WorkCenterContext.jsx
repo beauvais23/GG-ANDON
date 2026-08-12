@@ -13,9 +13,7 @@ import {
     useProductionLine
 } from "./ProductionLineContext";
 
-
 const WorkCenterContext = createContext();
-
 
 export function WorkCenterProvider({ children }) {
 
@@ -32,19 +30,29 @@ export function WorkCenterProvider({ children }) {
 
     useEffect(() => {
 
-    // Clear the current Work Center immediately
-    // whenever the Production Line changes.
+        // Clear the current Work Center immediately
+        // whenever the Production Line changes.
 
-    setWorkCenters([]);
-    setWorkCenter("");
+        setWorkCenters([]);
+        setWorkCenter("");
 
-    if (!productionLine) {
-        return;
-    }
+        //--------------------------------------------------
+        // Do not load protected data when logged out
+        //--------------------------------------------------
 
-    loadWorkCenters();
+        const token = localStorage.getItem("authToken");
 
-}, [productionLine]);
+        if (!token) {
+            return;
+        }
+
+        if (!productionLine) {
+            return;
+        }
+
+        loadWorkCenters();
+
+    }, [productionLine]);
 
 
     //------------------------------------------------------
@@ -53,12 +61,54 @@ export function WorkCenterProvider({ children }) {
 
     async function loadWorkCenters() {
 
+        //--------------------------------------------------
+        // Authentication Guard
+        //--------------------------------------------------
+
+        const token = localStorage.getItem("authToken");
+
+        if (!token) {
+
+            setWorkCenters([]);
+            setWorkCenter("");
+
+            return;
+        }
+
+        if (!productionLine) {
+
+            setWorkCenters([]);
+            setWorkCenter("");
+
+            return;
+        }
+
+
         try {
 
             const data =
                 await getWorkCentersByProductionLine(
                     productionLine
                 );
+
+
+            //--------------------------------------------------
+            // Make sure API returned an array
+            //--------------------------------------------------
+
+            if (!Array.isArray(data)) {
+
+                console.error(
+                    "Failed to load Work Centers: Invalid API response.",
+                    data
+                );
+
+                setWorkCenters([]);
+                setWorkCenter("");
+
+                return;
+            }
+
 
             setWorkCenters(data);
 
@@ -79,13 +129,14 @@ export function WorkCenterProvider({ children }) {
 
             if (
                 saved &&
-                data.some(wc => wc.name === saved)
+                data.some(
+                    wc => wc.name === saved
+                )
             ) {
 
                 setWorkCenter(saved);
 
                 return;
-
             }
 
 
@@ -136,6 +187,10 @@ export function WorkCenterProvider({ children }) {
     //------------------------------------------------------
 
     function changeWorkCenter(name) {
+
+        if (!productionLine) {
+            return;
+        }
 
         setWorkCenter(name);
 
