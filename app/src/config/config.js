@@ -1,12 +1,10 @@
 const config = {
   company: "G&G Industrial Lighting",
-
   facility: "Malta",
-
   workCenter: "Final Test",
 
-  // IMPORTANT: No trailing slash
-  apiBaseUrl: "https://cautious-spork-qvv7j7rw46xghwrx-3001.app.github.dev"
+  // Railway production backend
+  apiBaseUrl: "https://gg-andon-production.up.railway.app"
 };
 
 export default config;
