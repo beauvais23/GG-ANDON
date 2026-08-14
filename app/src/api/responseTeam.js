@@ -1,10 +1,6 @@
-const API =
-    window.location.hostname === "localhost"
-        ? "http://localhost:3001"
-        : `${window.location.protocol}//${window.location.hostname.replace(
-            "-5173",
-            "-3001"
-        )}`;
+import config from "../config/config";
+
+const API = config.apiBaseUrl;
 
 //------------------------------------------------------
 // Authentication Header
