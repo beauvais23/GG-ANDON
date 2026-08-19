@@ -9,6 +9,13 @@ const {
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
+console.log("====================================");
+console.log("TELEGRAM CONFIGURATION");
+console.log("====================================");
+console.log("TELEGRAM_BOT_TOKEN present:", !!TOKEN);
+console.log("TELEGRAM_CHAT_ID present:", !!CHAT_ID);
+console.log("====================================");
+
 
 //------------------------------------------------------
 // Build Telegram Message
