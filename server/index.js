@@ -1978,12 +1978,51 @@ app.delete("/response-team/:id", authenticateToken, (req, res) => {
 // Telegram Test
 //------------------------------------------------------
 
-app.get("/telegram/test", (req, res) => {
+app.get("/telegram/test", async (req, res) => {
 
     console.log("Telegram Test Route Hit");
 
+    const { sendTelegram } =
+        require("./services/telegram");
+
+    const testAlert = {
+
+        id: 999999,
+
+        type: "QUALITY",
+
+        production_line: "Gigabay",
+
+        work_center: "Final Test",
+
+        priority: "HIGH",
+
+        status: "ACTIVE",
+
+        requested: Date.now(),
+
+        assigned_to: null,
+
+        acknowledged_by: null,
+
+        resolved_by: null,
+
+        resolution_notes: ""
+
+    };
+
+    const messageId =
+        await sendTelegram(
+            testAlert,
+            "CREATED"
+        );
+
     res.json({
-        success: true
+
+        success: !!messageId,
+
+        messageId
+
     });
 
 });
