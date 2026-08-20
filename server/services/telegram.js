@@ -23,18 +23,6 @@ console.log(
     Boolean(process.env.TELEGRAM_CHAT_ID)
 );
 
-console.log(
-    "TELEGRAM_CHAT_ID length:",
-    process.env.TELEGRAM_CHAT_ID
-        ? process.env.TELEGRAM_CHAT_ID.length
-        : 0
-);
-
-console.log(
-    "TELEGRAM_CHAT_ID value type:",
-    typeof process.env.TELEGRAM_CHAT_ID
-);
-
 console.log("========================================");
 
 
