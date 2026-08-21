@@ -23,6 +23,8 @@ const {
 
 const { updateTelegram } = require("./services/telegramUpdate");
 
+const { telegramWebhookUrl } = require("./config");
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -2218,10 +2220,68 @@ console.log(
 });
 
 //------------------------------------------------------
+// Configure Telegram Webhook
+//------------------------------------------------------
+
+async function configureTelegramWebhook() {
+
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!token) {
+
+        console.log(
+            "Telegram webhook not configured: TELEGRAM_BOT_TOKEN missing."
+        );
+
+        return;
+
+    }
+
+    try {
+
+        const response = await axios.post(
+
+            `https://api.telegram.org/bot${token}/setWebhook`,
+
+            {
+
+                url: telegramWebhookUrl
+
+            }
+
+        );
+
+        if (response.data.ok) {
+
+            console.log(
+                `✓ Telegram webhook configured: ${telegramWebhookUrl}`
+            );
+
+        } else {
+
+            console.error(
+                "Telegram webhook configuration failed:",
+                response.data
+            );
+
+        }
+
+    } catch (err) {
+
+        console.error(
+            "Telegram webhook configuration error:",
+            err.response?.data || err.message
+        );
+
+    }
+
+}
+
+//------------------------------------------------------
 // Start Server
 //------------------------------------------------------
 
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", async () => {
 
     console.log("");
     console.log("========================================");
@@ -2230,5 +2290,7 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log(` Listening on port ${PORT}`);
     console.log(" Notifications Enabled");
     console.log("========================================");
+
+    await configureTelegramWebhook();
 
 });
