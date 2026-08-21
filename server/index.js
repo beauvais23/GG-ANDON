@@ -21,6 +21,8 @@ const {
     notifyCancelled
 } = require("./services/notificationManager");
 
+const { updateTelegram } = require("./services/telegramUpdate");
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -2110,6 +2112,8 @@ const alert = statements.getAlert.get(alertId);
 
 await notifyResolved(alert);
 
+await updateTelegram(alert);
+
     console.log(
         `✓ Telegram resolved Alert #${alertId} by ${responder}`
     );
@@ -2201,7 +2205,11 @@ const alert = statements.getAlert.get(alertId);
 
 await notifyAcknowledged(alert);
 
-        console.log(`✓ Telegram acknowledged Alert #${alertId} by ${responder}`);
+await updateTelegram(alert);
+
+console.log(
+    `✓ Telegram acknowledged Alert #${alertId} by ${responder}`
+);
 
     }
 
