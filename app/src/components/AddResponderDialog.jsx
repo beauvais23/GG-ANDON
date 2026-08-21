@@ -7,9 +7,7 @@ import {
     DialogActions,
     Button,
     TextField,
-    MenuItem,
-    FormControlLabel,
-    Switch
+    MenuItem
 } from "@mui/material";
 
 const departments = [
@@ -41,8 +39,8 @@ export default function AddResponderDialog({
     const [jobTitle, setJobTitle] = useState("");
     const [phone, setPhone] = useState("");
     const [email, setEmail] = useState("");
-    const [availability, setAvailability] = useState("Available");
-    const [active, setActive] = useState(true);
+    const [availability, setAvailability] =
+        useState("Available");
 
     useEffect(() => {
 
@@ -54,7 +52,6 @@ export default function AddResponderDialog({
             setPhone("");
             setEmail("");
             setAvailability("Available");
-            setActive(true);
 
         }
 
@@ -69,8 +66,7 @@ export default function AddResponderDialog({
             job_title: jobTitle,
             phone,
             email,
-            availability,
-            active: active ? 1 : 0
+            availability
 
         });
 
@@ -98,7 +94,9 @@ export default function AddResponderDialog({
                     margin="normal"
                     label="Name"
                     value={name}
-                    onChange={(e)=>setName(e.target.value)}
+                    onChange={(e) =>
+                        setName(e.target.value)
+                    }
                 />
 
                 <TextField
@@ -107,13 +105,24 @@ export default function AddResponderDialog({
                     margin="normal"
                     label="Department"
                     value={department}
-                    onChange={(e)=>setDepartment(e.target.value)}
+                    onChange={(e) =>
+                        setDepartment(e.target.value)
+                    }
                 >
-                    {departments.map((d)=>(
-                        <MenuItem key={d} value={d}>
+
+                    {departments.map((d) => (
+
+                        <MenuItem
+                            key={d}
+                            value={d}
+                        >
+
                             {d}
+
                         </MenuItem>
+
                     ))}
+
                 </TextField>
 
                 <TextField
@@ -121,7 +130,9 @@ export default function AddResponderDialog({
                     margin="normal"
                     label="Job Title"
                     value={jobTitle}
-                    onChange={(e)=>setJobTitle(e.target.value)}
+                    onChange={(e) =>
+                        setJobTitle(e.target.value)
+                    }
                 />
 
                 <TextField
@@ -129,7 +140,9 @@ export default function AddResponderDialog({
                     margin="normal"
                     label="Phone"
                     value={phone}
-                    onChange={(e)=>setPhone(e.target.value)}
+                    onChange={(e) =>
+                        setPhone(e.target.value)
+                    }
                 />
 
                 <TextField
@@ -137,47 +150,54 @@ export default function AddResponderDialog({
                     margin="normal"
                     label="Email"
                     value={email}
-                    onChange={(e)=>setEmail(e.target.value)}
+                    onChange={(e) =>
+                        setEmail(e.target.value)
+                    }
                 />
 
                 <TextField
                     select
                     fullWidth
                     margin="normal"
-                    label="Availability"
+                    label="Status"
                     value={availability}
-                    onChange={(e)=>setAvailability(e.target.value)}
-                >
-                    {availabilityOptions.map((status)=>(
-                        <MenuItem key={status} value={status}>
-                            {status}
-                        </MenuItem>
-                    ))}
-                </TextField>
-
-                <FormControlLabel
-                    control={
-                        <Switch
-                            checked={active}
-                            onChange={(e)=>setActive(e.target.checked)}
-                        />
+                    onChange={(e) =>
+                        setAvailability(e.target.value)
                     }
-                    label="Active"
-                />
+                >
+
+                    {availabilityOptions.map((status) => (
+
+                        <MenuItem
+                            key={status}
+                            value={status}
+                        >
+
+                            {status}
+
+                        </MenuItem>
+
+                    ))}
+
+                </TextField>
 
             </DialogContent>
 
             <DialogActions>
 
                 <Button onClick={onClose}>
+
                     Cancel
+
                 </Button>
 
                 <Button
                     variant="contained"
                     onClick={handleSave}
                 >
+
                     Add Responder
+
                 </Button>
 
             </DialogActions>
