@@ -1,6 +1,9 @@
 require("dotenv").config();
 
-const authenticateToken = require("./middleware/auth");
+const {
+    authenticateToken,
+    requireAdmin
+} = require("./middleware/auth");
 
 const jwt = require("jsonwebtoken");
 const express = require("express");
@@ -58,13 +61,34 @@ app.post("/auth/login", (req, res) => {
         } = req.body;
 
         //--------------------------------------------------
-        // Validate credentials
+        // Determine User Role
         //--------------------------------------------------
 
+        let role = null;
+
         if (
-            username !== process.env.APP_USERNAME ||
-            password !== process.env.APP_PASSWORD
+            username === process.env.ADMIN_USERNAME &&
+            password === process.env.ADMIN_PASSWORD
         ) {
+
+            role = "admin";
+
+        }
+
+        else if (
+            username === process.env.PRODUCTION_USERNAME &&
+            password === process.env.PRODUCTION_PASSWORD
+        ) {
+
+            role = "production";
+
+        }
+
+        //--------------------------------------------------
+        // Invalid Credentials
+        //--------------------------------------------------
+
+        else {
 
             return res.status(401).json({
 
@@ -77,13 +101,14 @@ app.post("/auth/login", (req, res) => {
         }
 
         //--------------------------------------------------
-        // Create authentication token
+        // Create Authentication Token
         //--------------------------------------------------
 
         const token = jwt.sign(
 
             {
-                username
+                username,
+                role
             },
 
             process.env.AUTH_SECRET,
@@ -95,14 +120,16 @@ app.post("/auth/login", (req, res) => {
         );
 
         //--------------------------------------------------
-        // Login successful
+        // Login Successful
         //--------------------------------------------------
 
         res.json({
 
             success: true,
 
-            token
+            token,
+
+            role
 
         });
 
@@ -119,7 +146,8 @@ app.post("/auth/login", (req, res) => {
 
             success: false,
 
-            message: "Authentication failed."
+            message:
+                "Authentication failed."
 
         });
 

@@ -1,4 +1,7 @@
-import { Routes, Route } from "react-router-dom";
+import {
+    Routes,
+    Route
+} from "react-router-dom";
 
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
@@ -11,16 +14,20 @@ import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
+
     return (
+
         <Routes>
 
             {/* Public Route */}
+
             <Route
                 path="/login"
                 element={<Login />}
             />
 
-            {/* Protected Routes */}
+            {/* Production Routes */}
+
             <Route
                 path="/"
                 element={
@@ -66,17 +73,21 @@ function App() {
                 }
             />
 
+            {/* Administration - Admin Only */}
+
             <Route
                 path="/admin"
                 element={
-                    <ProtectedRoute>
+                    <ProtectedRoute requireAdmin>
                         <AdminPage />
                     </ProtectedRoute>
                 }
             />
 
         </Routes>
+
     );
+
 }
 
 export default App;

@@ -1,39 +1,101 @@
 const jwt = require("jsonwebtoken");
 
+//------------------------------------------------------
+// Authenticate Token
+//------------------------------------------------------
+
 function authenticateToken(req, res, next) {
-    const authHeader = req.headers["authorization"];
+
+    const authHeader =
+        req.headers["authorization"];
 
     const token =
-        authHeader && authHeader.startsWith("Bearer ")
+        authHeader &&
+        authHeader.startsWith("Bearer ")
             ? authHeader.substring(7)
             : null;
 
     if (!token) {
+
         return res.status(401).json({
+
             success: false,
-            message: "Authentication required."
+
+            message:
+                "Authentication required."
+
         });
+
     }
 
     try {
-        const decoded = jwt.verify(
-            token,
-            process.env.AUTH_SECRET
-        );
+
+        const decoded =
+            jwt.verify(
+                token,
+                process.env.AUTH_SECRET
+            );
 
         req.user = decoded;
 
         next();
 
-    } catch (err) {
+    }
 
-        console.error("JWT verification failed:", err.message);
+    catch (err) {
+
+        console.error(
+            "JWT verification failed:",
+            err.message
+        );
 
         return res.status(403).json({
+
             success: false,
-            message: "Invalid or expired authentication token."
+
+            message:
+                "Invalid or expired authentication token."
+
         });
+
     }
+
 }
 
-module.exports = authenticateToken;
+//------------------------------------------------------
+// Require Admin
+//------------------------------------------------------
+
+function requireAdmin(req, res, next) {
+
+    if (
+        !req.user ||
+        req.user.role !== "admin"
+    ) {
+
+        return res.status(403).json({
+
+            success: false,
+
+            message:
+                "Administrator access required."
+
+        });
+
+    }
+
+    next();
+
+}
+
+//------------------------------------------------------
+// Exports
+//------------------------------------------------------
+
+module.exports = {
+
+    authenticateToken,
+
+    requireAdmin
+
+};
