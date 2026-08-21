@@ -864,4 +864,3 @@ export default function RespondersPanel() {
     );
 
 }
-```
