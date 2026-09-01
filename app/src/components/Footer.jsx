@@ -9,6 +9,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import TvIcon from "@mui/icons-material/Tv";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import InsightsIcon from "@mui/icons-material/Insights";
+import LogoutIcon from "@mui/icons-material/Logout";
 
 import { useNavigate } from "react-router-dom";
 
@@ -72,8 +73,44 @@ export default function Footer() {
 
                     }
 
-                }
+                },
 
+                replace: true
+
+            }
+
+        );
+
+    }
+
+    //------------------------------------------------------
+    // Logout
+    //------------------------------------------------------
+
+    function handleLogout() {
+
+        //--------------------------------------------------
+        // Clear Authentication
+        //--------------------------------------------------
+
+        localStorage.removeItem(
+            "authToken"
+        );
+
+        localStorage.removeItem(
+            "userRole"
+        );
+
+        //--------------------------------------------------
+        // Return To Login
+        //--------------------------------------------------
+
+        navigate(
+
+            "/login",
+
+            {
+                replace: true
             }
 
         );
@@ -196,6 +233,26 @@ export default function Footer() {
             >
 
                 Administration
+
+            </Button>
+
+            <Button
+
+                size="small"
+
+                variant="outlined"
+
+                color="error"
+
+                startIcon={<LogoutIcon />}
+
+                onClick={
+                    handleLogout
+                }
+
+            >
+
+                Logout
 
             </Button>
 
