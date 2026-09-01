@@ -1,6 +1,13 @@
 const Database = require("better-sqlite3");
+const path = require("path");
 
-const db = new Database("andon.db");
+const dbPath =
+    process.env.DATABASE_PATH ||
+    path.join(__dirname, "andon.db");
+
+console.log(`✓ Database path: ${dbPath}`);
+
+const db = new Database(dbPath);
 
 db.pragma("journal_mode = WAL");
 
