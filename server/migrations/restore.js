@@ -186,6 +186,7 @@ function restoreIfRequested(dbPath) {
 }
 
 module.exports = {
+    NAME_PATTERN,
     restoreIfRequested,
     listBackups
 };

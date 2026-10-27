@@ -1,5 +1,6 @@
 import RespondersPanel from "../components/admin/RespondersPanel";
 import ProductionLinesPanel from "../components/admin/ProductionLinesPanel";
+import BackupsPanel from "../components/admin/BackupsPanel";
 
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
@@ -578,6 +579,11 @@ return (
                     label="Production Lines"
                     value="productionLines"
                 />
+
+                <Tab
+                    label="Backups"
+                    value="backups"
+                />
             </Tabs>
 
             {adminSection === "responders" && (
@@ -589,6 +595,12 @@ return (
             {adminSection === "productionLines" && (
 
     <ProductionLinesPanel />
+
+)}
+
+            {adminSection === "backups" && (
+
+    <BackupsPanel />
 
 )}
 
