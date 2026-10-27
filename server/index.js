@@ -9,6 +9,7 @@ const jwt = require("jsonwebtoken");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const crypto = require("crypto");
 
 const {
     statements
@@ -115,7 +116,7 @@ app.post("/auth/login", (req, res) => {
             process.env.AUTH_SECRET,
 
             {
-                expiresIn: "8h"
+                expiresIn: process.env.JWT_EXPIRES_IN || "12h"
             }
 
         );
@@ -603,7 +604,7 @@ app.get("/production-lines", authenticateToken, (req, res) => {
 // Create Production Line
 //------------------------------------------------------
 
-app.post("/production-lines", authenticateToken, (req, res) => {
+app.post("/production-lines", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -663,7 +664,7 @@ app.post("/production-lines", authenticateToken, (req, res) => {
 // Update Production Line Order
 //------------------------------------------------------
 
-app.put("/production-lines/order", authenticateToken, (req, res) => {
+app.put("/production-lines/order", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -710,7 +711,7 @@ app.put("/production-lines/order", authenticateToken, (req, res) => {
 // Update Production Line
 //------------------------------------------------------
 
-app.put("/production-lines/:id", authenticateToken, (req, res) => {
+app.put("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -761,7 +762,7 @@ app.put("/production-lines/:id", authenticateToken, (req, res) => {
 // Delete Production Line
 //------------------------------------------------------
 
-app.delete("/production-lines/:id", authenticateToken, (req, res) => {
+app.delete("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -878,7 +879,7 @@ app.get("/work-centers/line/:productionLine", authenticateToken, (req, res) => {
 // Create Work Center
 //------------------------------------------------------
 
-app.post("/work-centers", authenticateToken, (req, res) => {
+app.post("/work-centers", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -945,7 +946,7 @@ statements.insertWorkCenter.run(
 // Update Work Center Order
 //------------------------------------------------------
 
-app.put("/work-centers/order", authenticateToken, (req, res) => {
+app.put("/work-centers/order", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -992,7 +993,7 @@ app.put("/work-centers/order", authenticateToken, (req, res) => {
 // Update Work Center
 //------------------------------------------------------
 
-app.put("/work-centers/:id", authenticateToken, (req, res) => {
+app.put("/work-centers/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -1725,7 +1726,7 @@ app.get("/dashboard/kpis", authenticateToken, (req, res) => {
 
 
 
-app.post("/response-team", authenticateToken, (req, res) => {
+app.post("/response-team", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -1844,7 +1845,7 @@ if (!cleanDepartment) {
 // Update Responder
 //------------------------------------------------------
 
-app.put("/response-team/:id", authenticateToken, (req, res) => {
+app.put("/response-team/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -1963,7 +1964,7 @@ if (!cleanDepartment) {
 // Delete Responder
 //------------------------------------------------------
 
-app.delete("/response-team/:id", authenticateToken, (req, res) => {
+app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -2008,63 +2009,31 @@ app.delete("/response-team/:id", authenticateToken, (req, res) => {
 });
 
 //------------------------------------------------------
-// Telegram Test
-//------------------------------------------------------
-
-app.get("/telegram/test", async (req, res) => {
-
-    console.log("Telegram Test Route Hit");
-
-    const { sendTelegram } =
-        require("./services/telegram");
-
-    const testAlert = {
-
-        id: 999999,
-
-        type: "QUALITY",
-
-        production_line: "Gigabay",
-
-        work_center: "Final Test",
-
-        priority: "HIGH",
-
-        status: "ACTIVE",
-
-        requested: Date.now(),
-
-        assigned_to: null,
-
-        acknowledged_by: null,
-
-        resolved_by: null,
-
-        resolution_notes: ""
-
-    };
-
-    const messageId =
-        await sendTelegram(
-            testAlert,
-            "CREATED"
-        );
-
-    res.json({
-
-        success: !!messageId,
-
-        messageId
-
-    });
-
-});
-
-//------------------------------------------------------
 // Telegram Webhook
 //------------------------------------------------------
 
+// Telegram echoes the secret_token we pass to setWebhook in this
+// header. No secret configured, or no match: reject (fail closed).
+function isFromTelegram(req) {
+
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const header = req.get("X-Telegram-Bot-Api-Secret-Token");
+
+    if (!secret || !header)
+        return false;
+
+    const a = Buffer.from(header);
+    const b = Buffer.from(secret);
+
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+
+}
+
 app.post("/telegram/webhook", async (req, res) => {
+
+    if (!isFromTelegram(req)) {
+        return res.sendStatus(401);
+    }
 
     // Outside production setWebhook never runs, so ignore
     // anything posted here (it can't be from our bot).
@@ -2282,6 +2251,19 @@ async function configureTelegramWebhook() {
 
     }
 
+    // Telegram allows 1-256 chars of A-Z a-z 0-9 _ -
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+
+    if (!secret || !/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
+
+        console.error(
+            "Telegram webhook NOT configured: TELEGRAM_WEBHOOK_SECRET missing or invalid (1-256 chars, A-Z a-z 0-9 _ -). Telegram buttons will not work."
+        );
+
+        return;
+
+    }
+
     try {
 
         const response = await axios.post(
@@ -2290,7 +2272,9 @@ async function configureTelegramWebhook() {
 
             {
 
-                url: telegramWebhookUrl
+                url: telegramWebhookUrl,
+
+                secret_token: secret
 
             }
 
