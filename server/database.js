@@ -654,5 +654,6 @@ console.log("✓ SQLite database ready");
 
 module.exports = {
     db,
+    dbPath,
     statements
 };
