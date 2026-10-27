@@ -30,7 +30,7 @@ Read this file fully before changing anything.
 | Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability` |
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
-| Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `availability.js` (responder enum), `dailyBackup.js` |
+| Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `availability.js` (responder enum), `dailyBackup.js`, `notificationQueue.js` (background notifications, per-alert order, time limit) |
 | Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test` |
 | Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset) |
 | Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json` | Remove in the cleanup PR (root `node_modules/` already removed) |
@@ -60,6 +60,7 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 | Backend | `SUPERVISOR_URL` | staging | Unset in production; falls back to the prod frontend (`server/config.js:11-13`) |
 | Backend | `JWT_EXPIRES_IN` | no | Default `12h`. A malformed value breaks every login |
 | Backend | `DAILY_BACKUP_HOUR` | no | New York hour 0–23, default `17` |
+| Backend | `NOTIFY_TIMEOUT_MS` | no | Time limit per Telegram/Google Chat call, default `5000` |
 | Backend | `BACKUP_DIR` | no | Default `<DATABASE_PATH dir>/backups` |
 | Backend | `RESTORE_BACKUP` | incident only | Backup file name to restore at next boot; delete after use |
 | Frontend | `VITE_API_BASE_URL` | yes (build time) | Backend URL for that environment |
@@ -150,7 +151,9 @@ Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET wit
 
 ## Known defects
 
-### Fixed in Phase 0.5 (PRs #2–#8, promoted Oct 27 2026)
+### Fixed
+
+Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are marked with their branch.
 
 | # | Defect | Fix |
 |---|---|---|
@@ -166,12 +169,12 @@ Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET wit
 | 10 | Monthly trends in UTC | `ny_month()` (0.5d) |
 | 11 | Availability case mismatch; web ack didn't set Responding | Enum `Available/Responding/Busy/Away`; web ack/resolve/cancel update it (0.5d) |
 | 12 | 409 duplicate ignored on tablet | "TYPE: Already open since h:mm AM/PM" banner (0.5d) |
+| 13 | Notifications awaited in the request with no timeouts | Routes answer first; notifications queued per alert; every outbound call limited by `NOTIFY_TIMEOUT_MS` (fix-13) |
 
 ### Open (line references at commit 5e304a6)
 
 | # | Defect | Location |
 |---|---|---|
-| 13 | Notifications awaited in the request with no timeouts | `server/index.js:381, 1247, 1478, 1663, 2248, 2341`; `googleChat.js:366`; `telegram.js:417`; `telegramUpdate.js:54` |
 | 14 | Resolution notes hard-coded to "Resolved" | `ProductionResponseCenter.jsx:545`, `Dashboard.jsx:189`, `ActiveAlertList.jsx:144` (dead); Telegram path `server/index.js:2197` |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
 | 16 | No CI; production healthcheck path not yet set | repo / Railway production settings (staging has `/health`) |

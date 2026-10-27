@@ -1,5 +1,6 @@
 const { supervisorUrl } = require("../config");
 const { notificationsEnabled } = require("./appEnv");
+const { notifyTimeoutMs } = require("./notificationQueue");
 
 const {
     alertIcons,
@@ -421,6 +422,8 @@ async function sendTelegram(alert, status) {
             {
 
                 method: "POST",
+
+                signal: AbortSignal.timeout(notifyTimeoutMs()),
 
                 headers: {
 

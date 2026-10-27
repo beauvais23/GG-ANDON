@@ -3,6 +3,7 @@ const {
     buildKeyboard
 } = require("./telegram");
 const { notificationsEnabled } = require("./appEnv");
+const { notifyTimeoutMs } = require("./notificationQueue");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -58,6 +59,8 @@ async function updateTelegram(alert) {
         {
 
             method: "POST",
+
+            signal: AbortSignal.timeout(notifyTimeoutMs()),
 
             headers: {
 
