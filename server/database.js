@@ -140,74 +140,11 @@ if (wcCount.count === 0) {
 
 
 //------------------------------------------------------
-// Seed Response Team
+// Response Team
+//
+// Not seeded. People are entered per environment in
+// Admin → Responders (CLAUDE.md hard rule 4).
 //------------------------------------------------------
-
-const existing = db
-    .prepare("SELECT COUNT(*) AS count FROM response_team")
-    .get();
-
-if (existing.count === 0) {
-
-    const insert = db.prepare(`
-        INSERT INTO response_team
-        (
-            name,
-            department,
-            job_title,
-            phone,
-            email,
-            availability,
-            active,
-            created_at,
-            updated_at
-        )
-        VALUES
-        (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-    `);
-
-    const now = Date.now();
-
-    insert.run(
-        "Steve Vielleux",
-        "Operations",
-        "Production Manager",
-        "",
-        "",
-        "Available",
-        1,
-        now,
-        now
-    );
-
-    insert.run(
-        "John Smith",
-        "Maintenance",
-        "Maintenance Technician",
-        "",
-        "",
-        "Available",
-        1,
-        now,
-        now
-    );
-
-    insert.run(
-        "Susan Brown",
-        "Leadership",
-        "Production Supervisor",
-        "",
-        "",
-        "Available",
-        1,
-        now,
-        now
-    );
-
-}
-
 
 //------------------------------------------------------
 // SQL Statements
