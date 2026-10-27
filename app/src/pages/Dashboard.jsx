@@ -9,6 +9,7 @@ import {
 import Header from "../components/Header";
 import AlertList from "../components/AlertList";
 import DashboardStats from "../components/DashboardStats";
+import ResolveDialog from "../components/ResolveDialog";
 
 import {
   getActiveAlerts,
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const clock = useClock();
 
   const [alerts, setAlerts] = useState([]);
+  const [resolving, setResolving] = useState(null);
 
   const [responseTeam, setResponseTeam] = useState([]);
 
@@ -169,38 +171,34 @@ export default function Dashboard() {
   // Resolve Alert
   //------------------------------------------------------
 
-  async function handleResolve(id) {
+  // Opens the note dialog; submitResolve does the resolve.
+  function handleResolve(id) {
 
-    try {
-
-      if (!selectedResponder) {
-
-        console.error(
-          "No responder selected."
-        );
-
-        return;
-
-      }
-
-      await resolveAlert(
-        id,
-        selectedResponder,
-        "Resolved"
-      );
-
-      await loadAlerts();
-
-    }
-
-    catch (err) {
+    if (!selectedResponder) {
 
       console.error(
-        "Dashboard resolve error:",
-        err
+        "No responder selected."
       );
 
+      return;
+
     }
+
+    setResolving(alerts.find(a => a.id === id) || { id });
+
+  }
+
+  async function submitResolve(id, note) {
+
+    const result = await resolveAlert(
+      id,
+      selectedResponder,
+      note
+    );
+
+    await loadAlerts();
+
+    return result;
 
   }
 
@@ -318,6 +316,13 @@ export default function Dashboard() {
 
 
       </Paper>
+
+      <ResolveDialog
+        alert={resolving}
+        responder={selectedResponder}
+        onClose={() => setResolving(null)}
+        onResolve={submitResolve}
+      />
 
     </Box>
   );

@@ -226,3 +226,36 @@ test("responder availability is stored as one enum; unknown values rejected", as
     assert.equal(bad.status, 400);
 
 });
+
+//------------------------------------------------------
+// Resolution notes (#14)
+//------------------------------------------------------
+
+test("resolve requires a real note: missing, blank, or over 500 chars → 400; valid note stored trimmed", async () => {
+
+    const raised = await raise("MAINTENANCE");
+    const id = raised.body.alert.id;
+
+    await acknowledge(id);
+
+    for (const body of [
+        { resolvedBy: RESPONDER },
+        { resolvedBy: RESPONDER, resolutionNotes: "   " },
+        { resolvedBy: RESPONDER, resolutionNotes: "x".repeat(501) }
+    ]) {
+
+        const res = await request(app).patch(`/alerts/${id}/resolve`).set(floor).send(body);
+
+        assert.equal(res.status, 400, JSON.stringify(body).slice(0, 60));
+
+    }
+
+    const ok = await request(app)
+        .patch(`/alerts/${id}/resolve`)
+        .set(floor)
+        .send({ resolvedBy: RESPONDER, resolutionNotes: "  Reseated drive belt  " });
+
+    assert.equal(ok.status, 200);
+    assert.equal(ok.body.alert.resolution_notes, "Reseated drive belt");
+
+});

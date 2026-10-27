@@ -1343,6 +1343,28 @@ app.patch(
             }
 
             //--------------------------------------------------
+            // Validate Resolution Note
+            //--------------------------------------------------
+
+            const cleanNotes =
+                typeof resolutionNotes === "string"
+                    ? resolutionNotes.trim()
+                    : "";
+
+            if (!cleanNotes || cleanNotes.length > 500) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Resolution note is required (up to 500 characters)."
+
+                });
+
+            }
+
+            //--------------------------------------------------
             // Get Alert
             //--------------------------------------------------
 
@@ -1421,7 +1443,7 @@ app.patch(
 
                     resolver.name,
 
-                    resolutionNotes,
+                    cleanNotes,
 
                     now,
 

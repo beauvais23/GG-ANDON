@@ -170,12 +170,13 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 11 | Availability case mismatch; web ack didn't set Responding | Enum `Available/Responding/Busy/Away`; web ack/resolve/cancel update it (0.5d) |
 | 12 | 409 duplicate ignored on tablet | "TYPE: Already open since h:mm AM/PM" banner (0.5d) |
 | 13 | Notifications awaited in the request with no timeouts | Routes answer first; notifications queued per alert; every outbound call limited by `NOTIFY_TIMEOUT_MS` (fix-13) |
+| 14 | Resolution notes hard-coded to "Resolved" (web) | "What fixed it?" dialog on `/supervisor` and `/dashboard`; API requires a note, max 500 chars (fix-14). Telegram resolves still write "Resolved from Telegram" |
 
 ### Open (line references at commit 5e304a6)
 
 | # | Defect | Location |
 |---|---|---|
-| 14 | Resolution notes hard-coded to "Resolved" | `ProductionResponseCenter.jsx:545`, `Dashboard.jsx:189`, `ActiveAlertList.jsx:144` (dead); Telegram path `server/index.js:2197` |
+| 14b | Telegram resolves have no real note (a button can't carry text) | `server/index.js` Telegram resolve path writes "Resolved from Telegram" |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
 | 16 | No CI; production healthcheck path not yet set | repo / Railway production settings (staging has `/health`) |
 | 17 | Seed data contains real people's names (breaks hard rule 4) | `server/database.js:143-209` (runs only on an empty table) |
