@@ -33,6 +33,13 @@ const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
 const { startOfDayNY } = require("./services/nyTime");
 const { startDailyBackups } = require("./services/dailyBackup");
+const { backupDirFor } = require("./migrations/runner");
+const {
+    NAME_PATTERN: BACKUP_NAME,
+    listBackups
+} = require("./migrations/restore");
+const fs = require("fs");
+const path = require("path");
 const {
     AVAILABILITY,
     normalizeAvailability
@@ -2070,6 +2077,63 @@ app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => 
         });
 
     }
+
+});
+
+//------------------------------------------------------
+// Database Backups (admin only)
+//
+// Lets an admin download backup files from the volume in
+// a browser, so a copy can be kept off Railway.
+//------------------------------------------------------
+
+app.get("/admin/backups", authenticateToken, requireAdmin, (req, res) => {
+
+    const dir = backupDirFor(dbPath);
+
+    const backups = listBackups(dir).map(file => {
+
+        const stat = fs.statSync(path.join(dir, file));
+
+        return {
+            file,
+            sizeBytes: stat.size,
+            modified: stat.mtimeMs
+        };
+
+    });
+
+    res.json({ success: true, backups });
+
+});
+
+app.get("/admin/backups/:file", authenticateToken, requireAdmin, (req, res) => {
+
+    const file = req.params.file;
+
+    if (!BACKUP_NAME.test(file)) {
+
+        return res.status(400).json({
+            success: false,
+            message: "Invalid backup file name."
+        });
+
+    }
+
+    const full = path.join(backupDirFor(dbPath), file);
+
+    if (!fs.existsSync(full)) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Backup not found."
+        });
+
+    }
+
+    console.log(`Backup downloaded by ${req.user.username}: ${file}`);
+
+    res.download(full, file);
 
 });
 
