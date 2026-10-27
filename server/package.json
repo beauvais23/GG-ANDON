@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "node --test test/*.test.js",
+    "migrate:status": "node migrations/runner.js status",
+    "migrate:down": "node migrations/runner.js down"
   },
   "keywords": [
     "andon",
@@ -25,6 +28,7 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "supertest": "^7.3.1"
   }
 }
