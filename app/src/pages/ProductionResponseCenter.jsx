@@ -16,6 +16,7 @@ import DashboardStats from "../components/DashboardStats";
 import ActiveAlertCard from "../components/ActiveAlertCard";
 import ResponderSelector from "../components/ResponderSelector";
 import ResponseTeamPanel from "../components/ResponseTeamPanel";
+import ResolveDialog from "../components/ResolveDialog";
 
 import useClock from "../hooks/useClock";
 
@@ -33,6 +34,7 @@ export default function ProductionResponseCenter() {
   const clock = useClock();
 
   const [alerts, setAlerts] = useState([]);
+  const [resolving, setResolving] = useState(null);
 const [responseTeam, setResponseTeam] = useState([]);
 const [selectedResponder, setSelectedResponder] = useState("");
 const [selectedType, setSelectedType] = useState("ALL");
@@ -537,15 +539,24 @@ async function loadAlerts() {
 
   }
 
-  async function handleResolve(id) {
+  // Opens the note dialog; submitResolve does the resolve.
+  function handleResolve(id) {
 
-    await resolveAlert(
+    setResolving(alerts.find(a => a.id === id) || { id });
+
+  }
+
+  async function submitResolve(id, note) {
+
+    const result = await resolveAlert(
       id,
       selectedResponder,
-      "Resolved"
+      note
     );
 
     loadAlerts();
+
+    return result;
 
   }
 
@@ -1037,6 +1048,13 @@ async function loadAlerts() {
         </Paper>
 
       </Box>
+
+      <ResolveDialog
+        alert={resolving}
+        responder={selectedResponder}
+        onClose={() => setResolving(null)}
+        onResolve={submitResolve}
+      />
 
     </Box>
   );
