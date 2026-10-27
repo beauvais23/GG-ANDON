@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { supervisorUrl } = require("../config");
+const { notificationsEnabled } = require("./appEnv");
 const {
     formatDate,
     formatElapsed
@@ -10,6 +11,13 @@ const {
 //------------------------------------------------------
 
 async function sendGoogleChatCard(alert, event) {
+
+    if (!notificationsEnabled()) {
+
+        console.log("Google Chat skipped: APP_ENV is not production.");
+        return;
+
+    }
 
     const webhook = process.env.GOOGLE_CHAT_WEBHOOK;
 

@@ -1,4 +1,5 @@
 const { supervisorUrl } = require("../config");
+const { notificationsEnabled } = require("./appEnv");
 
 const {
     alertIcons,
@@ -377,6 +378,14 @@ function buildKeyboard(alert, status) {
 //------------------------------------------------------
 
 async function sendTelegram(alert, status) {
+
+    if (!notificationsEnabled()) {
+
+        console.log("Telegram skipped: APP_ENV is not production.");
+
+        return null;
+
+    }
 
     if (!TOKEN || !CHAT_ID) {
 
