@@ -27,6 +27,7 @@ const {
 const { updateTelegram } = require("./services/telegramUpdate");
 
 const { telegramWebhookUrl } = require("./config");
+const { notificationsEnabled } = require("./services/appEnv");
 
 const app = express();
 
@@ -2065,6 +2066,12 @@ app.get("/telegram/test", async (req, res) => {
 
 app.post("/telegram/webhook", async (req, res) => {
 
+    // Outside production setWebhook never runs, so ignore
+    // anything posted here (it can't be from our bot).
+    if (!notificationsEnabled()) {
+        return res.sendStatus(200);
+    }
+
     const callback = req.body.callback_query;
 
     if (!callback) {
@@ -2253,6 +2260,16 @@ console.log(
 
 async function configureTelegramWebhook() {
 
+    if (!notificationsEnabled()) {
+
+        console.log(
+            "Telegram webhook not configured: APP_ENV is not production."
+        );
+
+        return;
+
+    }
+
     const token = process.env.TELEGRAM_BOT_TOKEN;
 
     if (!token) {
@@ -2316,7 +2333,11 @@ app.listen(PORT, "0.0.0.0", async () => {
     console.log(" ManufacturingOS Backend v6.0");
     console.log("========================================");
     console.log(` Listening on port ${PORT}`);
-    console.log(" Notifications Enabled");
+    console.log(
+        notificationsEnabled()
+            ? " Notifications Enabled"
+            : " Notifications Disabled (APP_ENV is not production)"
+    );
     console.log("========================================");
 
     await configureTelegramWebhook();

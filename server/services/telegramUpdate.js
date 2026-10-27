@@ -2,6 +2,7 @@ const {
     buildMessage,
     buildKeyboard
 } = require("./telegram");
+const { notificationsEnabled } = require("./appEnv");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -14,6 +15,9 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const { statements } = require("../database");
 
 async function updateTelegram(alert) {
+
+    if (!notificationsEnabled())
+        return;
 
     //------------------------------------------------------
     // Always reload the latest alert
