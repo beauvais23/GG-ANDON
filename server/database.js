@@ -7,6 +7,9 @@ const dbPath =
 
 console.log(`✓ Database path: ${dbPath}`);
 
+// Must run before the database is opened.
+require("./migrations/restore").restoreIfRequested(dbPath);
+
 const db = new Database(dbPath);
 
 db.pragma("journal_mode = WAL");

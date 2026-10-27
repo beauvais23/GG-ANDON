@@ -83,7 +83,7 @@ function backupDirFor(dbPath) {
 
 }
 
-function backupDatabase(db, dbPath, label) {
+function backupDatabase(db, dbPath, label, { prune = true } = {}) {
 
     const dir = backupDirFor(dbPath);
 
@@ -99,7 +99,8 @@ function backupDatabase(db, dbPath, label) {
 
     console.log(`✓ Database backup: ${file}`);
 
-    pruneBackups(dir);
+    if (prune)
+        pruneBackups(dir);
 
     return file;
 
@@ -234,7 +235,8 @@ module.exports = {
     migrateUp,
     migrateDown,
     pruneBackups,
-    backupDirFor
+    backupDirFor,
+    backupDatabase
 };
 
 //------------------------------------------------------
