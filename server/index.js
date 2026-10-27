@@ -29,6 +29,11 @@ const { updateTelegram } = require("./services/telegramUpdate");
 
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
+const { startOfDayNY } = require("./services/nyTime");
+const {
+    AVAILABILITY,
+    normalizeAvailability
+} = require("./services/availability");
 
 const app = express();
 
@@ -1197,6 +1202,13 @@ app.patch(
 
             }
 
+            // Same as the Telegram acknowledge path.
+            statements.updateResponderAvailability.run(
+                "Responding",
+                now,
+                responder.name
+            );
+
             //--------------------------------------------------
             // Get Updated Alert
             //--------------------------------------------------
@@ -1421,6 +1433,13 @@ app.patch(
 
             }
 
+            // Same as the Telegram resolve path.
+            statements.updateResponderAvailability.run(
+                "Available",
+                now,
+                resolver.name
+            );
+
             //--------------------------------------------------
             // Get Updated Alert
             //--------------------------------------------------
@@ -1573,6 +1592,8 @@ app.patch(
 
                     now,
 
+                    now,
+
                     alertId
 
                 );
@@ -1591,6 +1612,17 @@ app.patch(
                         "Alert could not be cancelled."
 
                 });
+
+            }
+
+            // An acknowledged alert had a responder set to Responding.
+            if (alert.status === "ACKNOWLEDGED" && alert.assigned_to) {
+
+                statements.updateResponderAvailability.run(
+                    "Available",
+                    now,
+                    alert.assigned_to
+                );
 
             }
 
@@ -1698,7 +1730,9 @@ app.get("/dashboard/kpis", authenticateToken, (req, res) => {
 
             active,
             acknowledged,
-            resolvedToday: resolved.length,
+            resolvedToday: resolved.filter(
+                a => a.resolved >= startOfDayNY()
+            ).length,
             mttr
 
         });
@@ -1776,6 +1810,20 @@ if (!cleanDepartment) {
 
 }
 
+const cleanAvailability = normalizeAvailability(availability);
+
+if (availability !== undefined && !cleanAvailability) {
+
+    return res.status(400).json({
+
+        success: false,
+
+        message: `Availability must be one of: ${AVAILABILITY.join(", ")}.`
+
+    });
+
+}
+
         //--------------------------------------------------
         // Duplicate Check
         //--------------------------------------------------
@@ -1807,7 +1855,7 @@ if (!cleanDepartment) {
     job_title,
     phone,
     email,
-    availability,
+    cleanAvailability ?? availability,
     active,
     now,
     now
@@ -1895,6 +1943,20 @@ if (!cleanDepartment) {
 
 }
 
+const cleanAvailability = normalizeAvailability(availability);
+
+if (availability !== undefined && !cleanAvailability) {
+
+    return res.status(400).json({
+
+        success: false,
+
+        message: `Availability must be one of: ${AVAILABILITY.join(", ")}.`
+
+    });
+
+}
+
         
 
         //----------------------------------------------
@@ -1926,7 +1988,7 @@ if (!cleanDepartment) {
     job_title,
     phone,
     email,
-    availability,
+    cleanAvailability ?? availability,
     active,
     now,
     req.params.id

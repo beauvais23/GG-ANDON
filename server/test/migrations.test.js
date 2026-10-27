@@ -20,6 +20,20 @@ const LIVE_SCHEMA = fs.readFileSync(
     "utf8"
 );
 
+// A migrations folder holding only 0001, for tests about the baseline itself.
+function baselineOnly() {
+
+    const dir = tempDir();
+
+    fs.copyFileSync(
+        path.join(__dirname, "..", "migrations", "0001_baseline.js"),
+        path.join(dir, "0001_baseline.js")
+    );
+
+    return dir;
+
+}
+
 function open() {
 
     const dbPath = path.join(tempDir(), "andon.db");
@@ -51,8 +65,9 @@ function backups(dbPath) {
 test("fresh database: 0001 creates the schema, no backup, rerun is a no-op", () => {
 
     const { db, dbPath } = open();
+    const dir = baselineOnly();
 
-    assert.deepEqual(migrateUp(db, dbPath), ["0001_baseline"]);
+    assert.deepEqual(migrateUp(db, dbPath, dir), ["0001_baseline"]);
 
     const tables = schemaOf(db).filter(r => r.type === "table").map(r => r.name);
 
@@ -66,7 +81,7 @@ test("fresh database: 0001 creates the schema, no backup, rerun is a no-op", () 
 
     assert.equal(backups(dbPath).length, 0);
 
-    assert.deepEqual(migrateUp(db, dbPath), []);
+    assert.deepEqual(migrateUp(db, dbPath, dir), []);
 
     assert.equal(backups(dbPath).length, 0);
 
@@ -87,7 +102,7 @@ test("live database (39e8b5d5 schema + data): 0001 changes nothing and backs up 
     const schemaBefore = schemaOf(db);
     const alertsBefore = db.prepare("SELECT * FROM alerts").all();
 
-    assert.deepEqual(migrateUp(db, dbPath), ["0001_baseline"]);
+    assert.deepEqual(migrateUp(db, dbPath, baselineOnly()), ["0001_baseline"]);
 
     assert.deepEqual(schemaOf(db), schemaBefore);
     assert.deepEqual(db.prepare("SELECT * FROM alerts").all(), alertsBefore);
@@ -125,10 +140,11 @@ test("older database missing the message-id columns gets them added", () => {
 test("baseline cannot be reverted", () => {
 
     const { db, dbPath } = open();
+    const dir = baselineOnly();
 
-    migrateUp(db, dbPath);
+    migrateUp(db, dbPath, dir);
 
-    assert.throws(() => migrateDown(db, dbPath), /cannot be reverted/);
+    assert.throws(() => migrateDown(db, dbPath, dir), /cannot be reverted/);
 
     const versions = db.prepare("SELECT version FROM schema_migrations").all();
 
@@ -209,5 +225,65 @@ test(`backups: only the newest ${KEEP_BACKUPS} are kept`, () => {
     assert.ok(!left.includes("andon-20260101T000000Z-before-0001.db"));
     assert.ok(left.includes(`andon-202601${KEEP_BACKUPS + 3}T000000Z-before-0001.db`));
     assert.ok(left.includes("unrelated.txt"));
+
+});
+
+test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drops it", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    const insert = db.prepare(`
+        INSERT INTO alerts
+        (production_line, work_center, type, status, requested, resolved, created_at, updated_at)
+        VALUES ('Team A', 'Assembly', 'QUALITY', ?, 1000, ?, 1000, ?)
+    `);
+
+    insert.run("CANCELLED", 5000, 5000);
+    insert.run("RESOLVED", 9000, 9000);
+    insert.run("CANCELLED", null, 7000);
+    insert.run("ACTIVE", null, 1000);
+
+    migrateUp(db, dbPath);
+
+    const rows = db.prepare("SELECT status, resolved, cancelled_at FROM alerts ORDER BY id").all();
+
+    assert.deepEqual(rows, [
+        { status: "CANCELLED", resolved: 5000, cancelled_at: 5000 },
+        { status: "RESOLVED", resolved: 9000, cancelled_at: null },
+        { status: "CANCELLED", resolved: null, cancelled_at: 7000 },
+        { status: "ACTIVE", resolved: null, cancelled_at: null }
+    ]);
+
+    migrateDown(db, dbPath); // 0003 (no-op)
+    migrateDown(db, dbPath); // 0002
+
+    const columns = db.prepare("PRAGMA table_info(alerts)").all().map(c => c.name);
+
+    assert.ok(!columns.includes("cancelled_at"));
+
+});
+
+test("0003: availability normalized to Available/Responding/Busy/Away", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    const insert = db.prepare(`
+        INSERT INTO response_team (name, department, availability)
+        VALUES (?, 'Ops', ?)
+    `);
+
+    const input = ["AVAILABLE", "available", "Responding", "RESPONDING", "busy", " Away ", "Off Site"];
+
+    input.forEach((value, i) => insert.run(`Person ${i}`, value));
+
+    migrateUp(db, dbPath);
+
+    const values = db.prepare("SELECT availability FROM response_team ORDER BY id").all().map(r => r.availability);
+
+    assert.deepEqual(values, ["Available", "Available", "Responding", "Responding", "Busy", "Away", "Off Site"]);
 
 });

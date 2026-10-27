@@ -154,3 +154,75 @@ test("acknowledge race: two acks, exactly one wins", async () => {
     assert.equal(winners[0].body.alert.status, "ACKNOWLEDGED");
 
 });
+
+//------------------------------------------------------
+// Responder availability
+//------------------------------------------------------
+
+async function availabilityOf(name) {
+
+    const res = await request(app).get("/response-team").set(floor);
+    const list = res.body.data || res.body;
+
+    return list.find(r => r.name === name).availability;
+
+}
+
+test("web acknowledge sets Responding; resolve sets Available", async () => {
+
+    const raised = await raise("SUPERVISOR");
+    const id = raised.body.alert.id;
+
+    await acknowledge(id);
+
+    assert.equal(await availabilityOf(RESPONDER), "Responding");
+
+    await request(app)
+        .patch(`/alerts/${id}/resolve`)
+        .set(floor)
+        .send({ resolvedBy: RESPONDER, resolutionNotes: "Done" });
+
+    assert.equal(await availabilityOf(RESPONDER), "Available");
+
+});
+
+test("cancelling an acknowledged alert sets the responder back to Available and records cancelled_at", async () => {
+
+    const raised = await raise("QUALITY");
+    const id = raised.body.alert.id;
+
+    await acknowledge(id);
+
+    assert.equal(await availabilityOf(RESPONDER), "Responding");
+
+    const cancelled = await request(app)
+        .patch(`/alerts/${id}/cancel`)
+        .set(floor)
+        .send({});
+
+    assert.equal(cancelled.status, 200);
+    assert.ok(cancelled.body.alert.cancelled_at > 0);
+    assert.equal(await availabilityOf(RESPONDER), "Available");
+
+});
+
+test("responder availability is stored as one enum; unknown values rejected", async () => {
+
+    const admin = await login("test_admin", "test-admin-pw");
+
+    const busy = await request(app)
+        .post("/response-team")
+        .set(admin)
+        .send({ name: "Enum Check", department: "Quality", availability: "busy" });
+
+    assert.equal(busy.status, 201);
+    assert.equal(await availabilityOf("Enum Check"), "Busy");
+
+    const bad = await request(app)
+        .post("/response-team")
+        .set(admin)
+        .send({ name: "Enum Check 2", department: "Quality", availability: "Sleeping" });
+
+    assert.equal(bad.status, 400);
+
+});

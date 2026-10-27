@@ -22,6 +22,15 @@ const { migrateUp } = require("./migrations/runner");
 
 migrateUp(db, dbPath);
 
+// Month buckets for trends use New York time, not UTC.
+const { monthNY } = require("./services/nyTime");
+
+db.function(
+    "ny_month",
+    { deterministic: true },
+    ms => (ms === null ? null : monthNY(Number(ms)))
+);
+
 const count =
     db.prepare(
         "SELECT COUNT(*) AS count FROM production_lines"
@@ -167,7 +176,7 @@ if (existing.count === 0) {
         "Production Manager",
         "",
         "",
-        "AVAILABLE",
+        "Available",
         1,
         now,
         now
@@ -179,7 +188,7 @@ if (existing.count === 0) {
         "Maintenance Technician",
         "",
         "",
-        "AVAILABLE",
+        "Available",
         1,
         now,
         now
@@ -191,7 +200,7 @@ if (existing.count === 0) {
         "Production Supervisor",
         "",
         "",
-        "AVAILABLE",
+        "Available",
         1,
         now,
         now
@@ -281,7 +290,7 @@ SUM(CASE WHEN status='RESOLVED' THEN 1 ELSE 0 END) AS resolvedAlerts,
 
 ROUND(AVG(acknowledged-requested)/1000,0) AS avgResponseSeconds,
 
-ROUND(AVG(resolved-requested)/1000,0) AS avgResolutionSeconds
+ROUND(AVG(CASE WHEN status='RESOLVED' THEN resolved-requested END)/1000,0) AS avgResolutionSeconds
 
 FROM alerts
 
@@ -307,7 +316,7 @@ getMonthlyTrend: db.prepare(`
 
 SELECT
 
-strftime('%Y-%m', requested/1000,'unixepoch') AS month,
+ny_month(requested) AS month,
 
 COUNT(*) AS total
 
@@ -323,7 +332,7 @@ getResponseTrend: db.prepare(`
 
 SELECT
 
-strftime('%Y-%m', requested/1000,'unixepoch') AS month,
+ny_month(requested) AS month,
 
 ROUND(AVG(acknowledged-requested)/1000,0) AS responseSeconds
 
@@ -341,13 +350,14 @@ getResolutionTrend: db.prepare(`
 
 SELECT
 
-strftime('%Y-%m', requested/1000,'unixepoch') AS month,
+ny_month(requested) AS month,
 
 ROUND(AVG(resolved-requested)/1000,0) AS resolutionSeconds
 
 FROM alerts
 
-WHERE resolved IS NOT NULL
+WHERE status='RESOLVED'
+  AND resolved IS NOT NULL
 
 GROUP BY month
 
@@ -387,6 +397,7 @@ cancelAlert: db.prepare(`
     SET
         status='CANCELLED',
         resolved=?,
+        cancelled_at=?,
         updated_at=?
     WHERE id=?
 `),
