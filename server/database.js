@@ -7,167 +7,29 @@ const dbPath =
 
 console.log(`✓ Database path: ${dbPath}`);
 
+// Must run before the database is opened.
+require("./migrations/restore").restoreIfRequested(dbPath);
+
 const db = new Database(dbPath);
 
 db.pragma("journal_mode = WAL");
 
 //------------------------------------------------------
-// Alerts Table
+// Schema (numbered migrations in ./migrations)
 //------------------------------------------------------
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS alerts (
+const { migrateUp } = require("./migrations/runner");
 
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+migrateUp(db, dbPath);
 
-    facility TEXT,
+// Month buckets for trends use New York time, not UTC.
+const { monthNY } = require("./services/nyTime");
 
-    production_line TEXT NOT NULL,
-
-    work_center TEXT NOT NULL,
-
-    type TEXT NOT NULL,
-
-    status TEXT NOT NULL DEFAULT 'ACTIVE',
-
-    requested INTEGER NOT NULL,
-
-    acknowledged INTEGER,
-
-    resolved INTEGER,
-
-    acknowledged_by TEXT,
-
-    assigned_to TEXT,
-
-    resolved_by TEXT,
-
-    resolution_notes TEXT,
-
-    priority TEXT DEFAULT 'NORMAL',
-
-shift TEXT,
-
-created_at INTEGER NOT NULL,
-
-updated_at INTEGER NOT NULL,
-
-duration_seconds INTEGER,
-
-google_message_id TEXT,
-
-telegram_message_id TEXT
-
+db.function(
+    "ny_month",
+    { deterministic: true },
+    ms => (ms === null ? null : monthNY(Number(ms)))
 );
-`);
-
-//------------------------------------------------------
-// Database Upgrades
-//------------------------------------------------------
-
-try {
-
-    db.exec(`
-        ALTER TABLE alerts
-        ADD COLUMN google_message_id TEXT
-    `);
-
-} catch {}
-
-try {
-
-    db.exec(`
-        ALTER TABLE alerts
-        ADD COLUMN telegram_message_id TEXT
-    `);
-
-} catch {}
-
-
-
-//------------------------------------------------------
-// Response Team Table
-//------------------------------------------------------
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS response_team (
-
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    name TEXT NOT NULL,
-
-    department TEXT NOT NULL,
-
-    job_title TEXT,
-
-    phone TEXT,
-
-    email TEXT,
-
-    availability TEXT NOT NULL DEFAULT 'AVAILABLE',
-
-    active INTEGER DEFAULT 1,
-
-    created_at INTEGER,
-
-    updated_at INTEGER
-
-);
-`);
-
-//------------------------------------------------------
-// Production Line Table
-//------------------------------------------------------
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS production_lines (
-
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    name TEXT NOT NULL UNIQUE,
-
-    facility TEXT NOT NULL,
-
-    description TEXT,
-
-    display_order INTEGER NOT NULL,
-
-    color TEXT DEFAULT '#1976d2',
-
-    active INTEGER DEFAULT 1,
-
-    created INTEGER,
-
-    modified INTEGER
-
-);
-`);
-
-//------------------------------------------------------
-// Work Centers Table
-//------------------------------------------------------
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS work_centers (
-
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    name TEXT NOT NULL,
-
-    production_line_id INTEGER NOT NULL,
-
-    facility TEXT NOT NULL,
-
-    display_order INTEGER NOT NULL DEFAULT 0,
-
-    active INTEGER DEFAULT 1,
-
-    created INTEGER,
-
-    modified INTEGER
-
-);
-`);
 
 const count =
     db.prepare(
@@ -200,38 +62,6 @@ if (count.count === 0) {
     insert.run("Terabay","Malta",4,"#1976d2",1,now,now);
 
 }
-
-//------------------------------------------------------
-// KPI History
-//------------------------------------------------------
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS kpi_history (
-
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    month TEXT NOT NULL,
-
-    total_alerts INTEGER DEFAULT 0,
-
-    quality INTEGER DEFAULT 0,
-
-    maintenance INTEGER DEFAULT 0,
-
-    materials INTEGER DEFAULT 0,
-
-    engineering INTEGER DEFAULT 0,
-
-    safety INTEGER DEFAULT 0,
-
-    supervisor_response_seconds REAL DEFAULT 0,
-
-    resolution_seconds REAL DEFAULT 0,
-
-    created INTEGER
-
-);
-`);
 
 //------------------------------------------------------
 // Seed Work Centers
@@ -309,7 +139,6 @@ if (wcCount.count === 0) {
 }
 
 
-
 //------------------------------------------------------
 // Seed Response Team
 //------------------------------------------------------
@@ -347,7 +176,7 @@ if (existing.count === 0) {
         "Production Manager",
         "",
         "",
-        "AVAILABLE",
+        "Available",
         1,
         now,
         now
@@ -359,7 +188,7 @@ if (existing.count === 0) {
         "Maintenance Technician",
         "",
         "",
-        "AVAILABLE",
+        "Available",
         1,
         now,
         now
@@ -371,7 +200,7 @@ if (existing.count === 0) {
         "Production Supervisor",
         "",
         "",
-        "AVAILABLE",
+        "Available",
         1,
         now,
         now
@@ -461,7 +290,7 @@ SUM(CASE WHEN status='RESOLVED' THEN 1 ELSE 0 END) AS resolvedAlerts,
 
 ROUND(AVG(acknowledged-requested)/1000,0) AS avgResponseSeconds,
 
-ROUND(AVG(resolved-requested)/1000,0) AS avgResolutionSeconds
+ROUND(AVG(CASE WHEN status='RESOLVED' THEN resolved-requested END)/1000,0) AS avgResolutionSeconds
 
 FROM alerts
 
@@ -487,7 +316,7 @@ getMonthlyTrend: db.prepare(`
 
 SELECT
 
-strftime('%Y-%m', requested/1000,'unixepoch') AS month,
+ny_month(requested) AS month,
 
 COUNT(*) AS total
 
@@ -503,7 +332,7 @@ getResponseTrend: db.prepare(`
 
 SELECT
 
-strftime('%Y-%m', requested/1000,'unixepoch') AS month,
+ny_month(requested) AS month,
 
 ROUND(AVG(acknowledged-requested)/1000,0) AS responseSeconds
 
@@ -521,13 +350,14 @@ getResolutionTrend: db.prepare(`
 
 SELECT
 
-strftime('%Y-%m', requested/1000,'unixepoch') AS month,
+ny_month(requested) AS month,
 
 ROUND(AVG(resolved-requested)/1000,0) AS resolutionSeconds
 
 FROM alerts
 
-WHERE resolved IS NOT NULL
+WHERE status='RESOLVED'
+  AND resolved IS NOT NULL
 
 GROUP BY month
 
@@ -567,6 +397,7 @@ cancelAlert: db.prepare(`
     SET
         status='CANCELLED',
         resolved=?,
+        cancelled_at=?,
         updated_at=?
     WHERE id=?
 `),
@@ -712,7 +543,6 @@ deleteProductionLine: db.prepare(`
 `),
 
 
-
 //--------------------------------------------------
 // Work Centers
 //--------------------------------------------------
@@ -824,5 +654,6 @@ console.log("✓ SQLite database ready");
 
 module.exports = {
     db,
+    dbPath,
     statements
 };

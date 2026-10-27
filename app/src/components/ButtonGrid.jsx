@@ -1,4 +1,8 @@
+import { useState } from "react";
+
 import Grid from "@mui/material/Grid";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
 
 import SearchIcon from "@mui/icons-material/Search";
 import HandymanIcon from "@mui/icons-material/Handyman";
@@ -14,7 +18,21 @@ import { useProductionLine } from "../context/ProductionLineContext";
 import { useWorkCenter } from "../context/WorkCenterContext";
 
 
+// Time the existing alert was raised, in plant time and the
+// same 12-hour format as the header clock (e.g. 1:04 PM).
+function plantTime(ms) {
+
+  return new Date(Number(ms)).toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+
+}
+
 export default function ButtonGrid() {
+
+  const [duplicateMessage, setDuplicateMessage] = useState("");
 
   const { startAlert } = useAlert();
 
@@ -48,6 +66,15 @@ export default function ButtonGrid() {
 
     }
 
+    // 409: the same alert is already open on this line / work center.
+    else if (response.duplicate && response.alert) {
+
+      setDuplicateMessage(
+        `${type}: Already open since ${plantTime(response.alert.requested)}`
+      );
+
+    }
+
   }
 
   catch (error) {
@@ -59,6 +86,8 @@ export default function ButtonGrid() {
 }
 
   return (
+
+    <>
 
     <Grid
       container
@@ -124,6 +153,24 @@ export default function ButtonGrid() {
       </Grid>
 
     </Grid>
+
+    <Snackbar
+      open={Boolean(duplicateMessage)}
+      autoHideDuration={8000}
+      onClose={() => setDuplicateMessage("")}
+      anchorOrigin={{ vertical: "top", horizontal: "center" }}
+    >
+      <Alert
+        severity="warning"
+        variant="filled"
+        onClose={() => setDuplicateMessage("")}
+        sx={{ fontSize: "1.4rem", alignItems: "center" }}
+      >
+        {duplicateMessage}
+      </Alert>
+    </Snackbar>
+
+    </>
 
   );
 

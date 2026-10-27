@@ -3,8 +3,9 @@ const config = {
   facility: "Malta",
   workCenter: "Final Test",
 
-  // Railway production backend
-  apiBaseUrl: "https://gg-andon-production.up.railway.app"
+  // Backend URL per environment, set on the Railway service (build time).
+  // vite.config.js fails the build if it is missing.
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "")
 };
 
 export default config;

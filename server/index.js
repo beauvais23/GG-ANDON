@@ -9,8 +9,11 @@ const jwt = require("jsonwebtoken");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const crypto = require("crypto");
 
 const {
+    db,
+    dbPath,
     statements
 } = require("./database");
 
@@ -27,6 +30,20 @@ const {
 const { updateTelegram } = require("./services/telegramUpdate");
 
 const { telegramWebhookUrl } = require("./config");
+const { notificationsEnabled } = require("./services/appEnv");
+const { startOfDayNY } = require("./services/nyTime");
+const { startDailyBackups } = require("./services/dailyBackup");
+const { backupDirFor } = require("./migrations/runner");
+const {
+    NAME_PATTERN: BACKUP_NAME,
+    listBackups
+} = require("./migrations/restore");
+const fs = require("fs");
+const path = require("path");
+const {
+    AVAILABILITY,
+    normalizeAvailability
+} = require("./services/availability");
 
 const app = express();
 
@@ -114,7 +131,7 @@ app.post("/auth/login", (req, res) => {
             process.env.AUTH_SECRET,
 
             {
-                expiresIn: "8h"
+                expiresIn: process.env.JWT_EXPIRES_IN || "12h"
             }
 
         );
@@ -602,7 +619,7 @@ app.get("/production-lines", authenticateToken, (req, res) => {
 // Create Production Line
 //------------------------------------------------------
 
-app.post("/production-lines", authenticateToken, (req, res) => {
+app.post("/production-lines", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -662,7 +679,7 @@ app.post("/production-lines", authenticateToken, (req, res) => {
 // Update Production Line Order
 //------------------------------------------------------
 
-app.put("/production-lines/order", authenticateToken, (req, res) => {
+app.put("/production-lines/order", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -709,7 +726,7 @@ app.put("/production-lines/order", authenticateToken, (req, res) => {
 // Update Production Line
 //------------------------------------------------------
 
-app.put("/production-lines/:id", authenticateToken, (req, res) => {
+app.put("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -760,7 +777,7 @@ app.put("/production-lines/:id", authenticateToken, (req, res) => {
 // Delete Production Line
 //------------------------------------------------------
 
-app.delete("/production-lines/:id", authenticateToken, (req, res) => {
+app.delete("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -877,7 +894,7 @@ app.get("/work-centers/line/:productionLine", authenticateToken, (req, res) => {
 // Create Work Center
 //------------------------------------------------------
 
-app.post("/work-centers", authenticateToken, (req, res) => {
+app.post("/work-centers", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -944,7 +961,7 @@ statements.insertWorkCenter.run(
 // Update Work Center Order
 //------------------------------------------------------
 
-app.put("/work-centers/order", authenticateToken, (req, res) => {
+app.put("/work-centers/order", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -991,7 +1008,7 @@ app.put("/work-centers/order", authenticateToken, (req, res) => {
 // Update Work Center
 //------------------------------------------------------
 
-app.put("/work-centers/:id", authenticateToken, (req, res) => {
+app.put("/work-centers/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -1194,6 +1211,13 @@ app.patch(
                 });
 
             }
+
+            // Same as the Telegram acknowledge path.
+            statements.updateResponderAvailability.run(
+                "Responding",
+                now,
+                responder.name
+            );
 
             //--------------------------------------------------
             // Get Updated Alert
@@ -1419,6 +1443,13 @@ app.patch(
 
             }
 
+            // Same as the Telegram resolve path.
+            statements.updateResponderAvailability.run(
+                "Available",
+                now,
+                resolver.name
+            );
+
             //--------------------------------------------------
             // Get Updated Alert
             //--------------------------------------------------
@@ -1571,6 +1602,8 @@ app.patch(
 
                     now,
 
+                    now,
+
                     alertId
 
                 );
@@ -1589,6 +1622,17 @@ app.patch(
                         "Alert could not be cancelled."
 
                 });
+
+            }
+
+            // An acknowledged alert had a responder set to Responding.
+            if (alert.status === "ACKNOWLEDGED" && alert.assigned_to) {
+
+                statements.updateResponderAvailability.run(
+                    "Available",
+                    now,
+                    alert.assigned_to
+                );
 
             }
 
@@ -1696,7 +1740,9 @@ app.get("/dashboard/kpis", authenticateToken, (req, res) => {
 
             active,
             acknowledged,
-            resolvedToday: resolved.length,
+            resolvedToday: resolved.filter(
+                a => a.resolved >= startOfDayNY()
+            ).length,
             mttr
 
         });
@@ -1724,7 +1770,7 @@ app.get("/dashboard/kpis", authenticateToken, (req, res) => {
 
 
 
-app.post("/response-team", authenticateToken, (req, res) => {
+app.post("/response-team", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -1774,6 +1820,20 @@ if (!cleanDepartment) {
 
 }
 
+const cleanAvailability = normalizeAvailability(availability);
+
+if (availability !== undefined && !cleanAvailability) {
+
+    return res.status(400).json({
+
+        success: false,
+
+        message: `Availability must be one of: ${AVAILABILITY.join(", ")}.`
+
+    });
+
+}
+
         //--------------------------------------------------
         // Duplicate Check
         //--------------------------------------------------
@@ -1805,7 +1865,7 @@ if (!cleanDepartment) {
     job_title,
     phone,
     email,
-    availability,
+    cleanAvailability ?? availability,
     active,
     now,
     now
@@ -1843,7 +1903,7 @@ if (!cleanDepartment) {
 // Update Responder
 //------------------------------------------------------
 
-app.put("/response-team/:id", authenticateToken, (req, res) => {
+app.put("/response-team/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -1893,6 +1953,20 @@ if (!cleanDepartment) {
 
 }
 
+const cleanAvailability = normalizeAvailability(availability);
+
+if (availability !== undefined && !cleanAvailability) {
+
+    return res.status(400).json({
+
+        success: false,
+
+        message: `Availability must be one of: ${AVAILABILITY.join(", ")}.`
+
+    });
+
+}
+
         
 
         //----------------------------------------------
@@ -1924,7 +1998,7 @@ if (!cleanDepartment) {
     job_title,
     phone,
     email,
-    availability,
+    cleanAvailability ?? availability,
     active,
     now,
     req.params.id
@@ -1962,7 +2036,7 @@ if (!cleanDepartment) {
 // Delete Responder
 //------------------------------------------------------
 
-app.delete("/response-team/:id", authenticateToken, (req, res) => {
+app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
@@ -2007,55 +2081,59 @@ app.delete("/response-team/:id", authenticateToken, (req, res) => {
 });
 
 //------------------------------------------------------
-// Telegram Test
+// Database Backups (admin only)
+//
+// Lets an admin download backup files from the volume in
+// a browser, so a copy can be kept off Railway.
 //------------------------------------------------------
 
-app.get("/telegram/test", async (req, res) => {
+app.get("/admin/backups", authenticateToken, requireAdmin, (req, res) => {
 
-    console.log("Telegram Test Route Hit");
+    const dir = backupDirFor(dbPath);
 
-    const { sendTelegram } =
-        require("./services/telegram");
+    const backups = listBackups(dir).map(file => {
 
-    const testAlert = {
+        const stat = fs.statSync(path.join(dir, file));
 
-        id: 999999,
-
-        type: "QUALITY",
-
-        production_line: "Gigabay",
-
-        work_center: "Final Test",
-
-        priority: "HIGH",
-
-        status: "ACTIVE",
-
-        requested: Date.now(),
-
-        assigned_to: null,
-
-        acknowledged_by: null,
-
-        resolved_by: null,
-
-        resolution_notes: ""
-
-    };
-
-    const messageId =
-        await sendTelegram(
-            testAlert,
-            "CREATED"
-        );
-
-    res.json({
-
-        success: !!messageId,
-
-        messageId
+        return {
+            file,
+            sizeBytes: stat.size,
+            modified: stat.mtimeMs
+        };
 
     });
+
+    res.json({ success: true, backups });
+
+});
+
+app.get("/admin/backups/:file", authenticateToken, requireAdmin, (req, res) => {
+
+    const file = req.params.file;
+
+    if (!BACKUP_NAME.test(file)) {
+
+        return res.status(400).json({
+            success: false,
+            message: "Invalid backup file name."
+        });
+
+    }
+
+    const full = path.join(backupDirFor(dbPath), file);
+
+    if (!fs.existsSync(full)) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Backup not found."
+        });
+
+    }
+
+    console.log(`Backup downloaded by ${req.user.username}: ${file}`);
+
+    res.download(full, file);
 
 });
 
@@ -2063,7 +2141,34 @@ app.get("/telegram/test", async (req, res) => {
 // Telegram Webhook
 //------------------------------------------------------
 
+// Telegram echoes the secret_token we pass to setWebhook in this
+// header. No secret configured, or no match: reject (fail closed).
+function isFromTelegram(req) {
+
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const header = req.get("X-Telegram-Bot-Api-Secret-Token");
+
+    if (!secret || !header)
+        return false;
+
+    const a = Buffer.from(header);
+    const b = Buffer.from(secret);
+
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+
+}
+
 app.post("/telegram/webhook", async (req, res) => {
+
+    if (!isFromTelegram(req)) {
+        return res.sendStatus(401);
+    }
+
+    // Outside production setWebhook never runs, so ignore
+    // anything posted here (it can't be from our bot).
+    if (!notificationsEnabled()) {
+        return res.sendStatus(200);
+    }
 
     const callback = req.body.callback_query;
 
@@ -2253,12 +2358,35 @@ console.log(
 
 async function configureTelegramWebhook() {
 
+    if (!notificationsEnabled()) {
+
+        console.log(
+            "Telegram webhook not configured: APP_ENV is not production."
+        );
+
+        return;
+
+    }
+
     const token = process.env.TELEGRAM_BOT_TOKEN;
 
     if (!token) {
 
         console.log(
             "Telegram webhook not configured: TELEGRAM_BOT_TOKEN missing."
+        );
+
+        return;
+
+    }
+
+    // Telegram allows 1-256 chars of A-Z a-z 0-9 _ -
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+
+    if (!secret || !/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
+
+        console.error(
+            "Telegram webhook NOT configured: TELEGRAM_WEBHOOK_SECRET missing or invalid (1-256 chars, A-Z a-z 0-9 _ -). Telegram buttons will not work."
         );
 
         return;
@@ -2273,7 +2401,9 @@ async function configureTelegramWebhook() {
 
             {
 
-                url: telegramWebhookUrl
+                url: telegramWebhookUrl,
+
+                secret_token: secret
 
             }
 
@@ -2309,16 +2439,29 @@ async function configureTelegramWebhook() {
 // Start Server
 //------------------------------------------------------
 
-app.listen(PORT, "0.0.0.0", async () => {
+// Tests import the app without opening a port.
+if (require.main === module) {
 
-    console.log("");
-    console.log("========================================");
-    console.log(" ManufacturingOS Backend v6.0");
-    console.log("========================================");
-    console.log(` Listening on port ${PORT}`);
-    console.log(" Notifications Enabled");
-    console.log("========================================");
+    app.listen(PORT, "0.0.0.0", async () => {
 
-    await configureTelegramWebhook();
+        console.log("");
+        console.log("========================================");
+        console.log(" ManufacturingOS Backend v6.0");
+        console.log("========================================");
+        console.log(` Listening on port ${PORT}`);
+        console.log(
+            notificationsEnabled()
+                ? " Notifications Enabled"
+                : " Notifications Disabled (APP_ENV is not production)"
+        );
+        console.log("========================================");
 
-});
+        startDailyBackups(db, dbPath);
+
+        await configureTelegramWebhook();
+
+    });
+
+}
+
+module.exports = app;
