@@ -2310,20 +2310,27 @@ async function configureTelegramWebhook() {
 // Start Server
 //------------------------------------------------------
 
-app.listen(PORT, "0.0.0.0", async () => {
+// Tests import the app without opening a port.
+if (require.main === module) {
 
-    console.log("");
-    console.log("========================================");
-    console.log(" ManufacturingOS Backend v6.0");
-    console.log("========================================");
-    console.log(` Listening on port ${PORT}`);
-    console.log(
-        notificationsEnabled()
-            ? " Notifications Enabled"
-            : " Notifications Disabled (APP_ENV is not production)"
-    );
-    console.log("========================================");
+    app.listen(PORT, "0.0.0.0", async () => {
 
-    await configureTelegramWebhook();
+        console.log("");
+        console.log("========================================");
+        console.log(" ManufacturingOS Backend v6.0");
+        console.log("========================================");
+        console.log(` Listening on port ${PORT}`);
+        console.log(
+            notificationsEnabled()
+                ? " Notifications Enabled"
+                : " Notifications Disabled (APP_ENV is not production)"
+        );
+        console.log("========================================");
 
-});
+        await configureTelegramWebhook();
+
+    });
+
+}
+
+module.exports = app;
