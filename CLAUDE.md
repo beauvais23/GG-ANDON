@@ -171,6 +171,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 12 | 409 duplicate ignored on tablet | "TYPE: Already open since h:mm AM/PM" banner (0.5d) |
 | 13 | Notifications awaited in the request with no timeouts | Routes answer first; notifications queued per alert; every outbound call limited by `NOTIFY_TIMEOUT_MS` (fix-13) |
 | 14 | Resolution notes hard-coded to "Resolved" (web) | "What fixed it?" dialog on `/supervisor` and `/dashboard`; API requires a note, max 500 chars (fix-14). Telegram resolves still write "Resolved from Telegram" |
+| 17 | Seed data contained real people's names (hard rule 4) | Responder seed removed; a new environment starts with no responders (fix-17). The names remain in git history and in any DB that was seeded before |
 
 ### Open (line references at commit 5e304a6)
 
@@ -179,7 +180,6 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 14b | Telegram resolves have no real note (a button can't carry text) | `server/index.js` Telegram resolve path writes "Resolved from Telegram" |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
 | 16 | No CI; production healthcheck path not yet set | repo / Railway production settings (staging has `/health`) |
-| 17 | Seed data contains real people's names (breaks hard rule 4) | `server/database.js:143-209` (runs only on an empty table) |
 | 18 | MTTA/MTTR use wall-clock time, not working minutes | `database.js` KPI/trend queries; `/dashboard/kpis` in `index.js` |
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 20 | Resolving one alert sets the responder Available even if another alert is still open for them | web resolve in `index.js`; Telegram resolve path |
