@@ -6,40 +6,85 @@ Read this file fully before changing anything.
 
 ## Hard rules (never break)
 
-1. `react-v2` auto-deploys BOTH Railway services to production on every push. Never push or merge to `react-v2` directly.
-   Work on feature branches → PR into `staging` → after staging sign-off, PR `staging` → `react-v2`.
+1. `react-v2` auto-deploys BOTH Railway production services on every push. Never push or merge to `react-v2` directly.
+   Work on feature branches → PR into `staging` (the default branch) → after staging sign-off, PR `staging` → `react-v2`.
+   Claude never opens, merges or pushes to `react-v2`, and never changes the Railway **production** environment (deploys, variables, settings).
 2. Production deploys happen outside shift hours (Mon–Thu 6:00–16:30 ET), because the backend has a mounted volume and redeploys cause a short outage.
+   Merge `staging` → `react-v2` **at 16:45 ET or later**, never during a shift. See "Promotion pre-flight".
 3. No secrets in code, commits, logs, or test fixtures. Env vars are referenced by name only.
 4. No real people's names in committed code or seed files. People, roles, and Slack IDs are entered through the Admin UI per environment.
-5. Every schema change is a numbered migration with `up` and `down`. The app backs up the DB before applying any migration.
+5. Every schema change is a numbered migration in `server/migrations/` with `up` and `down`. The runner backs up the DB before applying any migration (built in; see "Migrations and backups").
 6. Staging must never notify production channels. Notification code runs only when `APP_ENV=production`, or when a staging-specific channel is configured.
 7. Every PR description includes three sections: **What changed**, **How to test**, and **How to roll back**.
 8. Add tests for anything touching the event lifecycle, escalation timers, plan-vs-actual math, or adapter normalization.
 9. Keep the stack (Express 5, better-sqlite3, React 19, Vite, MUI). Don't add frameworks without a stated defect, fix, and cost.
-10. Read before you write. Line references below come from commit `39e8b5d5`. Verify them; the code may have moved.
+10. Read before you write. Line references below come from commit `5e304a6` (staging, Oct 27 2026). Verify them; the code may have moved.
+11. A new required env var is not "done" until it is on the promotion pre-flight list below. Missing production variables fail silently or break features.
 
 ## Stack and layout
 
 | Area | Location | Notes |
 |---|---|---|
-| Backend | `server/index.js` (~2,300 lines, all routes inline) | Express 5, JWT auth, better-sqlite3 |
-| DB layer | `server/database.js` | Schema created on boot; ad-hoc `ALTER` migrations at lines 68–84 |
-| Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` |
-| Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js` |
-| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets |
-| Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json`, committed root `node_modules/` | Remove in the cleanup PR |
+| Backend | `server/index.js` (~2,470 lines, all routes inline) | Express 5, JWT auth, better-sqlite3. Exports `app`; listens only when run directly |
+| DB layer | `server/database.js` | Opens the DB, runs `restoreIfRequested` then `migrateUp`, seeds empty tables, prepares statements. Registers SQL function `ny_month()` |
+| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability` |
+| Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
+| Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
+| Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `availability.js` (responder enum), `dailyBackup.js` |
+| Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test` |
+| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset) |
+| Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json` | Remove in the cleanup PR (root `node_modules/` already removed) |
 | Dead components | `ConfirmAlert.jsx`, `AlertSent.jsx`, `ActiveAlertList.jsx`, `pages/ActiveAlert.jsx` | Not imported or routed |
 
 ### Railway (project GGLED)
 
-| Service | Root dir | Branch | Notes |
-|---|---|---|---|
-| GG-ANDON (backend) | `/server` | `react-v2` | Volume mounted at `/data`; DB at `DATABASE_PATH` |
-| ManufacturingOS Frontend | `/app` | `react-v2` | `serve -s dist` |
+| Environment | Service | Root dir | Branch | Notes |
+|---|---|---|---|---|
+| production | GG-ANDON (backend) | `/server` | `react-v2` | Volume at `/data`; DB `/data/andon.db`; backups `/data/backups` |
+| production | ManufacturingOS Frontend | `/app` | `react-v2` | `serve -s dist` |
+| staging | GG-ANDON-staging | `/server` | `staging` | Own volume at `/data`; healthcheck `/health`; https://gg-andon-staging-staging.up.railway.app |
+| staging | ManufacturingOS Frontend-staging | `/app` | `staging` | https://manufacturingos-frontend-staging-staging.up.railway.app |
 
-Backend env var names: `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `PRODUCTION_USERNAME`, `PRODUCTION_PASSWORD`, `AUTH_SECRET`,
-`DATABASE_PATH`, `SUPERVISOR_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GOOGLE_CHAT_WEBHOOK`.
-`SERVER_URL` is unset in production and falls back to a hard-coded prod URL (`server/config.js:5-7`).
+The Railway plan has **no volume backups** (Hobby). All DB backups live on the same volume as the DB; the off-Railway copy is a manual download from `/admin` → Backups.
+
+### Environment variables (names only)
+
+| Service | Variable | Required | Notes |
+|---|---|---|---|
+| Backend | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `PRODUCTION_USERNAME`, `PRODUCTION_PASSWORD`, `AUTH_SECRET` | yes | Different values per environment |
+| Backend | `DATABASE_PATH` | yes | `/data/andon.db` |
+| Backend | `APP_ENV` | yes | `production` only in production. Anything else disables all Telegram/Google Chat traffic and `setWebhook` |
+| Backend | `TELEGRAM_WEBHOOK_SECRET` | production | 1–256 chars `A-Z a-z 0-9 _ -`. Missing/invalid → webhook rejects every call (Telegram buttons dead) |
+| Backend | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GOOGLE_CHAT_WEBHOOK` | production only | Never set in staging |
+| Backend | `SERVER_URL` | staging | Unset in production; falls back to the prod URL (`server/config.js:5-7`) |
+| Backend | `SUPERVISOR_URL` | staging | Unset in production; falls back to the prod frontend (`server/config.js:11-13`) |
+| Backend | `JWT_EXPIRES_IN` | no | Default `12h`. A malformed value breaks every login |
+| Backend | `DAILY_BACKUP_HOUR` | no | New York hour 0–23, default `17` |
+| Backend | `BACKUP_DIR` | no | Default `<DATABASE_PATH dir>/backups` |
+| Backend | `RESTORE_BACKUP` | incident only | Backup file name to restore at next boot; delete after use |
+| Frontend | `VITE_API_BASE_URL` | yes (build time) | Backend URL for that environment |
+
+## Migrations and backups
+
+- **Migrations**: `server/migrations/NNNN_name.js` exporting `up(db)` / `down(db)`; applied in order at boot, each in a transaction; recorded in `schema_migrations`. `npm run migrate:status`, `npm run migrate:down` (needs a shell, so not usable from a browser).
+  `0001_baseline` is the pre-migration schema and cannot be reverted.
+- **Pre-migration backup**: before any pending migration runs on a DB that has tables, `VACUUM INTO` writes `andon-<UTC>-before-NNNN.db`. If it fails, the server does not start.
+- **Daily backup**: at boot and every 10 min; after 17:00 ET, if today's (NY date) file is missing, `db.backup()` writes `andon-<UTC>-daily-<YYYY-MM-DD>.db` (via `.partial` + rename).
+- **Retention**: newest 14 daily and newest 14 other backups, kept separately.
+- **Restore (browser only)**: set `RESTORE_BACKUP=<file>` on the backend → Deploy. Snapshots the current DB as `…-before-restore.db`, integrity-checks the backup, swaps it in before the DB opens; runs once per file name. Any problem skips the restore and boots normally.
+  After a bad migration, **revert the code first**, then restore; otherwise the migration re-runs.
+- **Download**: `/admin` → Backups tab (`GET /admin/backups`, `GET /admin/backups/:file`, admin only). Keep a weekly copy in Google Drive `ANDON Backups/production`.
+
+## Promotion pre-flight (staging → react-v2)
+
+1. All tests pass on the staging tip; staging deploy logs are clean.
+2. **Every required production variable for this release exists in Railway production before the merge**, and the staged-changes banner is gone. Check the table above for anything new in this release.
+3. Merge at **16:45 ET or later**, Mon–Thu (or a non-OT weekend day).
+4. Watch the backend log for: `Database backup … before-NNNN` (if migrations), `Migration applied`, `Notifications Enabled`, `Telegram webhook configured`.
+5. Download the new `before-NNNN` backup from `/admin` → Backups to Drive.
+6. Smoke test: tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (cancelled alerts are excluded from MTTR).
+
+Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET without `APP_ENV`/`TELEGRAM_WEBHOOK_SECRET` set. Production ran 16 minutes with notifications disabled and one live alert (#48) unannounced. Steps 2 and 3 above exist because of this.
 
 ## Plant model
 
@@ -103,28 +148,43 @@ Backend env var names: `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `PRODUCTION_USERNAME`
 8. FPY = first-pass good ÷ (first-pass good + first-pass fails). Reworked passes are excluded from the numerator.
 9. RAG per hour: green ≥100% of plan, amber 90–99%, red <90% (admin-editable).
 
-## Known defects (Phase 0 audit, commit 39e8b5d5)
+## Known defects
+
+### Fixed in Phase 0.5 (PRs #2–#8, promoted Oct 27 2026)
+
+| # | Defect | Fix |
+|---|---|---|
+| 1 | Frontend API URL hard-coded to prod | `VITE_API_BASE_URL`, build fails if unset (0.5a) |
+| 2 | Telegram `setWebhook` on every boot | Runs only when `APP_ENV=production`, with `secret_token` (0.5a, 0.5b) |
+| 3 | Telegram webhook unauthenticated | `X-Telegram-Bot-Api-Secret-Token` checked, fails closed (0.5b) |
+| 4 | `GET /telegram/test` unauthenticated | Deleted (0.5b) |
+| 5 | `requireAdmin` never applied | Applied to the 10 config-change routes and the backup routes (0.5b, 0.5f) |
+| 6 | JWT expiry 8 h | `JWT_EXPIRES_IN`, default 12 h (0.5b) |
+| 7 | Ad-hoc, non-reversible migrations | Migration runner + backups + restore (0.5c, 0.5c2, 0.5e) |
+| 8 | MTTR included cancelled alerts | Queries use `status='RESOLVED'`; `cancelled_at` added (0.5d) |
+| 9 | "resolvedToday" was all-time | Since 00:00 America/New_York (0.5d) |
+| 10 | Monthly trends in UTC | `ny_month()` (0.5d) |
+| 11 | Availability case mismatch; web ack didn't set Responding | Enum `Available/Responding/Busy/Away`; web ack/resolve/cancel update it (0.5d) |
+| 12 | 409 duplicate ignored on tablet | "TYPE: Already open since h:mm AM/PM" banner (0.5d) |
+
+### Open (line references at commit 5e304a6)
 
 | # | Defect | Location |
 |---|---|---|
-| 1 | Frontend API URL hard-coded to prod | `app/src/config/config.js:7` |
-| 2 | Telegram `setWebhook` on every boot (skips only if the token is missing) | `server/index.js:2254-2306, 2322` |
-| 3 | Telegram webhook unauthenticated, no `secret_token` check | `server/index.js:2066` |
-| 4 | `GET /telegram/test` unauthenticated | `server/index.js:2013-2060` |
-| 5 | `requireAdmin` imported but never applied | `server/index.js:5`; config routes at ~605, 665, 712, 763, 880, 947, 994, 1727, 1846, 1965 |
-| 6 | JWT expiry 8 h vs 10.5 h shift | `server/index.js:117` |
-| 7 | Ad-hoc, non-reversible migrations | `server/database.js:68-84` |
-| 8 | MTTR includes cancelled alerts (cancel sets `resolved`) | `server/database.js:462-464, 520-536, 565-572` |
-| 9 | "resolvedToday" is an all-time count | `server/index.js:1675-1700` |
-| 10 | Monthly trends grouped in UTC | `server/database.js:490, 506, 524` |
-| 11 | Availability case mismatch (`AVAILABLE` vs `Available`); web ack doesn't set Responding | `server/database.js:107`, `RespondersPanel.jsx:64, 245`, `server/index.js:2131, 2224` |
-| 12 | 409 duplicate alert silently ignored on the tablet | `app/src/components/ButtonGrid.jsx` (handleAlert) |
-| 13 | Notifications awaited in the request with no timeouts | `server/index.js:364, 1223, 1447, 1619`; `googleChat.js:358`; `telegram.js:410` |
-| 14 | Resolution notes hard-coded to "Resolved" | `ProductionResponseCenter.jsx:542-546`, `ActiveAlertList.jsx:141`, `Dashboard.jsx:186` |
-| 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:763-792, 1965-2005` |
-| 16 | No tests, no CI, no Railway healthcheck | repo / Railway |
+| 13 | Notifications awaited in the request with no timeouts | `server/index.js:381, 1247, 1478, 1663, 2248, 2341`; `googleChat.js:366`; `telegram.js:417`; `telegramUpdate.js:54` |
+| 14 | Resolution notes hard-coded to "Resolved" | `ProductionResponseCenter.jsx:545`, `Dashboard.jsx:189`, `ActiveAlertList.jsx:144` (dead); Telegram path `server/index.js:2197` |
+| 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
+| 16 | No CI; production healthcheck path not yet set | repo / Railway production settings (staging has `/health`) |
+| 17 | Seed data contains real people's names (breaks hard rule 4) | `server/database.js:143-209` (runs only on an empty table) |
+| 18 | MTTA/MTTR use wall-clock time, not working minutes | `database.js` KPI/trend queries; `/dashboard/kpis` in `index.js` |
+| 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
+| 20 | Resolving one alert sets the responder Available even if another alert is still open for them | web resolve in `index.js`; Telegram resolve path |
+| 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
+| 22 | Backups are only on the Railway volume | Manual weekly download is the mitigation; automated off-site copy not built |
 
 ## Testing
 
-- Use `node:test` + `supertest` against a temporary SQLite file. Never use the real DB.
-- Freeze time in tests that touch shift or working-minute math. Cover Thu → Mon spans, breaks, and an active OT shift.
+- Use `node:test` + `supertest` against a temporary SQLite file (`server/test/helpers.js` → `loadApp()`). Never use the real DB.
+- Freeze time in tests that touch shift, day, or month math (`mock.timers.enable({ apis: ["Date"], now })`). Cover Thu → Mon spans, breaks, an active OT shift, and both DST change days.
+- Migration tests that are about the baseline itself use a folder containing only `0001` (see `baselineOnly()` in `migrations.test.js`).
+- Prove a fix by running its test against the old code once and seeing it fail.
