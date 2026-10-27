@@ -62,7 +62,25 @@ function monthNY(ms) {
 
 }
 
+// "YYYY-MM-DD" of `ms` in New York time.
+function dateNY(ms) {
+
+    const p = partsOf(ms);
+
+    return `${p.year}-${p.month}-${p.day}`;
+
+}
+
+// Hour 0-23 of `ms` in New York time.
+function hourNY(ms) {
+
+    return Number(partsOf(ms).hour);
+
+}
+
 module.exports = {
     startOfDayNY,
-    monthNY
+    monthNY,
+    dateNY,
+    hourNY
 };

@@ -106,17 +106,27 @@ function backupDatabase(db, dbPath, label, { prune = true } = {}) {
 
 }
 
+// Daily backups and the others (pre-migration, pre-restore) are
+// kept separately, so two weeks of dailies never push out the
+// last pre-migration copies.
 function pruneBackups(dir, keep = KEEP_BACKUPS) {
 
     const files = fs.readdirSync(dir)
         .filter(file => /^andon-.*\.db$/.test(file))
         .sort();
 
-    for (const file of files.slice(0, Math.max(0, files.length - keep))) {
+    const daily = files.filter(file => file.includes("-daily-"));
+    const other = files.filter(file => !file.includes("-daily-"));
 
-        fs.unlinkSync(path.join(dir, file));
+    for (const group of [daily, other]) {
 
-        console.log(`  Removed old backup: ${file}`);
+        for (const file of group.slice(0, Math.max(0, group.length - keep))) {
+
+            fs.unlinkSync(path.join(dir, file));
+
+            console.log(`  Removed old backup: ${file}`);
+
+        }
 
     }
 

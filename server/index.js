@@ -12,6 +12,8 @@ const axios = require("axios");
 const crypto = require("crypto");
 
 const {
+    db,
+    dbPath,
     statements
 } = require("./database");
 
@@ -30,6 +32,7 @@ const { updateTelegram } = require("./services/telegramUpdate");
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
 const { startOfDayNY } = require("./services/nyTime");
+const { startDailyBackups } = require("./services/dailyBackup");
 const {
     AVAILABILITY,
     normalizeAvailability
@@ -2388,6 +2391,8 @@ if (require.main === module) {
                 : " Notifications Disabled (APP_ENV is not production)"
         );
         console.log("========================================");
+
+        startDailyBackups(db, dbPath);
 
         await configureTelegramWebhook();
 
