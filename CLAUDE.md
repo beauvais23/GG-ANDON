@@ -184,6 +184,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 24 | Telegram Resolve (and the "✅ RESOLVED" button) answered "Acknowledged ✔"; a losing Acknowledge never saw "Already acknowledged by" (Telegram takes one answer per press) | Each press answered exactly once, after the DB update; a failed answer is logged and the webhook still returns 200 (fix-23-24) |
 | 16 | No CI | `.github/workflows/ci.yml`: backend tests + frontend lint and build on every PR into `staging`/`react-v2` and every push to `staging`; Node 22 like Railway (ci-16) |
 | 18 | MTTA/MTTR used wall-clock time | `services/workingTime.js` (`workingMs`, `responseStats`) feeds `/dashboard/executive` and `/dashboard/kpis`; trend SQL removed. Live Wallboard/Response Center timers are still wall-clock (escalation work) (fix-18) |
+| 25 | Tablet stayed silent when an alert was NOT created (backend 400/500, no connection, line with no work centers) | `ButtonGrid.jsx`: red "<TYPE> alert NOT sent: <reason>. Call your lead." banner; persistent warning when the line has no work centers (`workCentersLoaded` in `WorkCenterContext`) (fix-25) |
 
 ### Open (line references at commit 5e304a6)
 
@@ -194,7 +195,6 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
 | 22 | Backups are only on the Railway volume | Off-site copy to Google Drive built (feat-22). Still open: restore **from** Drive (`RESTORE_FROM_DRIVE`), needed if the volume is lost |
-| 25 | Tablet stayed silent when an alert was NOT created (backend 400/500, no connection, line with no work centers) | `ButtonGrid.jsx`: red "<TYPE> alert NOT sent: <reason>. Call your lead." banner; persistent warning when the line has no work centers (`workCentersLoaded` in `WorkCenterContext`) (fix-25) |
 
 ## Testing
 
