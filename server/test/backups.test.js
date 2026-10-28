@@ -111,3 +111,15 @@ test("unknown backup name: 404", async () => {
     assert.equal(res.status, 404);
 
 });
+
+test("backup list reports off-site status: off when Google Drive is not configured (#22)", async () => {
+
+    const res = await request(app).get("/admin/backups").set(admin);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.offsite.enabled, false);
+    assert.match(res.body.offsite.reason, /not set/);
+    assert.equal(res.body.offsite.stale, false);
+    assert.ok(res.body.backups.every(b => b.inDrive === false));
+
+});

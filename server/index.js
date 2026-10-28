@@ -34,6 +34,7 @@ const { notificationsEnabled } = require("./services/appEnv");
 const { startOfDayNY } = require("./services/nyTime");
 const { workingMs, overtimeDatesFrom, responseStats } = require("./services/workingTime");
 const { startDailyBackups } = require("./services/dailyBackup");
+const { offsiteStatus } = require("./services/offsiteBackup");
 const {
     notifyTimeoutMs,
     queueNotification
@@ -2154,6 +2155,9 @@ app.get("/admin/backups", authenticateToken, requireAdmin, (req, res) => {
 
     const dir = backupDirFor(dbPath);
 
+    const { inDrive, ...offsite } = offsiteStatus();
+    const drive = new Set(inDrive);
+
     const backups = listBackups(dir).map(file => {
 
         const stat = fs.statSync(path.join(dir, file));
@@ -2161,12 +2165,13 @@ app.get("/admin/backups", authenticateToken, requireAdmin, (req, res) => {
         return {
             file,
             sizeBytes: stat.size,
-            modified: stat.mtimeMs
+            modified: stat.mtimeMs,
+            inDrive: drive.has(file)
         };
 
     });
 
-    res.json({ success: true, backups });
+    res.json({ success: true, backups, offsite });
 
 });
 
