@@ -9,6 +9,7 @@ Read this file fully before changing anything.
 1. `react-v2` auto-deploys BOTH Railway production services on every push. Never push or merge to `react-v2` directly.
    Work on feature branches → PR into `staging` (the default branch) → after staging sign-off, PR `staging` → `react-v2`.
    Claude never opens, merges or pushes to `react-v2`, and never changes the Railway **production** environment (deploys, variables, settings).
+   Claude **may merge PRs into `staging`** after the Director of Manufacturing replies "approved" on that PR (approval Oct 28 2026). For promotions, Claude prepares a pre-filled `react-v2`...`staging` compare link; the Director creates and merges that PR.
 2. Production deploys may happen during shift hours (Mon–Thu 6:00–16:30 ET). **Standing approval from the Director of Manufacturing, Oct 28 2026**; no per-release approval is needed.
    A redeploy still causes a short backend outage (about 35 s, Oct 27), so for an in-shift release Claude states the cost first (outage, floor-visible changes, age of the newest backup) and recommends the lunch break (11:00–11:30) or 16:45 ET or later. See "Promotion pre-flight".
    This rule is about *when*. Who merges is unchanged by it: see hard rule 1.
