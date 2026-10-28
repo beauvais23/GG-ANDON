@@ -12,8 +12,16 @@ import ExecutiveDashboard from "./pages/ExecutiveDashboard";
 import Login from "./pages/Login";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import { useAlert } from "./context/AlertContext";
+import useAutoReload from "./hooks/useAutoReload";
 
 function App() {
+
+    // Pick up new deploys on screens that stay open all shift.
+    // Never while a tablet is showing an alert in progress.
+    const { activeAlert } = useAlert();
+
+    useAutoReload(Boolean(activeAlert));
 
     return (
 
