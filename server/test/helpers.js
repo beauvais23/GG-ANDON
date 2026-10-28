@@ -35,6 +35,7 @@ function loadApp() {
     delete process.env.GOOGLE_CHAT_WEBHOOK;
     delete process.env.GDRIVE_SERVICE_ACCOUNT_JSON;
     delete process.env.GDRIVE_BACKUP_FOLDER_ID;
+    delete process.env.RESTORE_FROM_DRIVE;
 
     return { app: require("../index"), dir };
 
