@@ -223,11 +223,7 @@ SUM(CASE WHEN status='ACTIVE' THEN 1 ELSE 0 END) AS activeAlerts,
 
 SUM(CASE WHEN status='ACKNOWLEDGED' THEN 1 ELSE 0 END) AS acknowledgedAlerts,
 
-SUM(CASE WHEN status='RESOLVED' THEN 1 ELSE 0 END) AS resolvedAlerts,
-
-ROUND(AVG(acknowledged-requested)/1000,0) AS avgResponseSeconds,
-
-ROUND(AVG(CASE WHEN status='RESOLVED' THEN resolved-requested END)/1000,0) AS avgResolutionSeconds
+SUM(CASE WHEN status='RESOLVED' THEN 1 ELSE 0 END) AS resolvedAlerts
 
 FROM alerts
 
@@ -265,42 +261,8 @@ ORDER BY month
 
 `),
 
-getResponseTrend: db.prepare(`
-
-SELECT
-
-ny_month(requested) AS month,
-
-ROUND(AVG(acknowledged-requested)/1000,0) AS responseSeconds
-
-FROM alerts
-
-WHERE acknowledged IS NOT NULL
-
-GROUP BY month
-
-ORDER BY month
-
-`),
-
-getResolutionTrend: db.prepare(`
-
-SELECT
-
-ny_month(requested) AS month,
-
-ROUND(AVG(resolved-requested)/1000,0) AS resolutionSeconds
-
-FROM alerts
-
-WHERE status='RESOLVED'
-  AND resolved IS NOT NULL
-
-GROUP BY month
-
-ORDER BY month
-
-`),
+// Response and resolution trends are computed in working
+// time by services/workingTime.js (#18).
 
     acknowledgeAlert: db.prepare(`
     UPDATE alerts

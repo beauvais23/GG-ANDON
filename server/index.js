@@ -32,6 +32,7 @@ const { updateTelegram } = require("./services/telegramUpdate");
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
 const { startOfDayNY } = require("./services/nyTime");
+const { workingMs, overtimeDatesFrom, responseStats } = require("./services/workingTime");
 const { startDailyBackups } = require("./services/dailyBackup");
 const {
     notifyTimeoutMs,
@@ -550,18 +551,24 @@ app.get(
 
     try {
 
-        const kpis = statements.getDashboardKPIs.get();
+        // Response/resolution times are working seconds (#18).
+        const {
+            avgResponseSeconds,
+            avgResolutionSeconds,
+            responseTrend,
+            resolutionTrend
+        } = responseStats(statements.getAllAlerts.all());
+
+        const kpis = {
+            ...statements.getDashboardKPIs.get(),
+            avgResponseSeconds,
+            avgResolutionSeconds
+        };
 
         const pareto = statements.getAlertPareto.all();
 
         const monthlyTrend =
             statements.getMonthlyTrend.all();
-
-        const responseTrend =
-            statements.getResponseTrend.all();
-
-        const resolutionTrend =
-            statements.getResolutionTrend.all();
 
         res.json({
 
@@ -1772,15 +1779,19 @@ app.get("/dashboard/kpis", authenticateToken, (req, res) => {
             a => a.status === "RESOLVED"
         );
 
+        // Working minutes, not clock time (#18).
+        const overtimeDates = overtimeDatesFrom(alerts);
+
         const mttr =
             resolved.length === 0
                 ? 0
                 : Math.round(
                     resolved.reduce((sum, alert) => {
 
-                        return sum + (
-                            (alert.resolved || 0) -
-                            (alert.requested || 0)
+                        return sum + workingMs(
+                            Number(alert.requested || 0),
+                            Number(alert.resolved || 0),
+                            overtimeDates
                         );
 
                     }, 0) /
