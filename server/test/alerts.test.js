@@ -153,6 +153,14 @@ test("acknowledge race: two acks, exactly one wins", async () => {
     assert.equal(winners.length, 1);
     assert.equal(winners[0].body.alert.status, "ACKNOWLEDGED");
 
+    // Close it, so RESPONDER holds no open alert in later tests (#20).
+    const cancelled = await request(app)
+        .patch(`/alerts/${id}/cancel`)
+        .set(floor)
+        .send({});
+
+    assert.equal(cancelled.status, 200);
+
 });
 
 //------------------------------------------------------
