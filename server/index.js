@@ -33,6 +33,10 @@ const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
 const { startOfDayNY } = require("./services/nyTime");
 const { startDailyBackups } = require("./services/dailyBackup");
+const {
+    notifyTimeoutMs,
+    queueNotification
+} = require("./services/notificationQueue");
 const { backupDirFor } = require("./migrations/runner");
 const {
     NAME_PATTERN: BACKUP_NAME,
@@ -378,7 +382,8 @@ app.post("/alerts", authenticateToken, async (req, res) => {
         // Send Notifications
         //--------------------------------------------------
 
-        await notifyCreated(alert);
+        // In the background: the tablet gets its answer right away.
+        queueNotification(alert.id, "created", () => notifyCreated(alert));
 
         //--------------------------------------------------
         // Response
@@ -1244,9 +1249,9 @@ app.patch(
             // Notification
             //--------------------------------------------------
 
-            await notifyAcknowledged(
+            queueNotification(updatedAlert.id, "acknowledged", () => notifyAcknowledged(
                 updatedAlert
-            );
+            ));
 
             //--------------------------------------------------
             // Response
@@ -1338,6 +1343,28 @@ app.patch(
             }
 
             //--------------------------------------------------
+            // Validate Resolution Note
+            //--------------------------------------------------
+
+            const cleanNotes =
+                typeof resolutionNotes === "string"
+                    ? resolutionNotes.trim()
+                    : "";
+
+            if (!cleanNotes || cleanNotes.length > 500) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Resolution note is required (up to 500 characters)."
+
+                });
+
+            }
+
+            //--------------------------------------------------
             // Get Alert
             //--------------------------------------------------
 
@@ -1416,7 +1443,7 @@ app.patch(
 
                     resolver.name,
 
-                    resolutionNotes,
+                    cleanNotes,
 
                     now,
 
@@ -1475,9 +1502,9 @@ app.patch(
             // Notification
             //--------------------------------------------------
 
-            await notifyResolved(
+            queueNotification(updatedAlert.id, "resolved", () => notifyResolved(
                 updatedAlert
-            );
+            ));
 
             //--------------------------------------------------
             // Response
@@ -1660,9 +1687,9 @@ app.patch(
             // Notification
             //--------------------------------------------------
 
-            await notifyCancelled(
+            queueNotification(updatedAlert.id, "cancelled", () => notifyCancelled(
                 updatedAlert
-            );
+            ));
 
             //--------------------------------------------------
             // Response
@@ -2221,7 +2248,9 @@ if (result.changes === 0) {
 
             show_alert: true
 
-        }
+        },
+
+        { timeout: notifyTimeoutMs() }
 
     );
 
@@ -2245,9 +2274,10 @@ statements.updateResponderAvailability.run(
 
 const alert = statements.getAlert.get(alertId);
 
-await notifyResolved(alert);
-
-await updateTelegram(alert);
+queueNotification(alert.id, "telegram resolved", async () => {
+    await notifyResolved(alert);
+    await updateTelegram(alert);
+});
 
     console.log(
         `✓ Telegram resolved Alert #${alertId} by ${responder}`
@@ -2267,7 +2297,9 @@ await updateTelegram(alert);
     {
         callback_query_id: callback.id,
         text: "Acknowledged ✔"
-    }
+    },
+
+        { timeout: notifyTimeoutMs() }
 );
 
     //--------------------------------------------------
@@ -2314,7 +2346,9 @@ if (result.changes === 0) {
 
             show_alert: true
 
-        }
+        },
+
+        { timeout: notifyTimeoutMs() }
 
     );
 
@@ -2338,9 +2372,10 @@ statements.updateResponderAvailability.run(
 
 const alert = statements.getAlert.get(alertId);
 
-await notifyAcknowledged(alert);
-
-await updateTelegram(alert);
+queueNotification(alert.id, "telegram acknowledged", async () => {
+    await notifyAcknowledged(alert);
+    await updateTelegram(alert);
+});
 
 console.log(
     `✓ Telegram acknowledged Alert #${alertId} by ${responder}`
@@ -2405,7 +2440,9 @@ async function configureTelegramWebhook() {
 
                 secret_token: secret
 
-            }
+            },
+
+            { timeout: notifyTimeoutMs() }
 
         );
 

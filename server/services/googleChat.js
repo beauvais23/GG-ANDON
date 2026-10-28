@@ -1,6 +1,7 @@
 const axios = require("axios");
 const { supervisorUrl } = require("../config");
 const { notificationsEnabled } = require("./appEnv");
+const { notifyTimeoutMs } = require("./notificationQueue");
 const {
     formatDate,
     formatElapsed
@@ -363,7 +364,7 @@ const payload = {
 
     try {
 
-        await axios.post(webhook, payload);
+        await axios.post(webhook, payload, { timeout: notifyTimeoutMs() });
 
         console.log("✓ Google Chat Card sent.");
 
