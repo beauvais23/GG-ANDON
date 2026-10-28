@@ -2228,181 +2228,173 @@ app.post("/telegram/webhook", async (req, res) => {
         return res.sendStatus(200);
     }
 
-//--------------------------------------------------
-// RESOLVE
-//--------------------------------------------------
-
-if (callback.data.startsWith("resolve_")) {
-
-    const alertId = callback.data.replace("resolve_", "");
+    const data = String(callback.data || "");
 
     const responder =
-        callback.from.first_name +
-        (callback.from.last_name ? " " + callback.from.last_name : "");
-
-    const now = Date.now();
-
-    const result = statements.resolveAlert.run(
-
-    now,
-    responder,
-    "Resolved from Telegram",
-    now,
-    now,
-    alertId
-
-);
-
-//----------------------------------------------
-// Already resolved
-//----------------------------------------------
-
-if (result.changes === 0) {
-
-    const alert = statements.getAlert.get(alertId);
-
-    await axios.post(
-
-        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
-
-        {
-
-            callback_query_id: callback.id,
-
-            text: `Already resolved by ${alert.resolved_by || "another responder"}`,
-
-            show_alert: true
-
-        },
-
-        { timeout: notifyTimeoutMs() }
-
-    );
-
-    return res.sendStatus(200);
-
-}
-
-//----------------------------------------------
-// Success
-//----------------------------------------------
-
-const alert = statements.getAlert.get(alertId);
-
-releaseResponders([alert.assigned_to, responder], now);
-
-queueNotification(alert.id, "telegram resolved", async () => {
-    await notifyResolved(alert);
-    await updateTelegram(alert);
-});
-
-    console.log(
-        `✓ Telegram resolved Alert #${alertId} by ${responder}`
-    );
-
-}    
-
-    console.log("Telegram Callback:");
-    console.log(JSON.stringify(callback, null, 2));
+        (callback.from?.first_name || "Telegram user") +
+        (callback.from?.last_name ? " " + callback.from.last_name : "");
 
     //--------------------------------------------------
-    // Stop Telegram spinner
+    // RESOLVE
     //--------------------------------------------------
 
-    await axios.post(
-    `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
-    {
-        callback_query_id: callback.id,
-        text: "Acknowledged ✔"
-    },
+    if (data.startsWith("resolve_")) {
 
-        { timeout: notifyTimeoutMs() }
-);
+        const alertId = data.replace("resolve_", "");
+        const now = Date.now();
+
+        const result = statements.resolveAlert.run(
+            now,
+            responder,
+            "Resolved from Telegram",
+            now,
+            now,
+            alertId
+        );
+
+        if (result.changes === 0) {
+
+            await answerTelegramCallback(
+                callback,
+                callbackConflictText(statements.getAlert.get(alertId), alertId),
+                true
+            );
+
+            return res.sendStatus(200);
+
+        }
+
+        const alert = statements.getAlert.get(alertId);
+
+        releaseResponders([alert.assigned_to, responder], now);
+
+        queueNotification(alert.id, "telegram resolved", async () => {
+            await notifyResolved(alert);
+            await updateTelegram(alert);
+        });
+
+        console.log(`✓ Telegram resolved Alert #${alertId} by ${responder}`);
+
+        await answerTelegramCallback(callback, "Resolved ✔");
+
+        return res.sendStatus(200);
+
+    }
 
     //--------------------------------------------------
     // ACKNOWLEDGE
     //--------------------------------------------------
 
-    if (callback.data.startsWith("ack_")) {
+    if (data.startsWith("ack_")) {
 
-        const alertId = callback.data.replace("ack_", "");
-
-        const responder =
-            callback.from.first_name +
-            (callback.from.last_name ? " " + callback.from.last_name : "");
-
+        const alertId = data.replace("ack_", "");
         const now = Date.now();
 
         const result = statements.acknowledgeAlert.run(
+            now,
+            responder,
+            responder,
+            now,
+            alertId
+        );
 
-    now,
-    responder,
-    responder,
-    now,
-    alertId
+        if (result.changes === 0) {
 
-);
+            await answerTelegramCallback(
+                callback,
+                callbackConflictText(statements.getAlert.get(alertId), alertId),
+                true
+            );
 
-//--------------------------------------------------
-// Someone already acknowledged it
-//--------------------------------------------------
+            return res.sendStatus(200);
 
-if (result.changes === 0) {
+        }
 
-    const alert = statements.getAlert.get(alertId);
+        statements.updateResponderAvailability.run(
+            "Responding",
+            now,
+            responder
+        );
 
-    await axios.post(
+        const alert = statements.getAlert.get(alertId);
 
-        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
+        queueNotification(alert.id, "telegram acknowledged", async () => {
+            await notifyAcknowledged(alert);
+            await updateTelegram(alert);
+        });
 
-        {
+        console.log(`✓ Telegram acknowledged Alert #${alertId} by ${responder}`);
 
-            callback_query_id: callback.id,
+        await answerTelegramCallback(callback, "Acknowledged ✔");
 
-            text: `Already acknowledged by ${alert.assigned_to}`,
-
-            show_alert: true
-
-        },
-
-        { timeout: notifyTimeoutMs() }
-
-    );
-
-    return res.sendStatus(200);
-
-}
-
-//--------------------------------------------------
-// Success
-//--------------------------------------------------
-
-statements.updateResponderAvailability.run(
-
-    "Responding",
-
-    now,
-
-    responder
-
-);
-
-const alert = statements.getAlert.get(alertId);
-
-queueNotification(alert.id, "telegram acknowledged", async () => {
-    await notifyAcknowledged(alert);
-    await updateTelegram(alert);
-});
-
-console.log(
-    `✓ Telegram acknowledged Alert #${alertId} by ${responder}`
-);
+        return res.sendStatus(200);
 
     }
+
+    //--------------------------------------------------
+    // Anything else (e.g. the "✅ RESOLVED" button on a
+    // finished alert): just stop the spinner.
+    //--------------------------------------------------
+
+    await answerTelegramCallback(
+        callback,
+        data === "resolved" ? "This alert is already resolved." : ""
+    );
 
     res.sendStatus(200);
 
 });
+
+//------------------------------------------------------
+// Telegram button answers (defects #23, #24)
+//
+// Telegram accepts one answer per button press, so each
+// path answers exactly once, after the database update.
+// A failed answer is logged, never thrown: the alert is
+// already updated, and a non-200 makes Telegram resend
+// the press.
+//------------------------------------------------------
+
+async function answerTelegramCallback(callback, text, showAlert = false) {
+
+    try {
+
+        await axios.post(
+            `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`,
+            {
+                callback_query_id: callback.id,
+                text,
+                show_alert: showAlert
+            },
+            { timeout: notifyTimeoutMs() }
+        );
+
+    } catch (error) {
+
+        console.error("Telegram answerCallbackQuery failed:", error.message);
+
+    }
+
+}
+
+// Why an acknowledge or resolve press changed nothing.
+function callbackConflictText(alert, alertId) {
+
+    if (!alert)
+        return `Alert #${alertId} was not found.`;
+
+    if (alert.status === "RESOLVED")
+        return `Already resolved by ${alert.resolved_by || "another responder"}.`;
+
+    if (alert.status === "CANCELLED")
+        return "This alert was cancelled.";
+
+    if (alert.status === "ACKNOWLEDGED")
+        return `Already acknowledged by ${alert.assigned_to || "another responder"}.`;
+
+    return "Acknowledge this alert before resolving it.";
+
+}
 
 //------------------------------------------------------
 // Configure Telegram Webhook
