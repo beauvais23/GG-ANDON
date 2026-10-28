@@ -9,8 +9,9 @@ Read this file fully before changing anything.
 1. `react-v2` auto-deploys BOTH Railway production services on every push. Never push or merge to `react-v2` directly.
    Work on feature branches → PR into `staging` (the default branch) → after staging sign-off, PR `staging` → `react-v2`.
    Claude never opens, merges or pushes to `react-v2`, and never changes the Railway **production** environment (deploys, variables, settings).
-2. Production deploys happen outside shift hours (Mon–Thu 6:00–16:30 ET), because the backend has a mounted volume and redeploys cause a short outage.
-   Merge `staging` → `react-v2` **at 16:45 ET or later**, never during a shift. See "Promotion pre-flight".
+2. Production deploys happen outside shift hours (Mon–Thu 6:00–16:30 ET) by default, because the backend has a mounted volume and a redeploy causes a short outage (about 35 s, Oct 27).
+   Default: merge `staging` → `react-v2` **at 16:45 ET or later**. **During a shift only with the Director of Manufacturing's explicit approval for that release**, recorded in the promotion PR description.
+   For an approved in-shift deploy, Claude states the cost first (outage, floor-visible changes, age of the newest backup) and recommends the lunch break (11:00–11:30). See "Promotion pre-flight".
 3. No secrets in code, commits, logs, or test fixtures. Env vars are referenced by name only.
 4. No real people's names in committed code or seed files. People, roles, and Slack IDs are entered through the Admin UI per environment.
 5. Every schema change is a numbered migration in `server/migrations/` with `up` and `down`. The runner backs up the DB before applying any migration (built in; see "Migrations and backups").
@@ -32,7 +33,7 @@ Read this file fully before changing anything.
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `availability.js` (responder enum), `dailyBackup.js`, `notificationQueue.js` (background notifications, per-alert order, time limit) |
 | Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test` |
-| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset) |
+| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing |
 | Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json` | Remove in the cleanup PR (root `node_modules/` already removed) |
 | Dead components | `ConfirmAlert.jsx`, `AlertSent.jsx`, `ActiveAlertList.jsx`, `pages/ActiveAlert.jsx` | Not imported or routed |
 
@@ -80,7 +81,7 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 
 1. All tests pass on the staging tip; staging deploy logs are clean.
 2. **Every required production variable for this release exists in Railway production before the merge**, and the staged-changes banner is gone. Check the table above for anything new in this release.
-3. Merge at **16:45 ET or later**, Mon–Thu (or a non-OT weekend day).
+3. Merge at **16:45 ET or later**, Mon–Thu (or a non-OT weekend day). In-shift only with the Director of Manufacturing's approval (hard rule 2): warn the floor first, prefer the lunch break, and write "In-shift deploy approved by the Director of Manufacturing" in the PR description.
 4. Watch the backend log for: `Database backup … before-NNNN` (if migrations), `Migration applied`, `Notifications Enabled`, `Telegram webhook configured`.
 5. Download the new `before-NNNN` backup from `/admin` → Backups to Drive.
 6. Smoke test: tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (cancelled alerts are excluded from MTTR).
@@ -179,7 +180,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 |---|---|---|
 | 14b | Telegram resolves have no real note (a button can't carry text) | `server/index.js` Telegram resolve path writes "Resolved from Telegram" |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
-| 16 | No CI; production healthcheck path not yet set | repo / Railway production settings (staging has `/health`) |
+| 16 | No CI (production healthcheck `/health` set on GG-ANDON Oct 27, 16:47 ET; the frontend also has `/health`, harmless) | repo |
 | 18 | MTTA/MTTR use wall-clock time, not working minutes | `database.js` KPI/trend queries; `/dashboard/kpis` in `index.js` |
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 20 | Resolving one alert sets the responder Available even if another alert is still open for them | web resolve in `index.js`; Telegram resolve path |
