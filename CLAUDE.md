@@ -33,7 +33,7 @@ Read this file fully before changing anything.
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `availability.js` (responder enum), `dailyBackup.js`, `notificationQueue.js` (background notifications, per-alert order, time limit) |
 | Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test` |
-| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset) |
+| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing |
 | Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json` | Remove in the cleanup PR (root `node_modules/` already removed) |
 | Dead components | `ConfirmAlert.jsx`, `AlertSent.jsx`, `ActiveAlertList.jsx`, `pages/ActiveAlert.jsx` | Not imported or routed |
 
