@@ -63,7 +63,8 @@ export async function getBackups() {
         throw new Error(data.message || "Could not load backups.");
     }
 
-    return data.backups;
+    // offsite: Google Drive copy status (#22).
+    return { backups: data.backups, offsite: data.offsite };
 
 }
 

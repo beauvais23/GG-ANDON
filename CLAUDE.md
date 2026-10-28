@@ -32,7 +32,7 @@ Read this file fully before changing anything.
 | Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability` |
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
-| Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `notificationQueue.js` (background notifications, per-alert order, time limit) |
+| Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit) |
 | Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test`. GitHub Actions (`.github/workflows/ci.yml`) runs them on every PR |
 | Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing |
 | Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json` | Remove in the cleanup PR (root `node_modules/` already removed) |
@@ -65,6 +65,8 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 | Backend | `NOTIFY_TIMEOUT_MS` | no | Time limit per Telegram/Google Chat call, default `5000` |
 | Backend | `BACKUP_DIR` | no | Default `<DATABASE_PATH dir>/backups` |
 | Backend | `RESTORE_BACKUP` | incident only | Backup file name to restore at next boot; delete after use |
+| Backend | `GDRIVE_SERVICE_ACCOUNT_JSON` | yes (secret) | Service account key (JSON) for the off-site copy. Pasted by the Director only; never in chat, code or logs. Same service account for both environments |
+| Backend | `GDRIVE_BACKUP_FOLDER_ID` | yes | Folder in the **G&G ANDON** Shared Drive: `production` = `1W4mdfHzxuFh5bt57LFSDhd86Z6iGyH0b`, `staging` = `1BV06LlANjP7b0mCnGsxSTIfqRI97yOnl`. Either variable missing → off-site copy off (warning on `/admin` → Backups) |
 | Frontend | `VITE_API_BASE_URL` | yes (build time) | Backend URL for that environment |
 
 ## Migrations and backups
@@ -76,6 +78,7 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 - **Retention**: newest 14 daily and newest 14 other backups, kept separately.
 - **Restore (browser only)**: set `RESTORE_BACKUP=<file>` on the backend → Deploy. Snapshots the current DB as `…-before-restore.db`, integrity-checks the backup, swaps it in before the DB opens; runs once per file name. Any problem skips the restore and boots normally.
   After a bad migration, **revert the code first**, then restore; otherwise the migration re-runs.
+- **Off-site copy** (`services/offsiteBackup.js`): at boot and every 10 min, every local backup not yet in the Drive folder is uploaded (service account, Shared Drive "G&G ANDON"). Drive keeps all copies. `/admin` → Backups shows the newest copy and an "In Drive" column. In production, a Google Chat warning goes out once a day while the newest Drive copy is over 26 h old.
 - **Download**: `/admin` → Backups tab (`GET /admin/backups`, `GET /admin/backups/:file`, admin only). Keep a weekly copy in Google Drive `ANDON Backups/production`.
 
 ## Promotion pre-flight (staging → react-v2)
@@ -190,7 +193,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
-| 22 | Backups are only on the Railway volume | Manual weekly download is the mitigation; automated off-site copy not built |
+| 22 | Backups are only on the Railway volume | Off-site copy to Google Drive built (feat-22). Still open: restore **from** Drive (`RESTORE_FROM_DRIVE`), needed if the volume is lost |
 
 ## Testing
 
