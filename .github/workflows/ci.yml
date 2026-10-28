@@ -32,7 +32,14 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci --no-audit --no-fund
-      - run: npm test
+      # shell: bash adds pipefail, so a test failure still fails the step.
+      - run: npm test 2>&1 | tee test-output.txt
+        shell: bash
+      # Show failing tests on the PR page as one annotation.
+      - if: failure()
+        run: |
+          msg=$(grep -A20 '^not ok' test-output.txt | head -120 | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=Failing backend tests::${msg:-see job log}"
 
   frontend-build:
     name: Frontend lint and build

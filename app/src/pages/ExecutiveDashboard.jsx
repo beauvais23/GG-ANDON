@@ -225,7 +225,7 @@ export default function ExecutiveDashboard() {
         },
 
         {
-    title:"AVG ACKNOWLEDGE",
+    title:"AVG ACKNOWLEDGE (WORK MIN)",
     value:`${(
         dashboard.kpis.avgResponseSeconds / 60
     ).toFixed(1)} min`,
@@ -240,7 +240,7 @@ export default function ExecutiveDashboard() {
 },
 
         {
-            title: "AVG RESOLUTION",
+            title: "AVG RESOLUTION (WORK MIN)",
             value: `${Math.round(
                 dashboard.kpis.avgResolutionSeconds / 60
             )} min`,
@@ -552,7 +552,7 @@ export default function ExecutiveDashboard() {
                 mb: 0.5
             }}
         >
-            Average Acknowledge Time
+            Average Acknowledge Time (working minutes)
         </Typography>
 
 
@@ -665,7 +665,7 @@ export default function ExecutiveDashboard() {
                 mb: 0.5
             }}
         >
-            Mean Time To Resolve (MTTR)
+            Mean Time To Resolve (MTTR, working minutes)
         </Typography>
 
 

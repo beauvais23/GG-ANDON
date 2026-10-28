@@ -1,4 +1,4 @@
-const { test, beforeEach, afterEach } = require("node:test");
+const { test, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
@@ -9,6 +9,12 @@ const { backupDirFor, pruneBackups, KEEP_BACKUPS } = require("../migrations/runn
 const { runDailyBackupIfDue } = require("../services/dailyBackup");
 
 const T = iso => Date.parse(iso);
+
+// The backup service logs every backup. Under load, that output
+// sometimes corrupts the test runner's channel ("Unable to
+// deserialize cloned data"), failing CI at random. Keep it quiet.
+mock.method(console, "log", () => {});
+mock.method(console, "error", () => {});
 
 let db;
 let dbPath;
