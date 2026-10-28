@@ -33,7 +33,7 @@ Read this file fully before changing anything.
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `availability.js` (responder enum), `dailyBackup.js`, `notificationQueue.js` (background notifications, per-alert order, time limit) |
-| Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test` |
+| Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test`. GitHub Actions (`.github/workflows/ci.yml`) runs them on every PR |
 | Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing |
 | Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json` | Remove in the cleanup PR (root `node_modules/` already removed) |
 | Dead components | `ConfirmAlert.jsx`, `AlertSent.jsx`, `ActiveAlertList.jsx`, `pages/ActiveAlert.jsx` | Not imported or routed |
@@ -80,7 +80,7 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 
 ## Promotion pre-flight (staging → react-v2)
 
-1. All tests pass on the staging tip; staging deploy logs are clean.
+1. All tests pass on the staging tip (green CI ✓ on the latest `staging` commit); staging deploy logs are clean.
 2. **Every required production variable for this release exists in Railway production before the merge**, and the staged-changes banner is gone. Check the table above for anything new in this release.
 3. Timing: any time (hard rule 2, standing approval). In-shift: warn the floor first and prefer the lunch break (11:00–11:30); otherwise 16:45 ET or later. Write "In-shift deploy (standing approval)" in the PR description when merging during a shift.
 4. Watch the backend log for: `Database backup … before-NNNN` (if migrations), `Migration applied`, `Notifications Enabled`, `Telegram webhook configured`.
@@ -177,6 +177,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 20 | Resolving or cancelling one alert set the responder Available while they still held another open alert | `releaseResponders()` in `index.js` (web resolve, cancel, Telegram resolve): Available only when no ACKNOWLEDGED alert is left; also releases the acknowledger when someone else resolves (fix-20) |
 | 23 | Telegram press on an alert ID that doesn't exist returned 500 | Every press gets a reason: not found, already resolved by, cancelled, already acknowledged by, acknowledge first (fix-23-24) |
 | 24 | Telegram Resolve (and the "✅ RESOLVED" button) answered "Acknowledged ✔"; a losing Acknowledge never saw "Already acknowledged by" (Telegram takes one answer per press) | Each press answered exactly once, after the DB update; a failed answer is logged and the webhook still returns 200 (fix-23-24) |
+| 16 | No CI | `.github/workflows/ci.yml`: backend tests + frontend lint and build on every PR into `staging`/`react-v2` and every push to `staging`; Node 22 like Railway (ci-16) |
 
 ### Open (line references at commit 5e304a6)
 
@@ -184,7 +185,6 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 |---|---|---|
 | 14b | Telegram resolves have no real note (a button can't carry text) | `server/index.js` Telegram resolve path writes "Resolved from Telegram" |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
-| 16 | No CI (production healthcheck `/health` set on GG-ANDON Oct 27, 16:47 ET; the frontend also has `/health`, harmless) | repo |
 | 18 | MTTA/MTTR use wall-clock time, not working minutes | `database.js` KPI/trend queries; `/dashboard/kpis` in `index.js` |
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |

@@ -1,0 +1,57 @@
+# Defect #16: run the checks on every PR and on every push to staging.
+# Read-only: no secrets, no deploys. Railway still deploys on its own.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [staging, react-v2]
+  push:
+    branches: [staging]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22    # same major as Railway
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  frontend-build:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      # The build refuses to run without a backend URL; this one is a
+      # placeholder and the output is thrown away.
+      - run: npm run build
+        env:
+          VITE_API_BASE_URL: https://ci.invalid
