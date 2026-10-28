@@ -9,9 +9,10 @@ Read this file fully before changing anything.
 1. `react-v2` auto-deploys BOTH Railway production services on every push. Never push or merge to `react-v2` directly.
    Work on feature branches → PR into `staging` (the default branch) → after staging sign-off, PR `staging` → `react-v2`.
    Claude never opens, merges or pushes to `react-v2`, and never changes the Railway **production** environment (deploys, variables, settings).
-2. Production deploys happen outside shift hours (Mon–Thu 6:00–16:30 ET) by default, because the backend has a mounted volume and a redeploy causes a short outage (about 35 s, Oct 27).
-   Default: merge `staging` → `react-v2` **at 16:45 ET or later**. **During a shift only with the Director of Manufacturing's explicit approval for that release**, recorded in the promotion PR description.
-   For an approved in-shift deploy, Claude states the cost first (outage, floor-visible changes, age of the newest backup) and recommends the lunch break (11:00–11:30). See "Promotion pre-flight".
+   Claude **may merge PRs into `staging`** after the Director of Manufacturing replies "approved" on that PR (approval Oct 28 2026). For promotions, Claude prepares a pre-filled `react-v2`...`staging` compare link; the Director creates and merges that PR.
+2. Production deploys may happen during shift hours (Mon–Thu 6:00–16:30 ET). **Standing approval from the Director of Manufacturing, Oct 28 2026**; no per-release approval is needed.
+   A redeploy still causes a short backend outage (about 35 s, Oct 27), so for an in-shift release Claude states the cost first (outage, floor-visible changes, age of the newest backup) and recommends the lunch break (11:00–11:30) or 16:45 ET or later. See "Promotion pre-flight".
+   This rule is about *when*. Who merges is unchanged by it: see hard rule 1.
 3. No secrets in code, commits, logs, or test fixtures. Env vars are referenced by name only.
 4. No real people's names in committed code or seed files. People, roles, and Slack IDs are entered through the Admin UI per environment.
 5. Every schema change is a numbered migration in `server/migrations/` with `up` and `down`. The runner backs up the DB before applying any migration (built in; see "Migrations and backups").
@@ -81,7 +82,7 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 
 1. All tests pass on the staging tip; staging deploy logs are clean.
 2. **Every required production variable for this release exists in Railway production before the merge**, and the staged-changes banner is gone. Check the table above for anything new in this release.
-3. Merge at **16:45 ET or later**, Mon–Thu (or a non-OT weekend day). In-shift only with the Director of Manufacturing's approval (hard rule 2): warn the floor first, prefer the lunch break, and write "In-shift deploy approved by the Director of Manufacturing" in the PR description.
+3. Timing: any time (hard rule 2, standing approval). In-shift: warn the floor first and prefer the lunch break (11:00–11:30); otherwise 16:45 ET or later. Write "In-shift deploy (standing approval)" in the PR description when merging during a shift.
 4. Watch the backend log for: `Database backup … before-NNNN` (if migrations), `Migration applied`, `Notifications Enabled`, `Telegram webhook configured`.
 5. Download the new `before-NNNN` backup from `/admin` → Backups to Drive.
 6. Smoke test: tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (cancelled alerts are excluded from MTTR).
@@ -173,6 +174,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 13 | Notifications awaited in the request with no timeouts | Routes answer first; notifications queued per alert; every outbound call limited by `NOTIFY_TIMEOUT_MS` (fix-13) |
 | 14 | Resolution notes hard-coded to "Resolved" (web) | "What fixed it?" dialog on `/supervisor` and `/dashboard`; API requires a note, max 500 chars (fix-14). Telegram resolves still write "Resolved from Telegram" |
 | 17 | Seed data contained real people's names (hard rule 4) | Responder seed removed; a new environment starts with no responders (fix-17). The names remain in git history and in any DB that was seeded before |
+| 20 | Resolving or cancelling one alert set the responder Available while they still held another open alert | `releaseResponders()` in `index.js` (web resolve, cancel, Telegram resolve): Available only when no ACKNOWLEDGED alert is left; also releases the acknowledger when someone else resolves (fix-20) |
 
 ### Open (line references at commit 5e304a6)
 
@@ -183,9 +185,10 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 16 | No CI (production healthcheck `/health` set on GG-ANDON Oct 27, 16:47 ET; the frontend also has `/health`, harmless) | repo |
 | 18 | MTTA/MTTR use wall-clock time, not working minutes | `database.js` KPI/trend queries; `/dashboard/kpis` in `index.js` |
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
-| 20 | Resolving one alert sets the responder Available even if another alert is still open for them | web resolve in `index.js`; Telegram resolve path |
 | 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
 | 22 | Backups are only on the Railway volume | Manual weekly download is the mitigation; automated off-site copy not built |
+| 23 | Telegram resolve of an alert ID that doesn't exist returns 500 (reads `resolved_by` of undefined) | `server/index.js` Telegram resolve, "already resolved" branch |
+| 24 | Telegram resolve doesn't return after success: it falls through and answers the button with "Acknowledged ✔" | `server/index.js` after the Telegram resolve block |
 
 ## Testing
 

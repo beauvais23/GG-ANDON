@@ -407,6 +407,13 @@ saveTelegramMessageId: db.prepare(`
     WHERE id=?
 `),
 
+countAcknowledgedAlertsFor: db.prepare(`
+    SELECT COUNT(*) AS n
+    FROM alerts
+    WHERE assigned_to=?
+      AND status='ACKNOWLEDGED'
+`),
+
 updateResponderAvailability: db.prepare(`
     UPDATE response_team
     SET
