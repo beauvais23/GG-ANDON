@@ -66,21 +66,25 @@ test("monthNY: month boundary follows New York, not UTC", () => {
 // KPIs through the API
 //------------------------------------------------------
 
-test("MTTR excludes CANCELLED; resolvedToday counts New York today; months bucket in New York", async () => {
+test("MTTR is working minutes and excludes CANCELLED; resolvedToday counts New York today; months bucket in New York", async () => {
 
-    // Frozen at Oct 26 23:30 New York (Oct 27 03:30 UTC).
+    // Frozen at Mon Oct 26 11:30 PM New York (Oct 27 03:30 UTC).
     mock.timers.enable({ apis: ["Date"], now: T("2026-10-27T03:30:00Z") });
 
-    // Resolved after 10 min, today in NY (01:00 NY).
-    insertAlert({ status: "RESOLVED", requested: T("2026-10-26T04:50:00Z"), resolved: T("2026-10-26T05:00:00Z") });
+    // 10:00 -> 10:10 AM Monday: 10 working minutes, resolved today in NY.
+    insertAlert({ status: "RESOLVED", requested: T("2026-10-26T14:00:00Z"), resolved: T("2026-10-26T14:10:00Z") });
 
-    // Resolved after 20 min, today in NY (23:00 NY), already Oct 27 in UTC.
+    // 10:50 AM -> 12:10 PM Monday, across lunch: 10 + 40 = 50 working minutes.
+    insertAlert({ status: "RESOLVED", requested: T("2026-10-26T14:50:00Z"), resolved: T("2026-10-26T16:10:00Z") });
+
+    // 10:40 -> 11:00 PM Monday: after the shift, 0 working minutes.
+    // Resolved today in NY, already Oct 27 in UTC.
     insertAlert({ status: "RESOLVED", requested: T("2026-10-27T02:40:00Z"), resolved: T("2026-10-27T03:00:00Z") });
 
-    // Resolved yesterday in NY (Oct 25 23:59 NY), Oct 26 in UTC.
+    // Sun Oct 25 11:29 -> 11:59 PM NY: resolved yesterday in NY, Oct 26 in UTC. 0 working minutes.
     insertAlert({ status: "RESOLVED", requested: T("2026-10-26T03:29:00Z"), resolved: T("2026-10-26T03:59:00Z") });
 
-    // Cancelled after 10 hours: must not count toward MTTR.
+    // Cancelled after 9:00 AM -> 7:00 PM Monday (380 working minutes): must not count.
     insertAlert({
         status: "CANCELLED",
         requested: T("2026-10-26T13:00:00Z"),
@@ -88,24 +92,25 @@ test("MTTR excludes CANCELLED; resolvedToday counts New York today; months bucke
         cancelled_at: T("2026-10-26T23:00:00Z")
     });
 
-    // Raised Oct 31 22:00 NY = Nov 1 02:00 UTC: belongs to October.
+    // Raised Oct 31 10:00 PM NY = Nov 1 02:00 UTC: belongs to October.
     insertAlert({ status: "ACTIVE", requested: T("2026-11-01T02:00:00Z") });
 
     const kpis = await request(app).get("/dashboard/kpis").set(auth);
 
     assert.equal(kpis.status, 200);
-    assert.equal(kpis.body.resolvedToday, 2); // UTC-day logic gives 1, all-time gives 3
-    assert.equal(kpis.body.mttr, 20);         // (10 + 20 + 30) / 3 minutes
+    assert.equal(kpis.body.resolvedToday, 3); // UTC-day logic gives 1, all-time gives 4
+    assert.equal(kpis.body.mttr, 15);         // (10 + 50 + 0 + 0) / 4 minutes; clock time gives 35
 
     const exec = await request(app).get("/dashboard/executive").set(auth);
 
     assert.equal(exec.status, 200);
 
-    // (600 + 1200 + 1800) / 3 = 1200 s. Including the cancel would give 9900.
-    assert.equal(exec.body.kpis.avgResolutionSeconds, 1200);
+    // (600 + 3000 + 0 + 0) / 4 = 900 s. Including the cancel would give 5280.
+    assert.equal(exec.body.kpis.avgResolutionSeconds, 900);
+    assert.equal(exec.body.kpis.resolvedAlerts, 4);
 
-    assert.deepEqual(exec.body.monthlyTrend, [{ month: "2026-10", total: 5 }]);
-    assert.deepEqual(exec.body.resolutionTrend, [{ month: "2026-10", resolutionSeconds: 1200 }]);
+    assert.deepEqual(exec.body.monthlyTrend, [{ month: "2026-10", total: 6 }]);
+    assert.deepEqual(exec.body.resolutionTrend, [{ month: "2026-10", resolutionSeconds: 900 }]);
 
     mock.timers.reset();
 

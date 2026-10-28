@@ -79,6 +79,7 @@ function hourNY(ms) {
 }
 
 module.exports = {
+    offsetAt,
     startOfDayNY,
     monthNY,
     dateNY,
