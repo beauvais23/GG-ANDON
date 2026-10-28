@@ -23,6 +23,10 @@ export function WorkCenterProvider({ children }) {
 
     const [workCenter, setWorkCenter] = useState("");
 
+    // True once this line's work centers have loaded, so an empty
+    // list means "none set up", not "still loading" (#25).
+    const [workCentersLoaded, setWorkCentersLoaded] = useState(false);
+
 
     //------------------------------------------------------
     // Load Work Centers When Production Line Changes
@@ -35,6 +39,7 @@ export function WorkCenterProvider({ children }) {
 
         setWorkCenters([]);
         setWorkCenter("");
+        setWorkCentersLoaded(false);
 
         //--------------------------------------------------
         // Do not load protected data when logged out
@@ -111,6 +116,7 @@ export function WorkCenterProvider({ children }) {
 
 
             setWorkCenters(data);
+            setWorkCentersLoaded(true);
 
 
             //--------------------------------------------------
@@ -212,6 +218,7 @@ export function WorkCenterProvider({ children }) {
             value={{
                 workCenters,
                 workCenter,
+                workCentersLoaded,
                 changeWorkCenter,
                 reloadWorkCenters: loadWorkCenters
             }}
