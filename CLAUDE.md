@@ -175,6 +175,8 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 14 | Resolution notes hard-coded to "Resolved" (web) | "What fixed it?" dialog on `/supervisor` and `/dashboard`; API requires a note, max 500 chars (fix-14). Telegram resolves still write "Resolved from Telegram" |
 | 17 | Seed data contained real people's names (hard rule 4) | Responder seed removed; a new environment starts with no responders (fix-17). The names remain in git history and in any DB that was seeded before |
 | 20 | Resolving or cancelling one alert set the responder Available while they still held another open alert | `releaseResponders()` in `index.js` (web resolve, cancel, Telegram resolve): Available only when no ACKNOWLEDGED alert is left; also releases the acknowledger when someone else resolves (fix-20) |
+| 23 | Telegram press on an alert ID that doesn't exist returned 500 | Every press gets a reason: not found, already resolved by, cancelled, already acknowledged by, acknowledge first (fix-23-24) |
+| 24 | Telegram Resolve (and the "✅ RESOLVED" button) answered "Acknowledged ✔"; a losing Acknowledge never saw "Already acknowledged by" (Telegram takes one answer per press) | Each press answered exactly once, after the DB update; a failed answer is logged and the webhook still returns 200 (fix-23-24) |
 
 ### Open (line references at commit 5e304a6)
 
@@ -187,8 +189,6 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
 | 22 | Backups are only on the Railway volume | Manual weekly download is the mitigation; automated off-site copy not built |
-| 23 | Telegram resolve of an alert ID that doesn't exist returns 500 (reads `resolved_by` of undefined) | `server/index.js` Telegram resolve, "already resolved" branch |
-| 24 | Telegram resolve doesn't return after success: it falls through and answers the button with "Acknowledged ✔" | `server/index.js` after the Telegram resolve block |
 
 ## Testing
 
