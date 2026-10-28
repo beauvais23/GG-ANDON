@@ -49,6 +49,36 @@ const {
     normalizeAvailability
 } = require("./services/availability");
 
+//------------------------------------------------------
+// Responder availability after an alert closes (defect #20)
+//
+// Sets each named responder back to Available, unless they
+// still hold another ACKNOWLEDGED alert; then their status
+// is left as it is (normally Responding). Call it after the
+// alert's own status has been updated.
+//------------------------------------------------------
+
+function releaseResponders(names, now) {
+
+    for (const name of new Set(names.filter(Boolean))) {
+
+        const { n } =
+            statements.countAcknowledgedAlertsFor.get(name);
+
+        if (n === 0) {
+
+            statements.updateResponderAvailability.run(
+                "Available",
+                now,
+                name
+            );
+
+        }
+
+    }
+
+}
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -1471,10 +1501,9 @@ app.patch(
             }
 
             // Same as the Telegram resolve path.
-            statements.updateResponderAvailability.run(
-                "Available",
-                now,
-                resolver.name
+            releaseResponders(
+                [alert.assigned_to, resolver.name],
+                now
             );
 
             //--------------------------------------------------
@@ -1653,13 +1682,9 @@ app.patch(
             }
 
             // An acknowledged alert had a responder set to Responding.
-            if (alert.status === "ACKNOWLEDGED" && alert.assigned_to) {
+            if (alert.status === "ACKNOWLEDGED") {
 
-                statements.updateResponderAvailability.run(
-                    "Available",
-                    now,
-                    alert.assigned_to
-                );
+                releaseResponders([alert.assigned_to], now);
 
             }
 
@@ -2262,17 +2287,9 @@ if (result.changes === 0) {
 // Success
 //----------------------------------------------
 
-statements.updateResponderAvailability.run(
-
-    "Available",
-
-    now,
-
-    responder
-
-);
-
 const alert = statements.getAlert.get(alertId);
+
+releaseResponders([alert.assigned_to, responder], now);
 
 queueNotification(alert.id, "telegram resolved", async () => {
     await notifyResolved(alert);
