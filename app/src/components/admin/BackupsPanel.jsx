@@ -58,12 +58,45 @@ function formatTime(ms) {
 }
 
 //------------------------------------------------------
+// Off-site (Google Drive) status, defect #22
+//------------------------------------------------------
+
+function OffsiteStatus({ offsite }) {
+
+    if (!offsite.enabled) {
+
+        return (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+                Off-site backup is off: {offsite.reason}.
+                Download a backup weekly and save it to Google Drive.
+            </Alert>
+        );
+
+    }
+
+    const newest = offsite.newestOffsiteAt
+        ? formatTime(offsite.newestOffsiteAt)
+        : "none yet";
+
+    return (
+        <Alert severity={offsite.stale ? "error" : "success"} sx={{ mb: 2 }}>
+            Off-site backup (Google Drive): newest copy {newest} ET
+            {offsite.lastSyncAt ? `, last checked ${formatTime(offsite.lastSyncAt)} ET` : ""}.
+            {offsite.stale && " The newest copy is more than 26 hours old."}
+            {offsite.lastError && ` Last error: ${offsite.lastError}`}
+        </Alert>
+    );
+
+}
+
+//------------------------------------------------------
 // Backups Panel
 //------------------------------------------------------
 
 export default function BackupsPanel() {
 
     const [backups, setBackups] = useState([]);
+    const [offsite, setOffsite] = useState(null);
     const [loading, setLoading] = useState(true);
     const [downloading, setDownloading] = useState("");
     const [error, setError] = useState("");
@@ -75,7 +108,10 @@ export default function BackupsPanel() {
 
         try {
 
-            setBackups(await getBackups());
+            const data = await getBackups();
+
+            setBackups(data.backups);
+            setOffsite(data.offsite || null);
 
         } catch (err) {
 
@@ -143,8 +179,9 @@ export default function BackupsPanel() {
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 These files live on the same Railway volume as the database.
-                Download one and save it to Google Drive to keep a copy off Railway.
-                A daily backup is taken after 5 pm ET; the newest 14 are kept.
+                A daily backup is taken after 5 pm ET; the newest 14 are kept here.
+                When off-site backup is on, every file is also copied to the
+                G&G ANDON Shared Drive in Google Drive, which keeps all of them.
             </Typography>
 
             {error && (
@@ -152,6 +189,8 @@ export default function BackupsPanel() {
                     {error}
                 </Alert>
             )}
+
+            {offsite && <OffsiteStatus offsite={offsite} />}
 
             {!loading && backups.length === 0 && !error && (
                 <Alert severity="info">
@@ -171,6 +210,7 @@ export default function BackupsPanel() {
                                 <TableCell>Type</TableCell>
                                 <TableCell>File</TableCell>
                                 <TableCell align="right">Size</TableCell>
+                                <TableCell>In Drive</TableCell>
                                 <TableCell />
                             </TableRow>
                         </TableHead>
@@ -203,6 +243,10 @@ export default function BackupsPanel() {
 
                                         <TableCell align="right">
                                             {formatSize(backup.sizeBytes)}
+                                        </TableCell>
+
+                                        <TableCell>
+                                            {backup.inDrive ? "✓" : "—"}
                                         </TableCell>
 
                                         <TableCell align="right">

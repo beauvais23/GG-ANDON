@@ -16,6 +16,7 @@ const path = require("path");
 
 const { backupDirFor, pruneBackups } = require("../migrations/runner");
 const { dateNY, hourNY } = require("./nyTime");
+const { offsiteTick, describeOffsite } = require("./offsiteBackup");
 
 const CHECK_MINUTES = 10;
 
@@ -89,12 +90,19 @@ function startDailyBackups(db, dbPath) {
         `Daily backup: after ${backupHour()}:00 New York time, checked every ${CHECK_MINUTES} min`
     );
 
-    runDailyBackupIfDue(db, dbPath);
+    console.log(describeOffsite());
 
-    setInterval(
-        () => runDailyBackupIfDue(db, dbPath),
-        CHECK_MINUTES * 60 * 1000
-    ).unref();
+    // After each check, copy any new backup off Railway (#22).
+    const tick = async () => {
+
+        await runDailyBackupIfDue(db, dbPath);
+        await offsiteTick(backupDirFor(dbPath));
+
+    };
+
+    tick();
+
+    setInterval(tick, CHECK_MINUTES * 60 * 1000).unref();
 
 }
 
