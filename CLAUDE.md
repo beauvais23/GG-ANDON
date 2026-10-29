@@ -47,7 +47,7 @@ Read this file fully before changing anything.
 | staging | GG-ANDON-staging | `/server` | `staging` | Own volume at `/data`; healthcheck `/health`; https://gg-andon-staging-staging.up.railway.app |
 | staging | ManufacturingOS Frontend-staging | `/app` | `staging` | https://manufacturingos-frontend-staging-staging.up.railway.app |
 
-The Railway plan has **no volume backups** (Hobby). All DB backups live on the same volume as the DB; the off-Railway copy is a manual download from `/admin` → Backups.
+The Railway plan has **no volume backups** (Hobby). Backups are written to the same volume as the DB and copied automatically to the **G&G ANDON** Shared Drive in Google Drive (see "Migrations and backups").
 
 ### Environment variables (names only)
 
@@ -65,6 +65,7 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 | Backend | `NOTIFY_TIMEOUT_MS` | no | Time limit per Telegram/Google Chat call, default `5000` |
 | Backend | `BACKUP_DIR` | no | Default `<DATABASE_PATH dir>/backups` |
 | Backend | `RESTORE_BACKUP` | incident only | Backup file name to restore at next boot; delete after use |
+| Backend | `RESTORE_FROM_DRIVE` | incident only | Backup file name in the Drive folder: downloaded at next boot, then restored like `RESTORE_BACKUP`. Never set both; delete after use |
 | Backend | `GDRIVE_SERVICE_ACCOUNT_JSON` | yes (secret) | Service account key (JSON) for the off-site copy. Pasted by the Director only; never in chat, code or logs. Same service account for both environments |
 | Backend | `GDRIVE_BACKUP_FOLDER_ID` | yes | Folder in the **G&G ANDON** Shared Drive: `production` = `1W4mdfHzxuFh5bt57LFSDhd86Z6iGyH0b`, `staging` = `1BV06LlANjP7b0mCnGsxSTIfqRI97yOnl`. Either variable missing → off-site copy off (warning on `/admin` → Backups) |
 | Frontend | `VITE_API_BASE_URL` | yes (build time) | Backend URL for that environment |
@@ -78,8 +79,9 @@ The Railway plan has **no volume backups** (Hobby). All DB backups live on the s
 - **Retention**: newest 14 daily and newest 14 other backups, kept separately.
 - **Restore (browser only)**: set `RESTORE_BACKUP=<file>` on the backend → Deploy. Snapshots the current DB as `…-before-restore.db`, integrity-checks the backup, swaps it in before the DB opens; runs once per file name. Any problem skips the restore and boots normally.
   After a bad migration, **revert the code first**, then restore; otherwise the migration re-runs.
+- **Restore from Drive** (volume lost or file pruned locally): set `RESTORE_FROM_DRIVE=<file>` → Deploy. At boot, before the DB opens, the file is downloaded from the Drive folder into the backup folder (child process, 2-min limit), then the `RESTORE_BACKUP` flow above runs. Download failure → restore skipped, normal boot. Lost volume: attach a new volume at `/data`, keep `DATABASE_PATH`, set `RESTORE_FROM_DRIVE` to the newest `…-daily-….db` in the Drive `production` folder, Deploy, then delete the variable.
 - **Off-site copy** (`services/offsiteBackup.js`): at boot and every 10 min, every local backup not yet in the Drive folder is uploaded (service account, Shared Drive "G&G ANDON"). Drive keeps all copies. `/admin` → Backups shows the newest copy and an "In Drive" column. In production, a Google Chat warning goes out once a day while the newest Drive copy is over 26 h old.
-- **Download**: `/admin` → Backups tab (`GET /admin/backups`, `GET /admin/backups/:file`, admin only). Keep a weekly copy in Google Drive `ANDON Backups/production`.
+- **Download**: `/admin` → Backups tab (`GET /admin/backups`, `GET /admin/backups/:file`, admin only). The weekly manual copy is optional now that the off-site copy runs daily.
 
 ## Promotion pre-flight (staging → react-v2)
 
@@ -184,6 +186,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 24 | Telegram Resolve (and the "✅ RESOLVED" button) answered "Acknowledged ✔"; a losing Acknowledge never saw "Already acknowledged by" (Telegram takes one answer per press) | Each press answered exactly once, after the DB update; a failed answer is logged and the webhook still returns 200 (fix-23-24) |
 | 16 | No CI | `.github/workflows/ci.yml`: backend tests + frontend lint and build on every PR into `staging`/`react-v2` and every push to `staging`; Node 22 like Railway (ci-16) |
 | 18 | MTTA/MTTR used wall-clock time | `services/workingTime.js` (`workingMs`, `responseStats`) feeds `/dashboard/executive` and `/dashboard/kpis`; trend SQL removed. Live Wallboard/Response Center timers are still wall-clock (escalation work) (fix-18) |
+| 22 | Backups were only on the Railway volume | Every backup copied to the G&G ANDON Shared Drive (feat-22, `offsiteBackup.js`); `RESTORE_FROM_DRIVE` restores from Drive at boot (feat-22b, `restore.js` + `fetchFromDrive.js`) |
 | 25 | Tablet stayed silent when an alert was NOT created (backend 400/500, no connection, line with no work centers) | `ButtonGrid.jsx`: red "<TYPE> alert NOT sent: <reason>. Call your lead." banner; persistent warning when the line has no work centers (`workCentersLoaded` in `WorkCenterContext`) (fix-25) |
 
 ### Open (line references at commit 5e304a6)
@@ -194,7 +197,6 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
 | 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
-| 22 | Backups are only on the Railway volume | Off-site copy to Google Drive built (feat-22). Still open: restore **from** Drive (`RESTORE_FROM_DRIVE`), needed if the volume is lost |
 
 ## Testing
 
