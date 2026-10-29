@@ -292,7 +292,7 @@ test("cancel with a reason stores who and why; the tablet's plain cancel still w
     assert.equal(cancelled.body.alert.resolved, null);
     assert.ok(cancelled.body.alert.cancelled_at > 0);
 
-    // Tablet: no body, no note.
+    // A tablet still on the old screen (before it reloads): no body, no note.
     const tablet = await raise("QUALITY");
     const plain = await request(app).patch(`/alerts/${tablet.body.alert.id}/cancel`).set(floor);
 
@@ -320,5 +320,25 @@ test("cancel reason: blank or over 500 chars is rejected and the alert stays ope
 
     assert.equal(ok.status, 200);
     assert.equal(ok.body.alert.resolution_notes, "Cancelled: Pressed by mistake");
+
+});
+
+test("tablet one-tap cancel: the reason and 'Operator (tablet)' are stored", async () => {
+
+    // Exactly what AlertScreen sends for each approved label.
+    for (const reason of ["Pressed by mistake", "Problem cleared itself", "Test", "Lead fixed it on the spot"]) {
+
+        const raised = await raise("MAINTENANCE");
+
+        const res = await request(app)
+            .patch(`/alerts/${raised.body.alert.id}/cancel`)
+            .set(floor)
+            .send({ reason, cancelledBy: "Operator (tablet)" });
+
+        assert.equal(res.status, 200);
+        assert.equal(res.body.alert.status, "CANCELLED");
+        assert.equal(res.body.alert.resolution_notes, `Cancelled by Operator (tablet): ${reason}`);
+
+    }
 
 });
