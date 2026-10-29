@@ -155,3 +155,40 @@ export async function deleteResponder(
 
     return handleResponse(response);
 }
+//------------------------------------------------------
+// Archived Responders (#15)
+//------------------------------------------------------
+
+export async function getArchivedResponders() {
+
+    const response =
+        await fetch(
+            `${API}/response-team/archived`,
+            {
+                headers: {
+                    ...getAuthHeaders()
+                }
+            }
+        );
+
+    return handleResponse(response);
+}
+
+export async function restoreResponder(
+    id
+) {
+
+    const response =
+        await fetch(
+            `${API}/response-team/${id}/restore`,
+            {
+                method: "POST",
+
+                headers: {
+                    ...getAuthHeaders()
+                }
+            }
+        );
+
+    return handleResponse(response);
+}

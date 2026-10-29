@@ -27,7 +27,7 @@ export default function DeleteResponderDialog({
 
             <DialogTitle>
 
-                Delete Responder
+                Archive Responder
 
             </DialogTitle>
 
@@ -35,7 +35,10 @@ export default function DeleteResponderDialog({
 
                 <DialogContentText>
 
-                    Are you sure you want to permanently remove this responder?
+                    Archive this responder? They disappear from the
+                    responder lists. Their alert history is kept, and
+                    you can restore them from Archived responders at
+                    the bottom of this page.
 
                 </DialogContentText>
 
@@ -73,12 +76,12 @@ export default function DeleteResponderDialog({
                 </Button>
 
                 <Button
-                    color="error"
+                    color="warning"
                     variant="contained"
                     onClick={onDelete}
                 >
 
-                    Delete
+                    Archive
 
                 </Button>
 

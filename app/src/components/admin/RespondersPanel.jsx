@@ -15,14 +15,18 @@ import {
 
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
+import ArchiveIcon from "@mui/icons-material/Archive";
 
 import {
     getResponseTeam,
     createResponder,
     updateResponder,
-    deleteResponder
+    deleteResponder,
+    getArchivedResponders,
+    restoreResponder
 } from "../../api/responseTeam";
+
+import ArchivedList from "./ArchivedList";
 
 import AddResponderDialog from "../AddResponderDialog";
 import EditResponderDialog from "../EditResponderDialog";
@@ -114,6 +118,8 @@ export default function RespondersPanel() {
     const [selectedResponder, setSelectedResponder] =
         useState(null);
 
+    const [archivedResponders, setArchivedResponders] = useState([]);
+
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteResponderItem, setDeleteResponderItem] =
         useState(null);
@@ -132,6 +138,8 @@ export default function RespondersPanel() {
                 await getResponseTeam();
 
             setResponders(data);
+
+            setArchivedResponders(await getArchivedResponders());
 
         } catch (err) {
 
@@ -204,8 +212,24 @@ export default function RespondersPanel() {
     }
 
     //------------------------------------------------------
-    // Delete Responder
+    // Archive / Restore Responder (#15): never deleted
     //------------------------------------------------------
+
+    async function handleRestore(responder) {
+
+        try {
+
+            await restoreResponder(responder.id);
+
+            await loadResponders();
+
+        } catch (err) {
+
+            alert(err.message);
+
+        }
+
+    }
 
     async function handleDelete() {
 
@@ -784,11 +808,11 @@ export default function RespondersPanel() {
                                         </Tooltip>
 
                                         <Tooltip
-                                            title="Delete responder"
+                                            title="Archive responder"
                                         >
 
                                             <IconButton
-                                                color="error"
+                                                color="warning"
                                                 onClick={() => {
 
                                                     setDeleteResponderItem(
@@ -802,7 +826,7 @@ export default function RespondersPanel() {
                                                 }}
                                             >
 
-                                                <DeleteIcon />
+                                                <ArchiveIcon />
 
                                             </IconButton>
 
@@ -844,7 +868,13 @@ export default function RespondersPanel() {
                 onSave={handleUpdate}
             />
 
-            {/* Delete Dialog */}
+            <ArchivedList
+                items={archivedResponders}
+                label="responders"
+                onRestore={handleRestore}
+            />
+
+            {/* Archive Dialog */}
 
             <DeleteResponderDialog
                 open={deleteOpen}
