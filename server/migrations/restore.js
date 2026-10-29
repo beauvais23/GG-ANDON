@@ -11,10 +11,17 @@
 // The restored file name is recorded in last-restore.json,
 // so a forgotten variable never restores twice. Any
 // problem skips the restore and boots the current database.
+//
+// RESTORE_FROM_DRIVE (defect #22) works the same way for a
+// backup that exists only in the Google Drive folder, e.g.
+// after the Railway volume was lost: the file is downloaded
+// into the backup folder first, then restored as above.
+// Set one of the two variables, not both.
 //------------------------------------------------------
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const Database = require("better-sqlite3");
 
 const {
@@ -90,25 +97,76 @@ function isHealthy(file) {
 
 function skip(reason) {
 
-    console.error(`✗ RESTORE_BACKUP skipped: ${reason} Booting the current database.`);
+    console.error(`✗ Restore skipped: ${reason} Booting the current database.`);
 
     return null;
 
 }
 
-function restoreIfRequested(dbPath) {
+const DRIVE_TIMEOUT_MS = 2 * 60 * 1000;
+
+// Downloads in a child process so the boot can wait for it
+// synchronously. Returns true when the file is now local.
+function downloadWithChild(name, dir) {
+
+    try {
+
+        execFileSync(
+            process.execPath,
+            [path.join(__dirname, "fetchFromDrive.js"), name, dir],
+            { stdio: "inherit", timeout: DRIVE_TIMEOUT_MS }
+        );
+
+        return true;
+
+    } catch {
+
+        return false;
+
+    }
+
+}
+
+function restoreIfRequested(dbPath, { download = downloadWithChild } = {}) {
 
     const dir = backupDirFor(dbPath);
 
-    logAvailableBackups(dir);
+    const local = (process.env.RESTORE_BACKUP || "").trim();
+    const fromDrive = (process.env.RESTORE_FROM_DRIVE || "").trim();
 
-    const name = (process.env.RESTORE_BACKUP || "").trim();
+    if (local && fromDrive) {
+
+        logAvailableBackups(dir);
+
+        return skip("both RESTORE_BACKUP and RESTORE_FROM_DRIVE are set; set only one.");
+
+    }
+
+    const name = local || fromDrive;
+
+    if (name && !NAME_PATTERN.test(name)) {
+
+        logAvailableBackups(dir);
+
+        return skip(`"${name}" is not a backup file name (andon-….db).`);
+
+    }
+
+    // Fetch from Drive unless the file is already here (e.g. a
+    // later boot with the variable still set).
+    if (fromDrive && !fs.existsSync(path.join(dir, name))) {
+
+        console.log(`RESTORE_FROM_DRIVE: downloading ${name} from Google Drive…`);
+
+        if (!download(name, dir))
+            return skip(`${name} could not be downloaded from Google Drive.`);
+
+    }
+
+    logAvailableBackups(dir);
 
     if (!name)
         return null;
-
-    if (!NAME_PATTERN.test(name))
-        return skip(`"${name}" is not a backup file name (andon-….db).`);
 
     const source = path.join(dir, name);
 
@@ -121,7 +179,7 @@ function restoreIfRequested(dbPath) {
 
         console.log(
             `RESTORE_BACKUP: ${name} was already restored at ${marker.restoredAt}. ` +
-            "Nothing to do. Remove RESTORE_BACKUP from the Railway variables."
+            "Nothing to do. Remove RESTORE_BACKUP / RESTORE_FROM_DRIVE from the Railway variables."
         );
 
         return null;
@@ -179,7 +237,7 @@ function restoreIfRequested(dbPath) {
 
     console.log(`✓ RESTORED database from ${name}.`);
     console.log(`  Previous database saved as ${record.snapshotOfPrevious}.`);
-    console.log("  Remove RESTORE_BACKUP from the Railway variables.");
+    console.log("  Remove RESTORE_BACKUP / RESTORE_FROM_DRIVE from the Railway variables.");
 
     return record;
 

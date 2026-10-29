@@ -208,6 +208,55 @@ async function uploadFile(full, folderId, token, timeoutMs) {
 
 }
 
+// Downloads one backup from the Drive folder into dir (used by
+// RESTORE_FROM_DRIVE, see migrations/restore.js). Throws with a
+// readable reason; writes via .partial so a cut-off download is
+// never mistaken for a backup.
+async function downloadFromDrive(name, dir, { timeoutMs = TIMEOUT_MS } = {}) {
+
+    const config = offsiteConfig();
+
+    if (!config.enabled)
+        throw new Error(`off-site backup not configured (${config.reason})`);
+
+    const token = await accessToken(config.credentials, timeoutMs);
+
+    // name is checked against /^andon-[A-Za-z0-9_-]+\.db$/ by the
+    // caller, so it cannot break out of the quotes.
+    const params = new URLSearchParams({
+        q: `name = '${name}' and '${config.folderId}' in parents and trashed = false`,
+        fields: "files(id, name, size)",
+        supportsAllDrives: "true",
+        includeItemsFromAllDrives: "true",
+        corpora: "allDrives"
+    });
+
+    const found = await (await call(`${DRIVE_API}?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+    }, timeoutMs)).json();
+
+    const file = (found.files || [])[0];
+
+    if (!file)
+        throw new Error(`${name} not found in the Google Drive backup folder`);
+
+    const response = await call(
+        `${DRIVE_API}/${encodeURIComponent(file.id)}?alt=media&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${token}` } },
+        timeoutMs
+    );
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const target = path.join(dir, name);
+
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(`${target}.partial`, bytes);
+    fs.renameSync(`${target}.partial`, target);
+
+    return { file: target, sizeBytes: bytes.length };
+
+}
+
 //------------------------------------------------------
 // Sync
 //------------------------------------------------------
@@ -417,6 +466,7 @@ function resetOffsiteState() {
 module.exports = {
     STALE_HOURS,
     syncOffsite,
+    downloadFromDrive,
     offsiteStatus,
     alertIfStale,
     offsiteTick,
