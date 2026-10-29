@@ -1,5 +1,8 @@
 require("dotenv").config();
 
+// Before any outbound call: IPv4 gets 2 s to connect (#27).
+require("./services/network");
+
 const {
     authenticateToken,
     requireAdmin
