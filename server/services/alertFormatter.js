@@ -1,3 +1,5 @@
+const { label } = require("./alertTypes");
+
 //------------------------------------------------------
 // Time Zone
 //------------------------------------------------------
@@ -13,7 +15,9 @@ const alertColors = {
     MAINTENANCE: "#F57C00",
     MATERIAL: "#FBC02D",
     SUPERVISOR: "#1976D2",
-    SAFETY: "#2E7D32"
+    SAFETY: "#2E7D32",
+    DOWNTIME: "#6E40C9",
+    NEAR_MISS: "#0E7C86"
 };
 
 //------------------------------------------------------
@@ -25,7 +29,9 @@ const alertIcons = {
     MAINTENANCE: "🟧",
     MATERIAL: "🟨",
     SUPERVISOR: "🟦",
-    SAFETY: "🟩"
+    SAFETY: "🟩",
+    DOWNTIME: "🟪",
+    NEAR_MISS: "⚠️"
 };
 
 //------------------------------------------------------
@@ -156,7 +162,7 @@ function formatAlert(alert) {
             alertColors[alert.type] || "#607D8B",
 
         title:
-            `${alert.type} ALERT`,
+            `${label(alert.type)} ALERT`,
 
         facility:
             alert.facility,

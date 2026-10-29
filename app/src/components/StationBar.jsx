@@ -6,12 +6,18 @@ import { getProductionLines } from "../api/productionLines";
 import { useProductionLine } from "../context/ProductionLineContext";
 import { useWorkCenter } from "../context/WorkCenterContext";
 import { labelSx, tokens } from "../theme/theme";
+import { ALERT_COLORS, alertLabel } from "../config/alertColors";
+
+import TimerOffOutlinedIcon from "@mui/icons-material/TimerOffOutlined";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 
 //------------------------------------------------------
 // Station strip (E2): LINE and WORK CENTER as big tap
 // chips, replacing the line toggle and the work-center
 // dropdown. The choice is remembered on the tablet as
 // before (ProductionLine / WorkCenter contexts).
+// Option B: DOWNTIME and NEAR MISS buttons on the right,
+// under the clock (Director's layout, Oct 29 2026).
 //------------------------------------------------------
 
 function Chip({ selected, onClick, children }) {
@@ -53,7 +59,54 @@ function Row({ label, children }) {
 
 }
 
-export default function StationBar() {
+const QUICK = [
+    { type: "DOWNTIME", subtitle: "Line stopped", icon: <TimerOffOutlinedIcon /> },
+    { type: "NEAR_MISS", subtitle: "Report a near miss", icon: <ReportProblemOutlinedIcon /> }
+];
+
+function QuickButton({ type, subtitle, icon, onClick }) {
+
+    const colors = ALERT_COLORS[type];
+
+    return (
+
+        <ButtonBase
+            onClick={onClick}
+            focusRipple
+            sx={{
+                width: { xs: "100%", sm: 250 },
+                minHeight: 48,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-start",
+                gap: 1.5,
+                px: 1.75,
+                py: 0.5,
+                bgcolor: colors.fill,
+                color: colors.text,
+                border: `1px solid ${colors.border}`,
+                borderLeft: `5px solid ${colors.edge}`,
+                borderRadius: "2px",
+                textAlign: "left",
+                "&:hover": { filter: "brightness(1.08)" },
+                "&:active": { filter: "brightness(0.92)" },
+                "& svg": { fontSize: 30 }
+            }}
+        >
+            {icon}
+            <Box>
+                <Box sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: 22, letterSpacing: "2px", lineHeight: 1 }}>
+                    {alertLabel(type)}
+                </Box>
+                <Box sx={{ fontSize: 12, opacity: 0.85, mt: 0.25 }}>{subtitle}</Box>
+            </Box>
+        </ButtonBase>
+
+    );
+
+}
+
+export default function StationBar({ onRaise }) {
 
     const { productionLine, changeProductionLine } = useProductionLine();
     const { workCenters, workCenter, changeWorkCenter } = useWorkCenter();
@@ -79,14 +132,17 @@ export default function StationBar() {
             aria-label="Station"
             sx={{
                 display: "flex",
-                flexDirection: "column",
-                gap: 1.25,
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 2,
                 px: 3,
                 py: 2,
                 bgcolor: "#0E1115",
                 borderBottom: `1px solid ${tokens.line}`
             }}
         >
+
+            <Box sx={{ flex: "1 1 520px", display: "flex", flexDirection: "column", gap: 1.25 }}>
 
             <Row label="Line">
                 {lines.map(line => (
@@ -111,6 +167,14 @@ export default function StationBar() {
                     </Chip>
                 ))}
             </Row>
+
+            </Box>
+
+            <Box sx={{ display: "flex", flexDirection: { xs: "row", lg: "column" }, gap: 1.25, flexWrap: "wrap", width: { xs: "100%", lg: "auto" } }}>
+                {QUICK.map(q => (
+                    <QuickButton key={q.type} {...q} onClick={() => onRaise(q.type)} />
+                ))}
+            </Box>
 
         </Box>
 

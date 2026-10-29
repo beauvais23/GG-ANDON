@@ -1,3 +1,5 @@
+const { label } = require("./alertTypes");
+
 //------------------------------------------------------
 // Time Zone
 //------------------------------------------------------
@@ -13,7 +15,9 @@ const alertIcons = {
     MAINTENANCE: "🟧",
     MATERIAL: "🟨",
     SUPERVISOR: "🟦",
-    SAFETY: "🟩"
+    SAFETY: "🟩",
+    DOWNTIME: "🟪",
+    NEAR_MISS: "⚠️"
 };
 
 const statusIcons = {
@@ -145,7 +149,7 @@ function formatNotification(alert, status) {
         priorityIcon:
             priorityIcons[alert.priority || "NORMAL"] || "🟢",
 
-        title: `${alert.type} ALERT`,
+        title: `${label(alert.type)} ALERT`,
 
         status,
 

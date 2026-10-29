@@ -11,6 +11,8 @@ import {
     Typography
 } from "@mui/material";
 
+import { alertLabel } from "../config/alertColors";
+
 // Matches the backend limit in PATCH /alerts/:id/resolve.
 const MAX_NOTE = 500;
 
@@ -101,7 +103,7 @@ export default function ResolveDialog({
                 <DialogContent sx={{ display: "grid", gap: 2 }}>
 
                     <Typography variant="body2" color="text.secondary">
-                        {alert?.type} · {alert?.production_line} / {alert?.work_center}
+                        {alertLabel(alert?.type)} · {alert?.production_line} / {alert?.work_center}
                         {responder ? ` · resolved by ${responder}` : ""}
                     </Typography>
 
