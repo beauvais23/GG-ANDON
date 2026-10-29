@@ -51,7 +51,8 @@ export default function ActiveAlertCard({
   alert,
   elapsed,
   onAcknowledge,
-  onResolve
+  onResolve,
+  onCancel
 }) {
   const theme = alertTheme[alert.type];
 
@@ -333,6 +334,24 @@ export default function ActiveAlertCard({
             >
               RESOLVE
             </Button>
+
+            {/* False alarm / test (#26). Not counted in MTTR. */}
+            {onCancel && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={() =>
+                  onCancel(alert.id)
+                }
+                sx={{
+                  width: 170,
+                  height: 40,
+                  fontWeight: 700
+                }}
+              >
+                CANCEL
+              </Button>
+            )}
           </Stack>
         </Stack>
       </Box>

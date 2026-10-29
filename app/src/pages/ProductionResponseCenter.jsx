@@ -17,13 +17,15 @@ import ActiveAlertCard from "../components/ActiveAlertCard";
 import ResponderSelector from "../components/ResponderSelector";
 import ResponseTeamPanel from "../components/ResponseTeamPanel";
 import ResolveDialog from "../components/ResolveDialog";
+import CancelDialog from "../components/CancelDialog";
 
 import useClock from "../hooks/useClock";
 
 import {
   getActiveAlerts,
   acknowledgeAlert,
-  resolveAlert
+  resolveAlert,
+  cancelAlert
 } from "../services/api";
 
 import alertTypes from "../config/alertTypes";
@@ -35,6 +37,7 @@ export default function ProductionResponseCenter() {
 
   const [alerts, setAlerts] = useState([]);
   const [resolving, setResolving] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
 const [responseTeam, setResponseTeam] = useState([]);
 const [selectedResponder, setSelectedResponder] = useState("");
 const [selectedType, setSelectedType] = useState("ALL");
@@ -546,6 +549,26 @@ async function loadAlerts() {
 
   }
 
+  // False alarm / test (#26): opens the reason dialog.
+  function handleCancel(id) {
+
+    setCancelling(alerts.find(a => a.id === id) || { id });
+
+  }
+
+  async function submitCancel(id, reason) {
+
+    const result = await cancelAlert(id, {
+      reason,
+      cancelledBy: selectedResponder
+    });
+
+    loadAlerts();
+
+    return result;
+
+  }
+
   async function submitResolve(id, note) {
 
     const result = await resolveAlert(
@@ -934,6 +957,9 @@ async function loadAlerts() {
                       onResolve={() =>
                         handleResolve(alert.id)
                       }
+                      onCancel={() =>
+                        handleCancel(alert.id)
+                      }
                     />
 
                   ))}
@@ -1054,6 +1080,13 @@ async function loadAlerts() {
         responder={selectedResponder}
         onClose={() => setResolving(null)}
         onResolve={submitResolve}
+      />
+
+      <CancelDialog
+        alert={cancelling}
+        responder={selectedResponder}
+        onClose={() => setCancelling(null)}
+        onCancel={submitCancel}
       />
 
     </Box>
