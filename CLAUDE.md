@@ -31,7 +31,7 @@ Read this file fully before changing anything.
 | DB layer | `server/database.js` | Opens the DB, runs `restoreIfRequested` then `migrateUp`, seeds empty tables, prepares statements. Registers SQL function `ny_month()` |
 | Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved` |
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
-| Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
+| Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; `telegramNote.js` asks for and saves Telegram resolution notes; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit) |
 | Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test`. GitHub Actions (`.github/workflows/ci.yml`) runs them on every PR |
 | Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing. Staging pages show an orange "STAGING (test system)" bar and a `[STAGING]` tab title (`components/StagingBanner.jsx`, detected from "staging" in the hostname; no variable) |
@@ -191,12 +191,12 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 26 | Only the tablet could cancel an alert; once the tablet moved on, a false alarm or test could only be resolved (counted in MTTR) | CANCEL button with a required reason on `/supervisor` and `/dashboard` (`CancelDialog.jsx`); `PATCH /alerts/:id/cancel` accepts optional `reason` (1–500) + `cancelledBy`, stored as `resolution_notes` "Cancelled by <name>: <reason>" (fix-26) |
 | 19 | Cancel wrote `resolved` too, so Telegram/Google Chat showed a cancelled alert as "Resolved" with its duration | `cancelAlert` sets only `cancelled_at`; formatters end a cancelled alert at `cancelled_at` and label the note "Cancel reason"; migration `0004` clears the copied `resolved` on old cancelled rows (fix-19) |
 | 21 | Reorder routes returned 500 on an empty or malformed body, and applied a list partly | `PUT /production-lines/order` and `/work-centers/order` share `applyOrder()` in `index.js`: 400 on a bad body or unknown id; the whole list in one transaction (fix-21) |
+| 14b | Telegram resolves had no real note (a button can't carry text) | After a Telegram Resolve the bot posts "<name>, what fixed alert #N?" (force_reply, `services/telegramNote.js`); the first text reply replaces "Resolved from Telegram" (`saveTelegramNote`) and the Telegram message is edited. `setWebhook` sends `allowed_updates: callback_query, message`. Google Chat keeps the resolve card it already got (fix-14b) |
 
 ### Open (line references at commit 5e304a6)
 
 | # | Defect | Location |
 |---|---|---|
-| 14b | Telegram resolves have no real note (a button can't carry text) | `server/index.js` Telegram resolve path writes "Resolved from Telegram" |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
 
 ## Testing
