@@ -35,8 +35,7 @@ Read this file fully before changing anything.
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit), `network.js` (outbound connect settings, loaded first in `index.js`) |
 | Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test`. GitHub Actions (`.github/workflows/ci.yml`) runs them on every PR |
 | Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing. Staging pages show an orange "STAGING (test system)" bar and a `[STAGING]` tab title (`components/StagingBanner.jsx`, detected from "staging" in the hostname; no variable) |
-| Legacy (unused) | repo root `index.html`, `css/`, `js/`, root `package.json` | Remove in the cleanup PR (root `node_modules/` already removed) |
-| Dead components | `ConfirmAlert.jsx`, `AlertSent.jsx`, `ActiveAlertList.jsx`, `pages/ActiveAlert.jsx` | Not imported or routed |
+| Cleanup (Oct 29 2026) | removed | Legacy root site (`index.html`, `css/`, `js/`, root `package.json`/lock, `assets/`, `scripts/backup-production-db.sh`) and 17 unused frontend files. Railway and CI build only `/server` and `/app` |
 
 ### Railway (project GGLED)
 
