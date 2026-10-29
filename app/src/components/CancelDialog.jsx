@@ -11,6 +11,8 @@ import {
     Typography
 } from "@mui/material";
 
+import { alertLabel } from "../config/alertColors";
+
 // Matches the backend limit in PATCH /alerts/:id/cancel.
 const MAX_REASON = 500;
 
@@ -96,7 +98,7 @@ export default function CancelDialog({
                 <DialogContent sx={{ display: "grid", gap: 2 }}>
 
                     <Typography variant="body2" color="text.secondary">
-                        {alert?.type} · {alert?.production_line} / {alert?.work_center}
+                        {alertLabel(alert?.type)} · {alert?.production_line} / {alert?.work_center}
                         {responder ? ` · cancelled by ${responder}` : ""}
                     </Typography>
 

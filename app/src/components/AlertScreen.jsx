@@ -6,7 +6,7 @@ import {
   Button
 } from "@mui/material";
 
-import { ALERT_COLORS, FALLBACK_COLOR } from "../config/alertColors";
+import { ALERT_COLORS, FALLBACK_COLOR, alertLabel } from "../config/alertColors";
 import { labelSx, tokens } from "../theme/theme";
 
 // mm:ss since the alert was raised (h:mm:ss after an hour).
@@ -134,7 +134,7 @@ export default function AlertScreen({
         </Box>
 
         <Typography component="h2" sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: { xs: 44, md: 64 }, letterSpacing: "3px", lineHeight: 1, color: colors.edge }}>
-          {currentAlert.type} ALERT
+          {alertLabel(currentAlert.type)} ALERT
         </Typography>
 
         <Box
@@ -188,7 +188,7 @@ export default function AlertScreen({
 
         <TabletCancelDialog
           open={cancelOpen}
-          alertType={currentAlert.type}
+          alertType={alertLabel(currentAlert.type)}
           onClose={() => setCancelOpen(false)}
           onCancel={handleCancel}
         />

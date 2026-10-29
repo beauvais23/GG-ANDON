@@ -34,6 +34,7 @@ const { updateTelegram } = require("./services/telegramUpdate");
 
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
+const { ALERT_TYPES, isAlertType } = require("./services/alertTypes");
 const { startOfDayNY } = require("./services/nyTime");
 const { workingMs, overtimeDatesFrom, responseStats } = require("./services/workingTime");
 const { startDailyBackups } = require("./services/dailyBackup");
@@ -281,6 +282,16 @@ app.post("/alerts", authenticateToken, async (req, res) => {
                 message:
                     "Production Line, Work Center, and Alert Type are required."
 
+            });
+
+        }
+
+        // Only the known types (Option B adds DOWNTIME, NEAR_MISS).
+        if (!isAlertType(type)) {
+
+            return res.status(400).json({
+                success: false,
+                message: `Unknown alert type "${String(type).slice(0, 40)}". Use one of: ${ALERT_TYPES.join(", ")}.`
             });
 
         }

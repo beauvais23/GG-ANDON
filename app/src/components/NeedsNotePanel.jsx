@@ -9,7 +9,7 @@ import EditNoteIcon from "@mui/icons-material/EditNote";
 
 import ResolveDialog from "./ResolveDialog";
 
-import { ALERT_COLORS, FALLBACK_COLOR } from "../config/alertColors";
+import { ALERT_COLORS, FALLBACK_COLOR, alertLabel } from "../config/alertColors";
 import { tokens } from "../theme/theme";
 
 import {
@@ -130,7 +130,7 @@ export default function NeedsNotePanel({ responder }) {
 
                         <Box>
                             <Box sx={{ fontWeight: 600 }}>
-                                #{alert.id} · {alert.type} · {alert.production_line} / {alert.work_center}
+                                #{alert.id} · {alertLabel(alert.type)} · {alert.production_line} / {alert.work_center}
                             </Box>
                             <Box sx={{ fontSize: 14, color: tokens.muted }}>
                                 Resolved {resolvedAt(alert.resolved)}

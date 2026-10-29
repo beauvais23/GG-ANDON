@@ -2,6 +2,7 @@ const { supervisorUrl } = require("../config");
 const { notificationsEnabled } = require("./appEnv");
 const { notifyTimeoutMs } = require("./notificationQueue");
 const { isConnectError } = require("./network");
+const { label } = require("./alertTypes");
 
 // One retry, only when the connection itself failed (#27).
 const RETRY_DELAY_MS = 2000;
@@ -71,7 +72,7 @@ function buildMessage(alert, status) {
 
 ______________________________
 
-<b>${alertIcons[alert.type]} ${alert.type} ALERT</b>
+<b>${alertIcons[alert.type] || "⚪"} ${label(alert.type)} ALERT</b>
 
 ______________________________
 `;

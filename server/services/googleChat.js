@@ -2,6 +2,7 @@ const axios = require("axios");
 const { supervisorUrl } = require("../config");
 const { notificationsEnabled } = require("./appEnv");
 const { notifyTimeoutMs } = require("./notificationQueue");
+const { label } = require("./alertTypes");
 const {
     formatDate,
     formatElapsed
@@ -39,7 +40,9 @@ const alertEmoji = {
     MAINTENANCE: "🟧",
     MATERIAL: "🟨",
     SUPERVISOR: "🟦",
-    SAFETY: "🟩"
+    SAFETY: "🟩",
+    DOWNTIME: "🟪",
+    NEAR_MISS: "⚠️"
 
 };
 
@@ -87,7 +90,7 @@ const payload = {
                 header: {
 
     title:
-        `${alertEmoji[alert.type] || "⚪"} ${alert.type} ALERT`
+        `${alertEmoji[alert.type] || "⚪"} ${label(alert.type)} ALERT`
 
 },
 
