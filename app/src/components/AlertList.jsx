@@ -9,7 +9,8 @@ export default function AlertList({
   alerts,
   responseTeamMember,
   onAcknowledge,
-  onResolve
+  onResolve,
+  onCancel
 }) {
 
   //------------------------------------------------------
@@ -78,6 +79,10 @@ export default function AlertList({
 
             onResolve={
               onResolve
+            }
+
+            onCancel={
+              onCancel
             }
 
           />

@@ -267,3 +267,54 @@ test("resolve requires a real note: missing, blank, or over 500 chars → 400; v
     assert.equal(ok.body.alert.resolution_notes, "Reseated drive belt");
 
 });
+
+//------------------------------------------------------
+// Cancel with a reason from /supervisor or /dashboard (#26)
+//------------------------------------------------------
+
+test("cancel with a reason stores who and why; the tablet's plain cancel still works", async () => {
+
+    const raised = await raise("QUALITY");
+    const id = raised.body.alert.id;
+
+    await acknowledge(id);
+
+    const cancelled = await request(app)
+        .patch(`/alerts/${id}/cancel`)
+        .set(floor)
+        .send({ reason: "  Smoke test after release  ", cancelledBy: RESPONDER });
+
+    assert.equal(cancelled.status, 200);
+    assert.equal(cancelled.body.alert.status, "CANCELLED");
+    assert.equal(cancelled.body.alert.resolution_notes, `Cancelled by ${RESPONDER}: Smoke test after release`);
+
+    // Tablet: no body, no note.
+    const tablet = await raise("QUALITY");
+    const plain = await request(app).patch(`/alerts/${tablet.body.alert.id}/cancel`).set(floor);
+
+    assert.equal(plain.status, 200);
+    assert.equal(plain.body.alert.status, "CANCELLED");
+    assert.equal(plain.body.alert.resolution_notes, null);
+
+});
+
+test("cancel reason: blank or over 500 chars is rejected and the alert stays open", async () => {
+
+    const raised = await raise("SAFETY");
+    const id = raised.body.alert.id;
+
+    for (const reason of ["   ", "", "x".repeat(501), 42]) {
+
+        const res = await request(app).patch(`/alerts/${id}/cancel`).set(floor).send({ reason });
+
+        assert.equal(res.status, 400, JSON.stringify(reason));
+        assert.match(res.body.message, /Cancel reason is required/);
+
+    }
+
+    const ok = await request(app).patch(`/alerts/${id}/cancel`).set(floor).send({ reason: "Pressed by mistake" });
+
+    assert.equal(ok.status, 200);
+    assert.equal(ok.body.alert.resolution_notes, "Cancelled: Pressed by mistake");
+
+});

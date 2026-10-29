@@ -10,10 +10,12 @@ import Header from "../components/Header";
 import AlertList from "../components/AlertList";
 import DashboardStats from "../components/DashboardStats";
 import ResolveDialog from "../components/ResolveDialog";
+import CancelDialog from "../components/CancelDialog";
 
 import {
   getActiveAlerts,
   resolveAlert,
+  cancelAlert,
   acknowledgeAlert
 } from "../services/api";
 
@@ -26,6 +28,7 @@ export default function Dashboard() {
 
   const [alerts, setAlerts] = useState([]);
   const [resolving, setResolving] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
 
   const [responseTeam, setResponseTeam] = useState([]);
 
@@ -188,6 +191,26 @@ export default function Dashboard() {
 
   }
 
+  // False alarm / test (#26): opens the reason dialog.
+  function handleCancel(id) {
+
+    setCancelling(alerts.find(a => a.id === id) || { id });
+
+  }
+
+  async function submitCancel(id, reason) {
+
+    const result = await cancelAlert(id, {
+      reason,
+      cancelledBy: selectedResponder
+    });
+
+    await loadAlerts();
+
+    return result;
+
+  }
+
   async function submitResolve(id, note) {
 
     const result = await resolveAlert(
@@ -311,6 +334,7 @@ export default function Dashboard() {
           responseTeamMember={selectedResponder}
           responseTeam={responseTeam}
           onResolve={handleResolve}
+          onCancel={handleCancel}
           onAcknowledge={handleAcknowledge}
         />
 
@@ -322,6 +346,13 @@ export default function Dashboard() {
         responder={selectedResponder}
         onClose={() => setResolving(null)}
         onResolve={submitResolve}
+      />
+
+      <CancelDialog
+        alert={cancelling}
+        responder={selectedResponder}
+        onClose={() => setCancelling(null)}
+        onCancel={submitCancel}
       />
 
     </Box>

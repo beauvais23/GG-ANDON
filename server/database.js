@@ -297,7 +297,8 @@ cancelAlert: db.prepare(`
         status='CANCELLED',
         resolved=?,
         cancelled_at=?,
-        updated_at=?
+        updated_at=?,
+        resolution_notes=COALESCE(?, resolution_notes)
     WHERE id=?
 `),
 

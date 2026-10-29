@@ -165,7 +165,9 @@ export async function resolveAlert(
 // Cancel Alert
 //------------------------------------------------------
 
-export async function cancelAlert(id) {
+// reason / cancelledBy: from the supervisor and dashboard
+// cancel dialog (#26). The tablet cancels without them.
+export async function cancelAlert(id, { reason, cancelledBy } = {}) {
 
     const response = await fetch(
         `${API_URL}/alerts/${id}/cancel`,
@@ -173,8 +175,13 @@ export async function cancelAlert(id) {
             method: "PATCH",
 
             headers: {
+                "Content-Type": "application/json",
                 ...getAuthHeaders(),
             },
+
+            body: JSON.stringify(
+                reason === undefined ? {} : { reason, cancelledBy }
+            ),
         }
     );
 
