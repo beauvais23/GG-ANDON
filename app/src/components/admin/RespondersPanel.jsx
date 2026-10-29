@@ -346,7 +346,7 @@ export default function RespondersPanel() {
             sx={{
                 p: 4,
                 borderRadius: 3,
-                bgcolor: "#ECEFF1"
+                bgcolor: "#0B0D10"
             }}
         >
 
@@ -552,7 +552,7 @@ export default function RespondersPanel() {
                 }
                 sx={{
                     mb: 4,
-                    bgcolor: "white"
+                    bgcolor: "#14181D"
                 }}
             />
 

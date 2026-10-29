@@ -592,7 +592,7 @@ async function loadAlerts() {
     <Box
       sx={{
         minHeight: "100vh",
-        bgcolor: "#EEF2F6"
+        bgcolor: "#0B0D10"
       }}
     >
 

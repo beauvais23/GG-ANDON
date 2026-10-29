@@ -69,7 +69,7 @@ export default function ExecutiveDashboard() {
             <Box
                 sx={{
                     minHeight:"100vh",
-                    bgcolor:"#EEF2F6"
+                    bgcolor:"#0B0D10"
                 }}
             >
 
@@ -95,7 +95,7 @@ export default function ExecutiveDashboard() {
         <Box
             sx={{
                 minHeight:"100vh",
-                bgcolor:"#EEF2F6"
+                bgcolor:"#0B0D10"
             }}
         >
 
@@ -107,7 +107,7 @@ export default function ExecutiveDashboard() {
     maxWidth: "100%",
     px: 4,
     py: 3,
-    bgcolor: "#EEF2F6"
+    bgcolor: "#0B0D10"
   }}
 >
 

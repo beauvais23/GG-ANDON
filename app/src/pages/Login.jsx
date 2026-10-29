@@ -208,7 +208,7 @@ export default function Login() {
                 justifyContent: "center",
 
                 backgroundColor:
-                    "#f4f6f8",
+                    "#0B0D10",
 
                 padding: 2
 
