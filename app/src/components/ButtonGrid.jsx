@@ -136,7 +136,7 @@ export default function ButtonGrid() {
       sx={{
         px: 2,
         py: 2,
-        background: "#263238",
+        background: "#14181D",
         borderRadius: 3,
         mx: 2,
         mb: 2
@@ -175,7 +175,7 @@ export default function ButtonGrid() {
 
       <Grid size={{ xs: 12, md: 6 }}>
         <AlertButton
-          color="#1976D2"
+          color="#237EB5"
           icon={<GroupsIcon sx={{ fontSize: 60 }} />}
           title="SUPERVISOR"
           subtitle="Supervisor Assistance"

@@ -25,7 +25,7 @@ export default function Home() {
     <Box
       sx={{
         minHeight: "100vh",
-        background: "#DCE3EA"
+        background: "#0B0D10"
       }}
     >
 

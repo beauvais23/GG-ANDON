@@ -41,7 +41,7 @@ export default function AlertButton({
 
           px: 5,
 
-          background: "#FFFFFF",
+          background: "#14181D",
 
           borderLeft: `12px solid ${color}`,
 

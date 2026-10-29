@@ -12,8 +12,8 @@ body,
 }
 
 body {
-  font-family: Roboto, Arial, sans-serif;
-  background: #ECEFF1;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #0B0D10;
   overflow-y: auto;
   overflow-x: hidden;
 }

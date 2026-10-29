@@ -300,7 +300,7 @@ const columns = [
 
             <Avatar
                 sx={{
-                    bgcolor: "#1976d2",
+                    bgcolor: "#237EB5",
                     width: 38,
                     height: 38,
                     fontSize: 14,
@@ -484,7 +484,7 @@ return (
     <Box
         sx={{
             minHeight: "100vh",
-            bgcolor: "#ECEFF1"
+            bgcolor: "#0B0D10"
         }}
     >
 
@@ -663,7 +663,7 @@ return (
             sx={{
                 mt: 5,
                 py: 2,
-                bgcolor: "#263238",
+                bgcolor: "#101318",
                 color: "white",
                 textAlign: "center"
             }}

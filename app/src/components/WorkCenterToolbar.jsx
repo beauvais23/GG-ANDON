@@ -22,7 +22,7 @@ export default function WorkCenterToolbar() {
         <Box
             sx={{
                 p: 2,
-                backgroundColor: "#ffffff"
+                backgroundColor: "#14181D"
             }}
         >
 

@@ -235,7 +235,7 @@ export default function Dashboard() {
     <Box
       sx={{
         minHeight: "100vh",
-        background: "#ECEFF1"
+        background: "#0B0D10"
       }}
     >
 

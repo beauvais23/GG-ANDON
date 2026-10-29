@@ -1,147 +1,77 @@
 import {
-  AppBar,
-  Toolbar,
-  Typography,
-  Box,
-  Chip
+    AppBar,
+    Box,
+    Toolbar,
+    Typography
 } from "@mui/material";
 
-import CircleIcon from "@mui/icons-material/Circle";
+import { useLocation } from "react-router-dom";
 
-import logo from "../assets/logo.png";
+import PagesMenu from "./PagesMenu";
+import { PAGES } from "../config/pages";
+import { labelSx, tokens } from "../theme/theme";
+
+//------------------------------------------------------
+// Top bar, the same on every page (E1): G&G mark, page
+// name, ONLINE light, clock, PAGES menu.
+//------------------------------------------------------
+
 
 export default function Header({ time }) {
 
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric"
-  });
+    const { pathname } = useLocation();
 
-  return (
+    const title = PAGES.find(p => p.path === pathname)?.title || "ManufacturingOS";
 
-    <AppBar
-      position="static"
-      elevation={6}
-      sx={{
-        background:
-          "linear-gradient(135deg,#072A60 0%,#0A4AA8 60%,#1565C0 100%)",
-        borderBottom: "3px solid rgba(255,255,255,.12)"
-      }}
-    >
+    return (
 
-      <Toolbar
-        sx={{
-          minHeight: 110,
-          px: 4,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}
-      >
+        <AppBar position="static" elevation={0}>
 
-        {/* LEFT SIDE */}
+            <Toolbar sx={{ minHeight: 64, px: 3, gap: 2.5, flexWrap: "wrap", py: 1 }}>
 
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 3
-          }}
-        >
+                {/* G&G mark */}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }} aria-label="G&G Industrial Lighting">
 
-          <Box
-            component="img"
-            src={logo}
-            alt="G&G Industrial Lighting"
-            sx={{
-              height: 78,
-              width: "auto",
-              filter: "drop-shadow(0 2px 6px rgba(0,0,0,.35))"
-            }}
-          />
+                    <Box sx={{ width: 6, height: 32, bgcolor: tokens.blue }} />
 
-          <Box>
+                    <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
+                        <Box component="span" sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: 24, letterSpacing: "1px" }}>
+                            G&amp;G
+                        </Box>
+                        <Box component="span" sx={{ ...labelSx, fontSize: 11, letterSpacing: "2.5px" }}>
+                            Industrial Lighting
+                        </Box>
+                    </Box>
 
-            <Typography
-              sx={{
-                fontSize: 40,
-                fontWeight: 700,
-                lineHeight: 1.05,
-                letterSpacing: .5
-              }}
-            >
-              G&amp;G Production Response System
-            </Typography>
+                </Box>
 
-            <Typography
-              sx={{
-                fontSize: 20,
-                opacity: .92,
-                mt: .6
-              }}
-            >
-              Malta • Production
-            </Typography>
+                <Box sx={{ width: "1px", height: 32, bgcolor: tokens.line }} />
 
-          </Box>
+                <Typography component="h1" sx={{ fontFamily: tokens.display, fontWeight: 600, fontSize: 22, letterSpacing: "3px", textTransform: "uppercase" }}>
+                    {title}
+                </Typography>
 
-        </Box>
+                <Box component="span" sx={{ ...labelSx, px: 1.25, py: 0.5, border: `1px solid ${tokens.line}` }}>
+                    Malta
+                </Box>
 
-        {/* RIGHT SIDE */}
+                <Box sx={{ flexGrow: 1 }} />
 
-        <Box
-          sx={{
-            textAlign: "right"
-          }}
-        >
+                <Box sx={{ ...labelSx, display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: tokens.online, boxShadow: `0 0 6px ${tokens.online}` }} />
+                    Online
+                </Box>
 
-          <Chip
-            icon={
-              <CircleIcon
-                sx={{
-                  color: "#00E676 !important",
-                  fontSize: 14
-                }}
-              />
-            }
-            label="SYSTEM ONLINE"
-            sx={{
-              mb: 1.5,
-              background: "rgba(255,255,255,.18)",
-              color: "white",
-              fontWeight: 700,
-              letterSpacing: .6
-            }}
-          />
+                <Typography sx={{ fontFamily: tokens.mono, fontSize: 22 }}>
+                    {time}
+                </Typography>
 
-          <Typography
-            sx={{
-              fontSize: 52,
-              fontWeight: 700,
-              fontFamily: "Roboto Mono",
-              lineHeight: 1
-            }}
-          >
-            {time}
-          </Typography>
+                <PagesMenu />
 
-          <Typography
-            sx={{
-              fontSize: 18,
-              opacity: .88
-            }}
-          >
-            {today}
-          </Typography>
+            </Toolbar>
 
-        </Box>
+        </AppBar>
 
-      </Toolbar>
-
-    </AppBar>
-
-  );
+    );
 
 }

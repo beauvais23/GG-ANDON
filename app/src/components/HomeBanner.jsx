@@ -23,7 +23,7 @@ export default function HomeBanner() {
         mb: 2,
         p: 2.5,
         borderRadius: 3,
-        background: "#263238",
+        background: "#14181D",
         color: "white"
       }}
     >

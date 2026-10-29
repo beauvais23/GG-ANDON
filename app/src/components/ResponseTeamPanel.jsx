@@ -76,7 +76,7 @@ export default function ResponseTeamPanel({ responseTeam }) {
 
                             <Avatar
                                 sx={{
-                                    bgcolor: "#1976d2"
+                                    bgcolor: "#237EB5"
                                 }}
                             >
                                 {initials(person.name)}
