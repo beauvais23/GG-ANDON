@@ -1,6 +1,10 @@
 const { supervisorUrl } = require("../config");
 const { notificationsEnabled } = require("./appEnv");
 const { notifyTimeoutMs } = require("./notificationQueue");
+const { isConnectError } = require("./network");
+
+// One retry, only when the connection itself failed (#27).
+const RETRY_DELAY_MS = 2000;
 
 const {
     alertIcons,
@@ -384,7 +388,7 @@ function buildKeyboard(alert, status) {
 // Send Telegram
 //------------------------------------------------------
 
-async function sendTelegram(alert, status) {
+async function sendTelegram(alert, status, { retryDelayMs = RETRY_DELAY_MS } = {}) {
 
     if (!notificationsEnabled()) {
 
@@ -421,7 +425,7 @@ async function sendTelegram(alert, status) {
         console.log("------------------------------------");
         console.log(JSON.stringify(payload, null, 2));
 
-        const response = await fetch(
+        const post = () => fetch(
 
             `https://api.telegram.org/bot${TOKEN}/sendMessage`,
 
@@ -442,6 +446,26 @@ async function sendTelegram(alert, status) {
             }
 
         );
+
+        let response;
+
+        try {
+
+            response = await post();
+
+        } catch (err) {
+
+            if (!isConnectError(err))
+                throw err;
+
+            // Nothing reached Telegram, so sending again can't double-post.
+            console.error(`Telegram connect failed (${err.cause?.code || err.code}); retrying alert #${alert.id} in ${retryDelayMs} ms`);
+
+            await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+
+            response = await post();
+
+        }
 
         const result = await response.json();
         //--------------------------------------------------
