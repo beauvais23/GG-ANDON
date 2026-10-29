@@ -7,7 +7,7 @@ import { labelSx, tokens } from "../theme/theme";
 // in the top bar.
 //------------------------------------------------------
 
-export default function Footer() {
+export default function Footer({ station }) {
 
     return (
 
@@ -24,6 +24,9 @@ export default function Footer() {
                 borderTop: `1px solid ${tokens.line}`
             }}
         >
+            {station && (
+                <span>Station <Box component="span" sx={{ color: tokens.text }}>{station}</Box></span>
+            )}
             <span>Facility <Box component="span" sx={{ color: tokens.text }}>Malta</Box></span>
             <Box sx={{ flexGrow: 1 }} />
             <span>ManufacturingOS</span>
