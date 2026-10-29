@@ -334,8 +334,12 @@ saveTelegramMessageId: db.prepare(`
         SELECT *
         FROM response_team
         WHERE active = 1
+          AND archived_at IS NULL
         ORDER BY name
     `),
+
+    // Includes archived: the duplicate-name check uses it.
+
 
     getAllResponseTeam: db.prepare(`
         SELECT *
@@ -397,9 +401,42 @@ updateResponderAvailability: db.prepare(`
     WHERE name=?
 `),
 
-deleteResponseTeam: db.prepare(`
-    DELETE FROM response_team
+//--------------------------------------------------
+// Archive (#15): never DELETE lines or responders
+//--------------------------------------------------
+
+archiveResponder: db.prepare(`
+    UPDATE response_team
+    SET
+        active=0,
+        archived_at=?,
+        updated_at=?
     WHERE id=?
+      AND archived_at IS NULL
+`),
+
+restoreResponder: db.prepare(`
+    UPDATE response_team
+    SET
+        active=1,
+        archived_at=NULL,
+        updated_at=?
+    WHERE id=?
+      AND archived_at IS NOT NULL
+`),
+
+getArchivedResponseTeam: db.prepare(`
+    SELECT *
+    FROM response_team
+    WHERE archived_at IS NOT NULL
+    ORDER BY archived_at DESC
+`),
+
+countOpenAlertsForLine: db.prepare(`
+    SELECT COUNT(*) AS n
+    FROM alerts
+    WHERE production_line=?
+      AND status IN ('ACTIVE', 'ACKNOWLEDGED')
 `),
 
 //--------------------------------------------------
@@ -409,6 +446,7 @@ deleteResponseTeam: db.prepare(`
 getProductionLines: db.prepare(`
     SELECT *
     FROM production_lines
+    WHERE archived_at IS NULL
     ORDER BY display_order
 `),
 
@@ -416,7 +454,27 @@ getActiveProductionLines: db.prepare(`
     SELECT *
     FROM production_lines
     WHERE active = 1
+      AND archived_at IS NULL
     ORDER BY display_order
+`),
+
+getProductionLine: db.prepare(`
+    SELECT *
+    FROM production_lines
+    WHERE id=?
+`),
+
+getProductionLineByName: db.prepare(`
+    SELECT *
+    FROM production_lines
+    WHERE name=?
+`),
+
+getArchivedProductionLines: db.prepare(`
+    SELECT *
+    FROM production_lines
+    WHERE archived_at IS NOT NULL
+    ORDER BY archived_at DESC
 `),
 
 insertProductionLine: db.prepare(`
@@ -456,9 +514,26 @@ updateProductionLineDisplayOrder: db.prepare(`
     WHERE id=?
 `),
 
-deleteProductionLine: db.prepare(`
-    DELETE FROM production_lines
+// Work centers stay with the line, untouched; they are
+// hidden while the line is archived and return with it.
+archiveProductionLine: db.prepare(`
+    UPDATE production_lines
+    SET
+        active=0,
+        archived_at=?,
+        modified=?
     WHERE id=?
+      AND archived_at IS NULL
+`),
+
+restoreProductionLine: db.prepare(`
+    UPDATE production_lines
+    SET
+        active=1,
+        archived_at=NULL,
+        modified=?
+    WHERE id=?
+      AND archived_at IS NOT NULL
 `),
 
 
@@ -473,6 +548,7 @@ getWorkCenters: db.prepare(`
     FROM work_centers wc
     JOIN production_lines pl
         ON wc.production_line_id = pl.id
+    WHERE pl.archived_at IS NULL
     ORDER BY
         pl.display_order,
         wc.display_order
@@ -486,6 +562,7 @@ getActiveWorkCenters: db.prepare(`
     JOIN production_lines pl
         ON wc.production_line_id = pl.id
     WHERE wc.active = 1
+      AND pl.archived_at IS NULL
     ORDER BY
         pl.display_order,
         wc.display_order
@@ -509,6 +586,7 @@ getWorkCentersByProductionLineName: db.prepare(`
         ON wc.production_line_id = pl.id
     WHERE
         pl.name = ?
+        AND pl.archived_at IS NULL
         AND wc.active = 1
     ORDER BY wc.display_order
 `),
@@ -524,6 +602,7 @@ getValidWorkCenter: db.prepare(`
         pl.name = ?
         AND wc.name = ?
         AND pl.active = 1
+        AND pl.archived_at IS NULL
         AND wc.active = 1
     LIMIT 1
 `),
@@ -559,11 +638,6 @@ updateWorkCenterDisplayOrder: db.prepare(`
     SET
         display_order=?,
         modified=?
-    WHERE id=?
-`),
-
-deleteWorkCenter: db.prepare(`
-    DELETE FROM work_centers
     WHERE id=?
 `)
 

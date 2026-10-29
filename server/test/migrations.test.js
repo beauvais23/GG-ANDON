@@ -257,6 +257,7 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0005
     migrateDown(db, dbPath); // 0004
     migrateDown(db, dbPath); // 0003 (no-op)
     migrateDown(db, dbPath); // 0002
@@ -316,9 +317,38 @@ test("0004: cancelled alerts lose the copied resolved time; resolved alerts unto
         { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0005
     migrateDown(db, dbPath); // 0004
 
     assert.deepEqual(read()[0], { status: "CANCELLED", resolved: 5000, cancelled_at: 5000 });
     assert.equal(read()[1].resolved, 9000);
+
+});
+
+test("0005: archived_at added to production_lines and response_team, empty; down drops both", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    db.prepare("INSERT INTO production_lines (name, facility, display_order) VALUES ('Team A', 'Malta', 1)").run();
+    db.prepare("INSERT INTO response_team (name, department) VALUES ('Test Responder', 'Operations')").run();
+
+    migrateUp(db, dbPath);
+
+    const cols = table => db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+
+    assert.ok(cols("production_lines").includes("archived_at"));
+    assert.ok(cols("response_team").includes("archived_at"));
+
+    // Nothing existing is archived.
+    assert.equal(db.prepare("SELECT archived_at FROM production_lines").get().archived_at, null);
+    assert.equal(db.prepare("SELECT archived_at FROM response_team").get().archived_at, null);
+
+    migrateDown(db, dbPath); // 0005
+
+    assert.ok(!cols("production_lines").includes("archived_at"));
+    assert.ok(!cols("response_team").includes("archived_at"));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM production_lines").get().n, 1);
 
 });

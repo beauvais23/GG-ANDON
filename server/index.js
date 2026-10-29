@@ -692,6 +692,20 @@ app.post("/production-lines", authenticateToken, requireAdmin, (req, res) => {
 
         }
 
+        // Names are unique, archived lines included (#15).
+        const taken = statements.getProductionLineByName.get(name);
+
+        if (taken) {
+
+            return res.status(409).json({
+                success: false,
+                message: taken.archived_at
+                    ? `An archived line is named ${name}. Restore it from Admin → Archived.`
+                    : `A production line named ${name} already exists.`
+            });
+
+        }
+
         const now = Date.now();
 
         statements.insertProductionLine.run(
@@ -894,14 +908,41 @@ app.put("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => 
 
 app.delete("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => {
 
+    // Archive, never DELETE (#15). Alerts and work centers
+    // keep pointing at the line; Admin can restore it.
     try {
 
-        statements.deleteProductionLine.run(
-            req.params.id
-        );
+        const line = statements.getProductionLine.get(req.params.id);
+
+        if (!line || line.archived_at) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Production line not found."
+            });
+
+        }
+
+        const open = statements.countOpenAlertsForLine.get(line.name).n;
+
+        if (open > 0) {
+
+            return res.status(409).json({
+                success: false,
+                message: `${line.name} has ${open} open alert(s). Resolve or cancel them before archiving the line.`
+            });
+
+        }
+
+        const now = Date.now();
+
+        statements.archiveProductionLine.run(now, now, line.id);
+
+        console.log(`Production line archived by ${req.user.username}: ${line.name}`);
 
         res.json({
-            success: true
+            success: true,
+            message: `${line.name} archived. Restore it from Admin → Archived.`
         });
 
     }
@@ -916,6 +957,40 @@ app.delete("/production-lines/:id", authenticateToken, requireAdmin, (req, res) 
         });
 
     }
+
+});
+
+//------------------------------------------------------
+// Archived Production Lines (#15)
+//------------------------------------------------------
+
+app.get("/production-lines/archived", authenticateToken, requireAdmin, (req, res) => {
+
+    res.json(statements.getArchivedProductionLines.all());
+
+});
+
+app.post("/production-lines/:id/restore", authenticateToken, requireAdmin, (req, res) => {
+
+    const line = statements.getProductionLine.get(req.params.id);
+
+    if (!line || !line.archived_at) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Archived production line not found."
+        });
+
+    }
+
+    statements.restoreProductionLine.run(Date.now(), line.id);
+
+    console.log(`Production line restored by ${req.user.username}: ${line.name}`);
+
+    res.json({
+        success: true,
+        message: `${line.name} restored.`
+    });
 
 });
 
@@ -1999,7 +2074,9 @@ if (availability !== undefined && !cleanAvailability) {
             return res.status(409).json({
 
                 success: false,
-                message: "Responder already exists."
+                message: existing.archived_at
+                    ? "An archived responder has this name. Restore them from Admin → Archived."
+                    : "Responder already exists."
 
             });
 
@@ -2189,12 +2266,13 @@ if (availability !== undefined && !cleanAvailability) {
 
 app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => {
 
+    // Archive, never DELETE (#15).
     try {
 
         const responder =
             statements.getResponder.get(req.params.id);
 
-        if (!responder) {
+        if (!responder || responder.archived_at) {
 
             return res.status(404).json({
 
@@ -2205,12 +2283,27 @@ app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => 
 
         }
 
-        statements.deleteResponseTeam.run(req.params.id);
+        const open = statements.countAcknowledgedAlertsFor.get(responder.name).n;
+
+        if (open > 0) {
+
+            return res.status(409).json({
+                success: false,
+                message: `${responder.name} is responding to ${open} open alert(s). Resolve or cancel them before archiving.`
+            });
+
+        }
+
+        const now = Date.now();
+
+        statements.archiveResponder.run(now, now, responder.id);
+
+        console.log(`Responder archived by ${req.user.username}: #${responder.id}`);
 
         res.json({
 
             success: true,
-            message: "Responder deleted."
+            message: "Responder archived. Restore from Admin → Archived."
 
         });
 
@@ -2228,6 +2321,40 @@ app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => 
         });
 
     }
+
+});
+
+//------------------------------------------------------
+// Archived Responders (#15)
+//------------------------------------------------------
+
+app.get("/response-team/archived", authenticateToken, requireAdmin, (req, res) => {
+
+    res.json(statements.getArchivedResponseTeam.all());
+
+});
+
+app.post("/response-team/:id/restore", authenticateToken, requireAdmin, (req, res) => {
+
+    const responder = statements.getResponder.get(req.params.id);
+
+    if (!responder || !responder.archived_at) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Archived responder not found."
+        });
+
+    }
+
+    statements.restoreResponder.run(Date.now(), responder.id);
+
+    console.log(`Responder restored by ${req.user.username}: #${responder.id}`);
+
+    res.json({
+        success: true,
+        message: "Responder restored."
+    });
 
 });
 

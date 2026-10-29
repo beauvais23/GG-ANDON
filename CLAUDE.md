@@ -29,7 +29,7 @@ Read this file fully before changing anything.
 |---|---|---|
 | Backend | `server/index.js` (~2,470 lines, all routes inline) | Express 5, JWT auth, better-sqlite3. Exports `app`; listens only when run directly |
 | DB layer | `server/database.js` | Opens the DB, runs `restoreIfRequested` then `migrateUp`, seeds empty tables, prepares statements. Registers SQL function `ny_month()` |
-| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved` |
+| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved`, `0005_archive_lines_responders` |
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; `telegramNote.js` asks for and saves Telegram resolution notes; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit) |
@@ -192,12 +192,11 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 19 | Cancel wrote `resolved` too, so Telegram/Google Chat showed a cancelled alert as "Resolved" with its duration | `cancelAlert` sets only `cancelled_at`; formatters end a cancelled alert at `cancelled_at` and label the note "Cancel reason"; migration `0004` clears the copied `resolved` on old cancelled rows (fix-19) |
 | 21 | Reorder routes returned 500 on an empty or malformed body, and applied a list partly | `PUT /production-lines/order` and `/work-centers/order` share `applyOrder()` in `index.js`: 400 on a bad body or unknown id; the whole list in one transaction (fix-21) |
 | 14b | Telegram resolves had no real note (a button can't carry text) | After a Telegram Resolve the bot posts "<name>, what fixed alert #N?" (force_reply, `services/telegramNote.js`); the first text reply replaces "Resolved from Telegram" (`saveTelegramNote`) and the Telegram message is edited. `setWebhook` sends `allowed_updates: callback_query, message`. Google Chat keeps the resolve card it already got (fix-14b) |
+| 15 | Admin Delete erased production lines and responders for good (a deleted line orphaned its work centers) | Delete now **archives** (`archived_at`, migration `0005`): hidden from the tablet, wallboard, pickers and Admin lists; refused (409) while the line or responder has open alerts; **Archived** list with Restore in Admin (`ArchivedList.jsx`). Work centers stay with an archived line and return with it. A new line can't reuse an archived line's name. `PRAGMA foreign_keys` stays off by decision (option A, Oct 29 2026) (fix-15) |
 
-### Open (line references at commit 5e304a6)
+### Open
 
-| # | Defect | Location |
-|---|---|---|
-| 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
+None. Not a defect yet: the work-center delete icon in Admin → Production Lines has no action (work centers can only be set inactive).
 
 ## Testing
 

@@ -184,3 +184,40 @@ export async function updateProductionLineOrder(
 
     return handleResponse(response);
 }
+//------------------------------------------------------
+// Archived Production Lines (#15)
+//------------------------------------------------------
+
+export async function getArchivedProductionLines() {
+
+    const response =
+        await fetch(
+            `${API}/production-lines/archived`,
+            {
+                headers: {
+                    ...getAuthHeaders()
+                }
+            }
+        );
+
+    return handleResponse(response);
+}
+
+export async function restoreProductionLine(
+    id
+) {
+
+    const response =
+        await fetch(
+            `${API}/production-lines/${id}/restore`,
+            {
+                method: "POST",
+
+                headers: {
+                    ...getAuthHeaders()
+                }
+            }
+        );
+
+    return handleResponse(response);
+}

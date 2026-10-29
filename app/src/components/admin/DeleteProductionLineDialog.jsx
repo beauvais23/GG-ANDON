@@ -29,7 +29,7 @@ export default function DeleteProductionLineDialog({
 
             <DialogTitle>
 
-                Delete Production Line
+                Archive Production Line
 
             </DialogTitle>
 
@@ -37,23 +37,15 @@ export default function DeleteProductionLineDialog({
 
                 <DialogContentText>
 
-                    Are you sure you want to delete
+                    Archive <strong>{line?.name}</strong>?
 
                     <br />
                     <br />
 
-                    <strong>
-
-                        {line?.name}
-
-                    </strong>
-
-                    ?
-
-                    <br />
-                    <br />
-
-                    This action cannot be undone.
+                    It disappears from the tablets, the wallboard and
+                    this list. Its alert history and work centers are
+                    kept, and you can restore it from Archived lines
+                    at the bottom of this page.
 
                 </DialogContentText>
 
@@ -69,7 +61,7 @@ export default function DeleteProductionLineDialog({
 
                 <Button
 
-                    color="error"
+                    color="warning"
 
                     variant="contained"
 
@@ -77,7 +69,7 @@ export default function DeleteProductionLineDialog({
 
                 >
 
-                    Delete
+                    Archive
 
                 </Button>
 
