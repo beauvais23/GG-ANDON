@@ -146,7 +146,7 @@ after(() => {
 
 });
 
-test("#24 resolve: one answer, 'Resolved ✔' (not 'Acknowledged ✔')", async () => {
+test("#24/#14b resolve: one pop-up, 'Resolved ✔' plus where to add the note", async () => {
 
     const id = await raise("QUALITY");
     await webAck(id);
@@ -154,7 +154,10 @@ test("#24 resolve: one answer, 'Resolved ✔' (not 'Acknowledged ✔')", async (
     const got = await press(`resolve_${id}`);
 
     assert.equal(got.length, 1);
-    assert.equal(got[0].text, "Resolved ✔");
+    assert.match(got[0].text, /^Resolved ✔ Add what fixed it in ManufacturingOS: .*Needs a resolution note\.$/);
+    assert.ok(got[0].text.length <= 200, "Telegram limit");
+    assert.equal(got[0].show_alert, true);
+    assert.equal((await getAlert(id)).resolution_notes, "Resolved from Telegram");
     assert.equal((await getAlert(id)).status, "RESOLVED");
 
 });

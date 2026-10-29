@@ -17,6 +17,7 @@ import ActiveAlertCard from "../components/ActiveAlertCard";
 import ResponderSelector from "../components/ResponderSelector";
 import ResponseTeamPanel from "../components/ResponseTeamPanel";
 import ResolveDialog from "../components/ResolveDialog";
+import NeedsNotePanel from "../components/NeedsNotePanel";
 import CancelDialog from "../components/CancelDialog";
 
 import useClock from "../hooks/useClock";
@@ -1017,6 +1018,8 @@ async function loadAlerts() {
           </Box>
 
         </Stack>
+
+        <NeedsNotePanel responder={selectedResponder} />
 
         {/*================================================*/}
         {/* FOOTER STATUS */}

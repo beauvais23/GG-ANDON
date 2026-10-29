@@ -27,7 +27,12 @@ export default function ResolveDialog({
     alert,
     responder,
     onClose,
-    onResolve
+    onResolve,
+
+    // Reused to add a note after a Telegram resolve (#14b).
+    title = `Resolve alert #${alert?.id}`,
+    submitLabel = "Resolve",
+    savingLabel = "Resolving…"
 
 }) {
 
@@ -90,7 +95,7 @@ export default function ResolveDialog({
             <form onSubmit={handleSubmit}>
 
                 <DialogTitle>
-                    Resolve alert #{alert?.id}
+                    {title}
                 </DialogTitle>
 
                 <DialogContent sx={{ display: "grid", gap: 2 }}>
@@ -135,7 +140,7 @@ export default function ResolveDialog({
                         color="success"
                         disabled={saving || !clean}
                     >
-                        {saving ? "Resolving…" : "Resolve"}
+                        {saving ? savingLabel : submitLabel}
                     </Button>
 
                 </DialogActions>
