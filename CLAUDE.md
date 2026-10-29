@@ -190,6 +190,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 25 | Tablet stayed silent when an alert was NOT created (backend 400/500, no connection, line with no work centers) | `ButtonGrid.jsx`: red "<TYPE> alert NOT sent: <reason>. Call your lead." banner; persistent warning when the line has no work centers (`workCentersLoaded` in `WorkCenterContext`) (fix-25) |
 | 26 | Only the tablet could cancel an alert; once the tablet moved on, a false alarm or test could only be resolved (counted in MTTR) | CANCEL button with a required reason on `/supervisor` and `/dashboard` (`CancelDialog.jsx`); `PATCH /alerts/:id/cancel` accepts optional `reason` (1–500) + `cancelledBy`, stored as `resolution_notes` "Cancelled by <name>: <reason>" (fix-26) |
 | 19 | Cancel wrote `resolved` too, so Telegram/Google Chat showed a cancelled alert as "Resolved" with its duration | `cancelAlert` sets only `cancelled_at`; formatters end a cancelled alert at `cancelled_at` and label the note "Cancel reason"; migration `0004` clears the copied `resolved` on old cancelled rows (fix-19) |
+| 21 | Reorder routes returned 500 on an empty or malformed body, and applied a list partly | `PUT /production-lines/order` and `/work-centers/order` share `applyOrder()` in `index.js`: 400 on a bad body or unknown id; the whole list in one transaction (fix-21) |
 
 ### Open (line references at commit 5e304a6)
 
@@ -197,7 +198,6 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 |---|---|---|
 | 14b | Telegram resolves have no real note (a button can't carry text) | `server/index.js` Telegram resolve path writes "Resolved from Telegram" |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
-| 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
 
 ## Testing
 

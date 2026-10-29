@@ -719,6 +719,90 @@ app.post("/production-lines", authenticateToken, requireAdmin, (req, res) => {
 });
 
 //------------------------------------------------------
+// Reorder body check (#21)
+//
+// Both order routes take [{ id, display_order }, ...].
+// Anything else is a 400, not a 500. The whole list is
+// applied in one transaction: an unknown id changes
+// nothing.
+//------------------------------------------------------
+
+function reorderError(items) {
+
+    if (!Array.isArray(items) || items.length === 0) {
+
+        return "Body must be a non-empty list of { id, display_order }.";
+
+    }
+
+    for (const item of items) {
+
+        if (
+            !item ||
+            !Number.isInteger(item.id) ||
+            !Number.isInteger(item.display_order) ||
+            item.display_order < 0
+        ) {
+
+            return "Each item needs an integer id and a display_order of 0 or more.";
+
+        }
+
+    }
+
+    return null;
+
+}
+
+function applyOrder(statement, items, label, res) {
+
+    const error = reorderError(items);
+
+    if (error) {
+
+        return res.status(400).json({ success: false, message: error });
+
+    }
+
+    const now = Date.now();
+
+    const applyAll = db.transaction(() => {
+
+        const notFound = items
+            .filter(item => statement.run(item.display_order, now, item.id).changes === 0)
+            .map(item => item.id);
+
+        if (notFound.length) {
+
+            // Throwing rolls back every update in this list.
+            throw Object.assign(new Error("unknown id"), { notFound });
+
+        }
+
+    });
+
+    try {
+
+        applyAll();
+
+    }
+
+    catch (err) {
+
+        if (!err.notFound) throw err;
+
+        return res.status(400).json({
+            success: false,
+            message: `Unknown ${label} id: ${err.notFound.join(", ")}. Nothing was changed.`
+        });
+
+    }
+
+    return res.json({ success: true });
+
+}
+
+//------------------------------------------------------
 // Update Production Line Order
 //------------------------------------------------------
 
@@ -726,27 +810,7 @@ app.put("/production-lines/order", authenticateToken, requireAdmin, (req, res) =
 
     try {
 
-        const lines = req.body;
-
-        const now = Date.now();
-
-        for (const line of lines) {
-
-            statements.updateProductionLineDisplayOrder.run(
-
-                line.display_order,
-                now,
-                line.id
-
-            );
-
-        }
-
-        res.json({
-
-            success: true
-
-        });
+        applyOrder(statements.updateProductionLineDisplayOrder, req.body, "production line", res);
 
     }
 
@@ -1008,27 +1072,7 @@ app.put("/work-centers/order", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
-        const workCenters = req.body;
-
-        const now = Date.now();
-
-        for (const wc of workCenters) {
-
-            statements.updateWorkCenterDisplayOrder.run(
-
-                wc.display_order,
-                now,
-                wc.id
-
-            );
-
-        }
-
-        res.json({
-
-            success: true
-
-        });
+        applyOrder(statements.updateWorkCenterDisplayOrder, req.body, "work center", res);
 
     }
 
