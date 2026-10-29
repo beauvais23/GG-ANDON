@@ -249,13 +249,15 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
 
     const rows = db.prepare("SELECT status, resolved, cancelled_at FROM alerts ORDER BY id").all();
 
+    // resolved on the first row is cleared again by 0004 (#19).
     assert.deepEqual(rows, [
-        { status: "CANCELLED", resolved: 5000, cancelled_at: 5000 },
+        { status: "CANCELLED", resolved: null, cancelled_at: 5000 },
         { status: "RESOLVED", resolved: 9000, cancelled_at: null },
         { status: "CANCELLED", resolved: null, cancelled_at: 7000 },
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0004
     migrateDown(db, dbPath); // 0003 (no-op)
     migrateDown(db, dbPath); // 0002
 
@@ -285,5 +287,38 @@ test("0003: availability normalized to Available/Responding/Busy/Away", () => {
     const values = db.prepare("SELECT availability FROM response_team ORDER BY id").all().map(r => r.availability);
 
     assert.deepEqual(values, ["Available", "Available", "Responding", "Responding", "Busy", "Away", "Off Site"]);
+
+});
+
+test("0004: cancelled alerts lose the copied resolved time; resolved alerts untouched; down restores it", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    const insert = db.prepare(`
+        INSERT INTO alerts
+        (production_line, work_center, type, status, requested, resolved, created_at, updated_at)
+        VALUES ('Team A', 'Assembly', 'QUALITY', ?, 1000, ?, 1000, ?)
+    `);
+
+    insert.run("CANCELLED", 5000, 5000);  // old cancel: resolved = cancel time
+    insert.run("RESOLVED", 9000, 9000);
+    insert.run("ACKNOWLEDGED", null, 2000);
+
+    migrateUp(db, dbPath);
+
+    const read = () => db.prepare("SELECT status, resolved, cancelled_at FROM alerts ORDER BY id").all();
+
+    assert.deepEqual(read(), [
+        { status: "CANCELLED", resolved: null, cancelled_at: 5000 },
+        { status: "RESOLVED", resolved: 9000, cancelled_at: null },
+        { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
+    ]);
+
+    migrateDown(db, dbPath); // 0004
+
+    assert.deepEqual(read()[0], { status: "CANCELLED", resolved: 5000, cancelled_at: 5000 });
+    assert.equal(read()[1].resolved, 9000);
 
 });

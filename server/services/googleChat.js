@@ -286,7 +286,7 @@ const payload = {
 
                                 {
 
-                                    header: "Resolution",
+                                    header: alert.status === "CANCELLED" ? "Cancel reason" : "Resolution",
 
                                     widgets: [
 

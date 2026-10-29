@@ -295,7 +295,6 @@ cancelAlert: db.prepare(`
     UPDATE alerts
     SET
         status='CANCELLED',
-        resolved=?,
         cancelled_at=?,
         updated_at=?,
         resolution_notes=COALESCE(?, resolution_notes)
