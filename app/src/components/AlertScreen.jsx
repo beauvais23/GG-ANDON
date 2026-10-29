@@ -18,6 +18,8 @@ import {
   getActiveAlerts
 } from "../services/api";
 
+import TabletCancelDialog from "./TabletCancelDialog";
+
 export default function AlertScreen({
 
   alert,
@@ -26,6 +28,7 @@ export default function AlertScreen({
 }) {
 
   const [currentAlert, setCurrentAlert] = useState(alert);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   useEffect(() => {
 
@@ -60,11 +63,22 @@ export default function AlertScreen({
 
   }, [alert.id, onResolve]);
 
-  async function handleCancel() {
+  // Every tablet cancel carries a reason (one tap, or "Other").
+  // The alert screen stays up if the cancel didn't go through.
+  async function handleCancel(reason) {
 
-    await cancelAlert(currentAlert.id);
+    const result = await cancelAlert(currentAlert.id, {
+      reason,
+      cancelledBy: "Operator (tablet)"
+    });
 
+    if (result?.success === false)
+      return result;
+
+    setCancelOpen(false);
     onResolve();
+
+    return result;
 
   }
 
@@ -207,12 +221,19 @@ export default function AlertScreen({
             fontSize: 20,
             fontWeight: "bold"
           }}
-          onClick={handleCancel}
+          onClick={() => setCancelOpen(true)}
         >
 
           CANCEL REQUEST
 
         </Button>
+
+        <TabletCancelDialog
+          open={cancelOpen}
+          alertType={currentAlert.type}
+          onClose={() => setCancelOpen(false)}
+          onCancel={handleCancel}
+        />
 
       </Paper>
 
