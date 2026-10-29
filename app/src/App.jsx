@@ -12,6 +12,7 @@ import ExecutiveDashboard from "./pages/ExecutiveDashboard";
 import Login from "./pages/Login";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import StagingBanner from "./components/StagingBanner";
 import { useAlert } from "./context/AlertContext";
 import useAutoReload from "./hooks/useAutoReload";
 
@@ -24,6 +25,10 @@ function App() {
     useAutoReload(Boolean(activeAlert));
 
     return (
+
+        <>
+
+        <StagingBanner />
 
         <Routes>
 
@@ -93,6 +98,8 @@ function App() {
             />
 
         </Routes>
+
+        </>
 
     );
 
