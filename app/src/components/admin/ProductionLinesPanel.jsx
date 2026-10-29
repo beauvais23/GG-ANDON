@@ -23,8 +23,13 @@ import {
     createProductionLine,
     updateProductionLine,
     deleteProductionLine,
-    updateProductionLineOrder
+    updateProductionLineOrder,
+    getArchivedProductionLines,
+    restoreProductionLine
 } from "../../api/productionLines";
+
+import ArchivedList from "./ArchivedList";
+import ArchiveIcon from "@mui/icons-material/Archive";
 
 import { useEffect, useState } from "react";
 
@@ -59,6 +64,7 @@ export default function ProductionLinesPanel() {
     //------------------------------------------------------
 
     const [lines, setLines] = useState([]);
+    const [archivedLines, setArchivedLines] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const [search, setSearch] = useState("");
@@ -98,6 +104,8 @@ export default function ProductionLinesPanel() {
         );
 
         setLines(data);
+
+        setArchivedLines(await getArchivedProductionLines());
 
         //------------------------------------
         // Load Work Centers
@@ -229,8 +237,26 @@ async function handleUpdate(line) {
 }
 
 //------------------------------------------------------
-// Delete
+// Archive / Restore (#15): lines are never deleted
 //------------------------------------------------------
+
+async function handleRestore(line) {
+
+    try {
+
+        await restoreProductionLine(line.id);
+
+        await loadLines();
+
+    }
+
+    catch (err) {
+
+        alert(err.message);
+
+    }
+
+}
 
 async function handleDelete() {
 
@@ -690,13 +716,14 @@ function moveLineDown(lineId) {
     </IconButton>
 
     <IconButton
-        color="error"
+        color="warning"
+        title="Archive line"
         onClick={() => {
             setDeleteLine(line);
             setDeleteOpen(true);
         }}
     >
-        <DeleteIcon />
+        <ArchiveIcon />
     </IconButton>
 
 </Stack>
@@ -830,6 +857,12 @@ function moveLineDown(lineId) {
 
                 }}
                 onSave={handleUpdate}
+            />
+
+            <ArchivedList
+                items={archivedLines}
+                label="lines"
+                onRestore={handleRestore}
             />
 
             <DeleteProductionLineDialog

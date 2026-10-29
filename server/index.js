@@ -28,6 +28,14 @@ const {
 } = require("./services/notificationManager");
 
 const { updateTelegram } = require("./services/telegramUpdate");
+const {
+    TELEGRAM_DEFAULT_NOTE,
+    NOTE_MAX,
+    telegramName,
+    promptForNote,
+    noteReplyAlertId,
+    replyInThread
+} = require("./services/telegramNote");
 
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
@@ -684,6 +692,20 @@ app.post("/production-lines", authenticateToken, requireAdmin, (req, res) => {
 
         }
 
+        // Names are unique, archived lines included (#15).
+        const taken = statements.getProductionLineByName.get(name);
+
+        if (taken) {
+
+            return res.status(409).json({
+                success: false,
+                message: taken.archived_at
+                    ? `An archived line is named ${name}. Restore it from Admin → Archived.`
+                    : `A production line named ${name} already exists.`
+            });
+
+        }
+
         const now = Date.now();
 
         statements.insertProductionLine.run(
@@ -719,6 +741,90 @@ app.post("/production-lines", authenticateToken, requireAdmin, (req, res) => {
 });
 
 //------------------------------------------------------
+// Reorder body check (#21)
+//
+// Both order routes take [{ id, display_order }, ...].
+// Anything else is a 400, not a 500. The whole list is
+// applied in one transaction: an unknown id changes
+// nothing.
+//------------------------------------------------------
+
+function reorderError(items) {
+
+    if (!Array.isArray(items) || items.length === 0) {
+
+        return "Body must be a non-empty list of { id, display_order }.";
+
+    }
+
+    for (const item of items) {
+
+        if (
+            !item ||
+            !Number.isInteger(item.id) ||
+            !Number.isInteger(item.display_order) ||
+            item.display_order < 0
+        ) {
+
+            return "Each item needs an integer id and a display_order of 0 or more.";
+
+        }
+
+    }
+
+    return null;
+
+}
+
+function applyOrder(statement, items, label, res) {
+
+    const error = reorderError(items);
+
+    if (error) {
+
+        return res.status(400).json({ success: false, message: error });
+
+    }
+
+    const now = Date.now();
+
+    const applyAll = db.transaction(() => {
+
+        const notFound = items
+            .filter(item => statement.run(item.display_order, now, item.id).changes === 0)
+            .map(item => item.id);
+
+        if (notFound.length) {
+
+            // Throwing rolls back every update in this list.
+            throw Object.assign(new Error("unknown id"), { notFound });
+
+        }
+
+    });
+
+    try {
+
+        applyAll();
+
+    }
+
+    catch (err) {
+
+        if (!err.notFound) throw err;
+
+        return res.status(400).json({
+            success: false,
+            message: `Unknown ${label} id: ${err.notFound.join(", ")}. Nothing was changed.`
+        });
+
+    }
+
+    return res.json({ success: true });
+
+}
+
+//------------------------------------------------------
 // Update Production Line Order
 //------------------------------------------------------
 
@@ -726,27 +832,7 @@ app.put("/production-lines/order", authenticateToken, requireAdmin, (req, res) =
 
     try {
 
-        const lines = req.body;
-
-        const now = Date.now();
-
-        for (const line of lines) {
-
-            statements.updateProductionLineDisplayOrder.run(
-
-                line.display_order,
-                now,
-                line.id
-
-            );
-
-        }
-
-        res.json({
-
-            success: true
-
-        });
+        applyOrder(statements.updateProductionLineDisplayOrder, req.body, "production line", res);
 
     }
 
@@ -822,14 +908,41 @@ app.put("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => 
 
 app.delete("/production-lines/:id", authenticateToken, requireAdmin, (req, res) => {
 
+    // Archive, never DELETE (#15). Alerts and work centers
+    // keep pointing at the line; Admin can restore it.
     try {
 
-        statements.deleteProductionLine.run(
-            req.params.id
-        );
+        const line = statements.getProductionLine.get(req.params.id);
+
+        if (!line || line.archived_at) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Production line not found."
+            });
+
+        }
+
+        const open = statements.countOpenAlertsForLine.get(line.name).n;
+
+        if (open > 0) {
+
+            return res.status(409).json({
+                success: false,
+                message: `${line.name} has ${open} open alert(s). Resolve or cancel them before archiving the line.`
+            });
+
+        }
+
+        const now = Date.now();
+
+        statements.archiveProductionLine.run(now, now, line.id);
+
+        console.log(`Production line archived by ${req.user.username}: ${line.name}`);
 
         res.json({
-            success: true
+            success: true,
+            message: `${line.name} archived. Restore it from Admin → Archived.`
         });
 
     }
@@ -844,6 +957,40 @@ app.delete("/production-lines/:id", authenticateToken, requireAdmin, (req, res) 
         });
 
     }
+
+});
+
+//------------------------------------------------------
+// Archived Production Lines (#15)
+//------------------------------------------------------
+
+app.get("/production-lines/archived", authenticateToken, requireAdmin, (req, res) => {
+
+    res.json(statements.getArchivedProductionLines.all());
+
+});
+
+app.post("/production-lines/:id/restore", authenticateToken, requireAdmin, (req, res) => {
+
+    const line = statements.getProductionLine.get(req.params.id);
+
+    if (!line || !line.archived_at) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Archived production line not found."
+        });
+
+    }
+
+    statements.restoreProductionLine.run(Date.now(), line.id);
+
+    console.log(`Production line restored by ${req.user.username}: ${line.name}`);
+
+    res.json({
+        success: true,
+        message: `${line.name} restored.`
+    });
 
 });
 
@@ -1008,27 +1155,7 @@ app.put("/work-centers/order", authenticateToken, requireAdmin, (req, res) => {
 
     try {
 
-        const workCenters = req.body;
-
-        const now = Date.now();
-
-        for (const wc of workCenters) {
-
-            statements.updateWorkCenterDisplayOrder.run(
-
-                wc.display_order,
-                now,
-                wc.id
-
-            );
-
-        }
-
-        res.json({
-
-            success: true
-
-        });
+        applyOrder(statements.updateWorkCenterDisplayOrder, req.body, "work center", res);
 
     }
 
@@ -1947,7 +2074,9 @@ if (availability !== undefined && !cleanAvailability) {
             return res.status(409).json({
 
                 success: false,
-                message: "Responder already exists."
+                message: existing.archived_at
+                    ? "An archived responder has this name. Restore them from Admin → Archived."
+                    : "Responder already exists."
 
             });
 
@@ -2137,12 +2266,13 @@ if (availability !== undefined && !cleanAvailability) {
 
 app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => {
 
+    // Archive, never DELETE (#15).
     try {
 
         const responder =
             statements.getResponder.get(req.params.id);
 
-        if (!responder) {
+        if (!responder || responder.archived_at) {
 
             return res.status(404).json({
 
@@ -2153,12 +2283,27 @@ app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => 
 
         }
 
-        statements.deleteResponseTeam.run(req.params.id);
+        const open = statements.countAcknowledgedAlertsFor.get(responder.name).n;
+
+        if (open > 0) {
+
+            return res.status(409).json({
+                success: false,
+                message: `${responder.name} is responding to ${open} open alert(s). Resolve or cancel them before archiving.`
+            });
+
+        }
+
+        const now = Date.now();
+
+        statements.archiveResponder.run(now, now, responder.id);
+
+        console.log(`Responder archived by ${req.user.username}: #${responder.id}`);
 
         res.json({
 
             success: true,
-            message: "Responder deleted."
+            message: "Responder archived. Restore from Admin → Archived."
 
         });
 
@@ -2176,6 +2321,40 @@ app.delete("/response-team/:id", authenticateToken, requireAdmin, (req, res) => 
         });
 
     }
+
+});
+
+//------------------------------------------------------
+// Archived Responders (#15)
+//------------------------------------------------------
+
+app.get("/response-team/archived", authenticateToken, requireAdmin, (req, res) => {
+
+    res.json(statements.getArchivedResponseTeam.all());
+
+});
+
+app.post("/response-team/:id/restore", authenticateToken, requireAdmin, (req, res) => {
+
+    const responder = statements.getResponder.get(req.params.id);
+
+    if (!responder || !responder.archived_at) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Archived responder not found."
+        });
+
+    }
+
+    statements.restoreResponder.run(Date.now(), responder.id);
+
+    console.log(`Responder restored by ${req.user.username}: #${responder.id}`);
+
+    res.json({
+        success: true,
+        message: "Responder restored."
+    });
 
 });
 
@@ -2261,6 +2440,64 @@ function isFromTelegram(req) {
 
 }
 
+//------------------------------------------------------
+// Telegram note reply (#14b): a group message that
+// replies to our "what fixed alert #N?" prompt.
+// Always answers 200; Telegram resends anything else.
+//------------------------------------------------------
+
+async function handleTelegramNoteReply(message, alertId) {
+
+    const alert = statements.getAlert.get(alertId);
+    const text = typeof message.text === "string" ? message.text.trim() : "";
+    const replier = telegramName(message.from);
+
+    let answer;
+
+    if (!alert) {
+
+        answer = `Alert #${alertId} was not found.`;
+
+    } else if (!text) {
+
+        answer = `Note not saved: reply with text (not a photo or sticker).`;
+
+    } else if (text.length > NOTE_MAX) {
+
+        answer = `Note not saved: ${text.length} characters, the limit is ${NOTE_MAX}. Reply again, shorter.`;
+
+    } else {
+
+        const note = replier === alert.resolved_by
+            ? text
+            : `${text} (note by ${replier})`;
+
+        const saved = statements.saveTelegramNote.run(
+            note,
+            Date.now(),
+            alert.id,
+            TELEGRAM_DEFAULT_NOTE
+        ).changes === 1;
+
+        answer = saved
+            ? `✔ Note saved on alert #${alert.id}.`
+            : `Alert #${alert.id} already has a note. Nothing changed.`;
+
+        if (saved) {
+
+            console.log(`✓ Telegram note saved on Alert #${alert.id} by ${replier}`);
+
+        }
+
+    }
+
+    queueNotification(alertId, "telegram note", async () => {
+        await updateTelegram({ id: alertId });
+        await replyInThread(message, answer);
+    });
+
+}
+
 app.post("/telegram/webhook", async (req, res) => {
 
     if (!isFromTelegram(req)) {
@@ -2271,6 +2508,16 @@ app.post("/telegram/webhook", async (req, res) => {
     // anything posted here (it can't be from our bot).
     if (!notificationsEnabled()) {
         return res.sendStatus(200);
+    }
+
+    const noteAlertId = noteReplyAlertId(req.body.message);
+
+    if (noteAlertId) {
+
+        await handleTelegramNoteReply(req.body.message, noteAlertId);
+
+        return res.sendStatus(200);
+
     }
 
     const callback = req.body.callback_query;
@@ -2297,7 +2544,7 @@ app.post("/telegram/webhook", async (req, res) => {
         const result = statements.resolveAlert.run(
             now,
             responder,
-            "Resolved from Telegram",
+            TELEGRAM_DEFAULT_NOTE,
             now,
             now,
             alertId
@@ -2323,6 +2570,10 @@ app.post("/telegram/webhook", async (req, res) => {
             await notifyResolved(alert);
             await updateTelegram(alert);
         });
+
+        // Own step: a failed Google Chat call above must not skip it (#14b).
+        queueNotification(alert.id, "telegram note prompt", () =>
+            promptForNote(alert, callback.from));
 
         console.log(`✓ Telegram resolved Alert #${alertId} by ${responder}`);
 
@@ -2498,7 +2749,10 @@ async function configureTelegramWebhook() {
 
                 url: telegramWebhookUrl,
 
-                secret_token: secret
+                secret_token: secret,
+
+                // Button presses, plus replies to the note prompt (#14b).
+                allowed_updates: ["callback_query", "message"]
 
             },
 
