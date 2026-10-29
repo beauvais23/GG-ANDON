@@ -28,6 +28,14 @@ const {
 } = require("./services/notificationManager");
 
 const { updateTelegram } = require("./services/telegramUpdate");
+const {
+    TELEGRAM_DEFAULT_NOTE,
+    NOTE_MAX,
+    telegramName,
+    promptForNote,
+    noteReplyAlertId,
+    replyInThread
+} = require("./services/telegramNote");
 
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
@@ -2305,6 +2313,64 @@ function isFromTelegram(req) {
 
 }
 
+//------------------------------------------------------
+// Telegram note reply (#14b): a group message that
+// replies to our "what fixed alert #N?" prompt.
+// Always answers 200; Telegram resends anything else.
+//------------------------------------------------------
+
+async function handleTelegramNoteReply(message, alertId) {
+
+    const alert = statements.getAlert.get(alertId);
+    const text = typeof message.text === "string" ? message.text.trim() : "";
+    const replier = telegramName(message.from);
+
+    let answer;
+
+    if (!alert) {
+
+        answer = `Alert #${alertId} was not found.`;
+
+    } else if (!text) {
+
+        answer = `Note not saved: reply with text (not a photo or sticker).`;
+
+    } else if (text.length > NOTE_MAX) {
+
+        answer = `Note not saved: ${text.length} characters, the limit is ${NOTE_MAX}. Reply again, shorter.`;
+
+    } else {
+
+        const note = replier === alert.resolved_by
+            ? text
+            : `${text} (note by ${replier})`;
+
+        const saved = statements.saveTelegramNote.run(
+            note,
+            Date.now(),
+            alert.id,
+            TELEGRAM_DEFAULT_NOTE
+        ).changes === 1;
+
+        answer = saved
+            ? `✔ Note saved on alert #${alert.id}.`
+            : `Alert #${alert.id} already has a note. Nothing changed.`;
+
+        if (saved) {
+
+            console.log(`✓ Telegram note saved on Alert #${alert.id} by ${replier}`);
+
+        }
+
+    }
+
+    queueNotification(alertId, "telegram note", async () => {
+        await updateTelegram({ id: alertId });
+        await replyInThread(message, answer);
+    });
+
+}
+
 app.post("/telegram/webhook", async (req, res) => {
 
     if (!isFromTelegram(req)) {
@@ -2315,6 +2381,16 @@ app.post("/telegram/webhook", async (req, res) => {
     // anything posted here (it can't be from our bot).
     if (!notificationsEnabled()) {
         return res.sendStatus(200);
+    }
+
+    const noteAlertId = noteReplyAlertId(req.body.message);
+
+    if (noteAlertId) {
+
+        await handleTelegramNoteReply(req.body.message, noteAlertId);
+
+        return res.sendStatus(200);
+
     }
 
     const callback = req.body.callback_query;
@@ -2341,7 +2417,7 @@ app.post("/telegram/webhook", async (req, res) => {
         const result = statements.resolveAlert.run(
             now,
             responder,
-            "Resolved from Telegram",
+            TELEGRAM_DEFAULT_NOTE,
             now,
             now,
             alertId
@@ -2367,6 +2443,10 @@ app.post("/telegram/webhook", async (req, res) => {
             await notifyResolved(alert);
             await updateTelegram(alert);
         });
+
+        // Own step: a failed Google Chat call above must not skip it (#14b).
+        queueNotification(alert.id, "telegram note prompt", () =>
+            promptForNote(alert, callback.from));
 
         console.log(`✓ Telegram resolved Alert #${alertId} by ${responder}`);
 
@@ -2542,7 +2622,10 @@ async function configureTelegramWebhook() {
 
                 url: telegramWebhookUrl,
 
-                secret_token: secret
+                secret_token: secret,
+
+                // Button presses, plus replies to the note prompt (#14b).
+                allowed_updates: ["callback_query", "message"]
 
             },
 

@@ -291,6 +291,19 @@ resolveAlert: db.prepare(`
         AND status='ACKNOWLEDGED'
 `),
 
+// First Telegram reply wins: only replaces the default
+// note a Telegram resolve wrote (#14b).
+saveTelegramNote: db.prepare(`
+    UPDATE alerts
+    SET
+        resolution_notes=?,
+        updated_at=?
+    WHERE
+        id=?
+        AND status='RESOLVED'
+        AND resolution_notes=?
+`),
+
 cancelAlert: db.prepare(`
     UPDATE alerts
     SET
