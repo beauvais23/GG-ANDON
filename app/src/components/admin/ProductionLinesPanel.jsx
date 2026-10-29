@@ -499,7 +499,7 @@ function moveLineDown(lineId) {
             sx={{
                 p: 4,
                 borderRadius: 3,
-                bgcolor: "#ECEFF1"
+                bgcolor: "#0B0D10"
             }}
         >
 

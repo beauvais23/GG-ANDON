@@ -1,16 +1,26 @@
 import { useState } from "react";
 
-import Grid from "@mui/material/Grid";
+import Box from "@mui/material/Box";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 
 import SearchIcon from "@mui/icons-material/Search";
-import HandymanIcon from "@mui/icons-material/Handyman";
-import Inventory2Icon from "@mui/icons-material/Inventory2";
-import GroupsIcon from "@mui/icons-material/Groups";
-import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutlined";
+import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 
 import AlertButton from "./AlertButton";
+import { ALERT_COLORS } from "../config/alertColors";
+
+// Five equal buttons, left to right (E2).
+const BUTTONS = [
+  { type: "QUALITY", subtitle: "Quality assistance", icon: <SearchIcon /> },
+  { type: "MAINTENANCE", subtitle: "Equipment assistance", icon: <BuildOutlinedIcon /> },
+  { type: "MATERIAL", subtitle: "Material needed", icon: <Inventory2OutlinedIcon /> },
+  { type: "SUPERVISOR", subtitle: "Supervisor assistance", icon: <PersonOutlineIcon /> },
+  { type: "SAFETY", subtitle: "Safety assistance", icon: <GppMaybeOutlinedIcon /> }
+];
 
 import { createAlert } from "../services/api";
 import { useAlert } from "../context/AlertContext";
@@ -125,75 +135,36 @@ export default function ButtonGrid() {
     <>
 
     {noWorkCenters && (
-      <Alert severity="error" variant="filled" sx={{ mx: 2, mb: 2, fontSize: "1.3rem" }}>
+      <Alert severity="error" variant="filled" sx={{ mx: 3, mt: 2, fontSize: "1.3rem" }}>
         No work centers are set up for {productionLine}. Alerts cannot be sent from this line. Call your lead.
       </Alert>
     )}
 
-    <Grid
-      container
-      spacing={2}
+    <Box
       sx={{
-        px: 2,
-        py: 2,
-        background: "#263238",
-        borderRadius: 3,
-        mx: 2,
-        mb: 2
+        flexGrow: 1,
+        display: "grid",
+        gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+        gap: 1.5,
+        px: 3,
+        py: 2.5
       }}
     >
 
-      <Grid size={{ xs: 12 }}>
-        <AlertButton
-          color="#D32F2F"
-          icon={<SearchIcon sx={{ fontSize: 60 }} />}
-          title="QUALITY"
-          subtitle="Quality Assistance"
-          onClick={() => handleAlert("QUALITY")}
-        />
-      </Grid>
+      {BUTTONS.map(button => (
 
-      <Grid size={{ xs: 12, md: 6 }}>
         <AlertButton
-          color="#F57C00"
-          icon={<HandymanIcon sx={{ fontSize: 60 }} />}
-          title="MAINTENANCE"
-          subtitle="Equipment Assistance"
-          onClick={() => handleAlert("MAINTENANCE")}
+          key={button.type}
+          colors={ALERT_COLORS[button.type]}
+          icon={button.icon}
+          title={button.type}
+          subtitle={button.subtitle}
+          onClick={() => handleAlert(button.type)}
         />
-      </Grid>
 
-      <Grid size={{ xs: 12, md: 6 }}>
-        <AlertButton
-          color="#FBC02D"
-          icon={<Inventory2Icon sx={{ fontSize: 60 }} />}
-          title="MATERIAL"
-          subtitle="Material Needed"
-          onClick={() => handleAlert("MATERIAL")}
-        />
-      </Grid>
+      ))}
 
-      <Grid size={{ xs: 12, md: 6 }}>
-        <AlertButton
-          color="#1976D2"
-          icon={<GroupsIcon sx={{ fontSize: 60 }} />}
-          title="SUPERVISOR"
-          subtitle="Supervisor Assistance"
-          onClick={() => handleAlert("SUPERVISOR")}
-        />
-      </Grid>
-
-      <Grid size={{ xs: 12, md: 6 }}>
-        <AlertButton
-          color="#2E7D32"
-          icon={<HealthAndSafetyIcon sx={{ fontSize: 60 }} />}
-          title="SAFETY"
-          subtitle="Safety Assistance"
-          onClick={() => handleAlert("SAFETY")}
-        />
-      </Grid>
-
-    </Grid>
+    </Box>
 
     <Snackbar
       open={Boolean(duplicateMessage)}

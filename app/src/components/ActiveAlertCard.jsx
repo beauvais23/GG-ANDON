@@ -36,7 +36,7 @@ const alertTheme = {
     icon: <Inventory2Icon sx={{ fontSize: 34 }} />
   },
   SUPERVISOR: {
-    color: "#1976D2",
+    color: "#237EB5",
     title: "SUPERVISOR ALERT",
     icon: <GroupsIcon sx={{ fontSize: 34 }} />
   },
@@ -201,7 +201,7 @@ export default function ActiveAlertCard({
               label={alert.status}
               sx={{
                 mt: .5,
-                bgcolor: "white",
+                bgcolor: "#14181D",
                 color: theme.color,
                 fontWeight: 700
               }}
@@ -215,7 +215,7 @@ export default function ActiveAlertCard({
       <Box
         sx={{
           p: 3,
-          bgcolor: "#FAFAFA"
+          bgcolor: "#1B2027"
         }}
       >
         <Stack

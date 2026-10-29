@@ -2,16 +2,24 @@ import { useEffect, useState } from "react";
 
 import {
   Box,
-  Paper,
   Typography,
-  Button,
-  Chip,
-  Stack
+  Button
 } from "@mui/material";
 
-import CancelIcon from "@mui/icons-material/Cancel";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import PersonIcon from "@mui/icons-material/Person";
+import { ALERT_COLORS, FALLBACK_COLOR } from "../config/alertColors";
+import { labelSx, tokens } from "../theme/theme";
+
+// mm:ss since the alert was raised (h:mm:ss after an hour).
+function elapsed(requested, now) {
+
+  const total = Math.max(0, Math.floor((now - Number(requested)) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = String(total % 60).padStart(2, "0");
+
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${String(m).padStart(2, "0")}:${sec}`;
+
+}
 
 import {
   cancelAlert,
@@ -29,6 +37,16 @@ export default function AlertScreen({
 
   const [currentAlert, setCurrentAlert] = useState(alert);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  // The timer keeps running even if a status check fails.
+  useEffect(() => {
+
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+
+    return () => clearInterval(tick);
+
+  }, []);
 
   useEffect(() => {
 
@@ -85,147 +103,87 @@ export default function AlertScreen({
   const acknowledged =
     currentAlert.status === "ACKNOWLEDGED";
 
-  return (
-    <Box
-      sx={{
-        p: 5,
-        display: "flex",
-        justifyContent: "center"
-      }}
-    >
+  const colors = ALERT_COLORS[currentAlert.type] || FALLBACK_COLOR;
 
-      <Paper
-        elevation={8}
+  const status = acknowledged
+    ? { label: "ACKNOWLEDGED", dot: tokens.blueText }
+    : { label: "WAITING FOR RESPONSE", dot: "#FF6B61" };
+
+  return (
+
+    <Box sx={{ flexGrow: 1, display: "flex", px: 3, py: 2.5 }}>
+
+      <Box
         sx={{
-          width: "100%",
-          maxWidth: 900,
-          p: 6,
-          borderRadius: 4,
-          textAlign: "center"
+          flexGrow: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 2.5,
+          p: 4,
+          textAlign: "center",
+          bgcolor: tokens.panel,
+          border: `1px solid ${tokens.line}`,
+          borderTop: `6px solid ${colors.edge}`
         }}
       >
 
-        <Typography
-          variant="h2"
-          color={acknowledged ? "primary.main" : "error.main"}
-          sx={{
-            fontWeight: "bold"
-          }}
-        >
+        <Box component="span" sx={{ ...labelSx, fontSize: 14, letterSpacing: "3px" }}>
+          Alert #{currentAlert.id} · {currentAlert.production_line} · {currentAlert.work_center}
+        </Box>
 
+        <Typography component="h2" sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: { xs: 44, md: 64 }, letterSpacing: "3px", lineHeight: 1, color: colors.edge }}>
           {currentAlert.type} ALERT
-
         </Typography>
 
-        <Typography
-          variant="h5"
+        <Box
           sx={{
-            mt: 2,
-            fontWeight: 500
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            px: 2.25,
+            py: 1.25,
+            border: `1px solid ${tokens.lineStrong}`,
+            fontFamily: tokens.display,
+            fontWeight: 600,
+            fontSize: 18,
+            letterSpacing: "2px"
           }}
         >
+          <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: status.dot, boxShadow: `0 0 8px ${status.dot}` }} />
+          {status.label}
+        </Box>
 
-          {acknowledged
-            ? "Help Is On The Way"
-            : "Assistance Requested"}
-
+        <Typography sx={{ fontFamily: tokens.mono, fontSize: { xs: 44, md: 56 }, lineHeight: 1 }} aria-label="Time since the alert was raised">
+          {elapsed(currentAlert.requested, now)}
         </Typography>
-
-        <Chip
-          sx={{
-            mt: 3,
-            height: 48,
-            fontSize: 18,
-            px: 2
-          }}
-          color={acknowledged ? "primary" : "error"}
-          icon={
-            acknowledged
-              ? <CheckCircleIcon />
-              : undefined
-          }
-          label={
-            acknowledged
-              ? "ACKNOWLEDGED"
-              : "WAITING FOR RESPONSE"
-          }
-        />
 
         {acknowledged && (
 
-          <Stack
-            spacing={1}
-            sx={{
-              alignItems: "center",
-              mt: 5
-            }}>
-
-            <PersonIcon
-              color="primary"
-              sx={{
-                fontSize: 42
-              }}
-            />
-
-            <Typography
-              variant="overline"
-              sx={{
-                color: "text.secondary"
-              }}
-            >
-
-              RESPONDING
-
-            </Typography>
-
-            <Typography
-              variant="h4"
-              color="primary"
-              sx={{
-                fontWeight: "bold"
-              }}
-            >
-
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.5 }}>
+            <Box component="span" sx={labelSx}>Responding</Box>
+            <Typography sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: 34, letterSpacing: "1px", color: tokens.blueText }}>
               {currentAlert.acknowledged_by}
-
             </Typography>
-
-          </Stack>
+          </Box>
 
         )}
 
-        <Typography
-          sx={{
-            mt: 5,
-            fontSize: 22,
-            color: "text.secondary",
-            lineHeight: 1.6
-          }}
-        >
-
+        <Typography sx={{ fontSize: 20, color: "#A9B3BE", maxWidth: 760 }}>
           {acknowledged
-            ? `${currentAlert.acknowledged_by} has acknowledged your request. Please remain at your workstation.`
-            : "Your request has been sent. Please remain at your workstation while a responder is notified."}
-
+            ? `${currentAlert.acknowledged_by} is on the way. Please stay at your workstation.`
+            : "Your request has been sent. Please stay at your workstation."}
         </Typography>
 
         <Button
-          variant="contained"
+          variant="outlined"
           color="error"
           size="large"
-          startIcon={<CancelIcon />}
-          sx={{
-            mt: 6,
-            px: 8,
-            py: 2,
-            fontSize: 20,
-            fontWeight: "bold"
-          }}
           onClick={() => setCancelOpen(true)}
+          sx={{ mt: 1, height: 64, px: 6, fontSize: 22, letterSpacing: "3px", borderWidth: 2, color: "#FF8A80", borderColor: "#D84A41", "&:hover": { borderWidth: 2 } }}
         >
-
           CANCEL REQUEST
-
         </Button>
 
         <TabletCancelDialog
@@ -235,7 +193,7 @@ export default function AlertScreen({
           onCancel={handleCancel}
         />
 
-      </Paper>
+      </Box>
 
     </Box>
   );

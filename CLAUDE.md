@@ -34,7 +34,7 @@ Read this file fully before changing anything.
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit), `network.js` (outbound connect settings, loaded first in `index.js`) |
 | Tests | `server/test/` | `node:test` + `supertest`, temp SQLite per file. Run `cd server && npm test`. GitHub Actions (`.github/workflows/ci.yml`) runs them on every PR |
-| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing. Staging pages show an orange "STAGING (test system)" bar and a `[STAGING]` tab title (`components/StagingBanner.jsx`, detected from "staging" in the hostname; no variable) |
+| Frontend | `app/src/` | React 19, MUI 9, MUI X DataGrid, Recharts; polling, no websockets. Backend URL from `VITE_API_BASE_URL` (build fails if unset). Open screens reload themselves after a deploy (`hooks/useAutoReload.js` + `/version.json`): checked every 2 min, only when idle 60 s with no alert screen, dialog or typing. Staging pages show an orange "STAGING (test system)" bar and a `[STAGING]` tab title (`components/StagingBanner.jsx`, detected from "staging" in the hostname; no variable). **Look (Option E, mockup approved Oct 29 2026):** one dark industrial theme in `theme/theme.js` (tokens: ground `#0B0D10`, panel `#14181D`, line `#262C33`, G&G blue `#237EB5`; Barlow Condensed / Inter / JetBrains Mono from Google Fonts); never hard-code light backgrounds. Top bar + **PAGES** menu on every page (`Header.jsx`, `PagesMenu.jsx`, page list in `config/pages.js`); alert colors in `config/alertColors.js` |
 | Cleanup (Oct 29 2026) | removed | Legacy root site (`index.html`, `css/`, `js/`, root `package.json`/lock, `assets/`, `scripts/backup-production-db.sh`) and 17 unused frontend files. Railway and CI build only `/server` and `/app` |
 
 ### Railway (project GGLED)
@@ -197,7 +197,11 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 
 ### Open
 
-None. The dead work-center delete icon in Admin → Production Lines was removed (Director, Oct 29 2026); work centers are set inactive instead.
+| # | Defect | Location |
+|---|---|---|
+| 29 | `/dashboard` stat tiles show no numbers and its alert cards no elapsed time: it passes `alerts` to `DashboardStats` (which expects `active`, `waiting`, …) and `AlertList` never passes `elapsed`. `/supervisor` is correct. Fix planned in E3 | `pages/Dashboard.jsx`, `components/AlertList.jsx` |
+
+The dead work-center delete icon in Admin → Production Lines was removed (Director, Oct 29 2026); work centers are set inactive instead.
 
 ## Testing
 
