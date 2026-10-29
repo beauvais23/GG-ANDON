@@ -1653,6 +1653,41 @@ app.patch(
             }
 
             //--------------------------------------------------
+            // Optional reason (#26): the supervisor and dashboard
+            // screens require one; the tablet sends none.
+            //--------------------------------------------------
+
+            const { reason, cancelledBy } = req.body || {};
+
+            let cancelNote = null;
+
+            if (reason !== undefined) {
+
+                const cleanReason =
+                    typeof reason === "string" ? reason.trim() : "";
+
+                const cleanBy =
+                    typeof cancelledBy === "string" ? cancelledBy.trim().slice(0, 100) : "";
+
+                if (!cleanReason || cleanReason.length > 500) {
+
+                    return res.status(400).json({
+
+                        success: false,
+
+                        message:
+                            "Cancel reason is required (up to 500 characters)."
+
+                    });
+
+                }
+
+                cancelNote =
+                    `Cancelled${cleanBy ? ` by ${cleanBy}` : ""}: ${cleanReason}`;
+
+            }
+
+            //--------------------------------------------------
             // Cancel Alert
             //--------------------------------------------------
 
@@ -1667,6 +1702,8 @@ app.patch(
                     now,
 
                     now,
+
+                    cancelNote,
 
                     alertId
 

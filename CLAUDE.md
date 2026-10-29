@@ -90,7 +90,7 @@ The Railway plan has **no volume backups** (Hobby). Backups are written to the s
 3. Timing: any time (hard rule 2, standing approval). In-shift: warn the floor first and prefer the lunch break (11:00–11:30); otherwise 16:45 ET or later. Write "In-shift deploy (standing approval)" in the PR description when merging during a shift.
 4. Watch the backend log for: `Database backup … before-NNNN` (if migrations), `Migration applied`, `Notifications Enabled`, `Telegram webhook configured`.
 5. Download the new `before-NNNN` backup from `/admin` → Backups to Drive.
-6. Smoke test: tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (cancelled alerts are excluded from MTTR).
+6. Smoke test **on the production URL** (not staging, which never notifies): tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (tablet CANCEL REQUEST, or CANCEL on `/supervisor` with a reason; cancelled alerts are excluded from MTTR).
 
 Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET without `APP_ENV`/`TELEGRAM_WEBHOOK_SECRET` set. Production ran 16 minutes with notifications disabled and one live alert (#48) unannounced. Steps 2 and 3 above exist because of this.
 
@@ -188,6 +188,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 18 | MTTA/MTTR used wall-clock time | `services/workingTime.js` (`workingMs`, `responseStats`) feeds `/dashboard/executive` and `/dashboard/kpis`; trend SQL removed. Live Wallboard/Response Center timers are still wall-clock (escalation work) (fix-18) |
 | 22 | Backups were only on the Railway volume | Every backup copied to the G&G ANDON Shared Drive (feat-22, `offsiteBackup.js`); `RESTORE_FROM_DRIVE` restores from Drive at boot (feat-22b, `restore.js` + `fetchFromDrive.js`) |
 | 25 | Tablet stayed silent when an alert was NOT created (backend 400/500, no connection, line with no work centers) | `ButtonGrid.jsx`: red "<TYPE> alert NOT sent: <reason>. Call your lead." banner; persistent warning when the line has no work centers (`workCentersLoaded` in `WorkCenterContext`) (fix-25) |
+| 26 | Only the tablet could cancel an alert; once the tablet moved on, a false alarm or test could only be resolved (counted in MTTR) | CANCEL button with a required reason on `/supervisor` and `/dashboard` (`CancelDialog.jsx`); `PATCH /alerts/:id/cancel` accepts optional `reason` (1–500) + `cancelledBy`, stored as `resolution_notes` "Cancelled by <name>: <reason>" (fix-26) |
 
 ### Open (line references at commit 5e304a6)
 
