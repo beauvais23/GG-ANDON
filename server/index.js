@@ -1701,8 +1701,6 @@ app.patch(
 
                     now,
 
-                    now,
-
                     cancelNote,
 
                     alertId

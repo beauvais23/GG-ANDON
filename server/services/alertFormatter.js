@@ -112,7 +112,8 @@ function getElapsed(alert) {
 
     const start = Number(alert.requested);
 
-    const end = Number(alert.resolved || Date.now());
+    // A cancelled alert stops at its cancel time (#19).
+    const end = Number(alert.resolved || alert.cancelled_at || Date.now());
 
     const totalSeconds = Math.floor((end - start) / 1000);
 
