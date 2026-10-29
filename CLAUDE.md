@@ -90,7 +90,7 @@ The Railway plan has **no volume backups** (Hobby). Backups are written to the s
 3. Timing: any time, mid-shift included, unless the Director says otherwise for that release (hard rule 2). In-shift: warn the floor first. Write "In-shift deploy (standing approval)" in the PR description when merging during a shift.
 4. Watch the backend log for: `Database backup … before-NNNN` (if migrations), `Migration applied`, `Notifications Enabled`, `Telegram webhook configured`.
 5. Download the new `before-NNNN` backup from `/admin` → Backups to Drive.
-6. Smoke test **on the production URL** (not staging, which never notifies): tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (tablet CANCEL REQUEST, or CANCEL on `/supervisor` with a reason; cancelled alerts are excluded from MTTR).
+6. Smoke test **on the production URL** (not staging, which never notifies): tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (tablet CANCEL REQUEST → **Test**, or CANCEL on `/supervisor` with a reason; cancelled alerts are excluded from MTTR).
 
 Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET without `APP_ENV`/`TELEGRAM_WEBHOOK_SECRET` set. Production ran 16 minutes with notifications disabled and one live alert (#48) unannounced. Steps 2 and 3 above exist because of this.
 
@@ -194,10 +194,11 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 14b | Telegram resolves had no real note (a button can't carry text) | The ANDON Telegram is a **channel**: members can't reply to the bot, so a force_reply prompt fails (400; first try fix-14b, Oct 29). Now (fix-14b-add-note): Telegram Resolve pop-up says to add the note in ManufacturingOS; `GET /alerts/needs-note` lists RESOLVED alerts still noted "Resolved from Telegram"; **Needs a resolution note** panel with **Add note** on `/supervisor` and `/dashboard` (`NeedsNotePanel.jsx`); `PATCH /alerts/:id/note` (1–500 chars) replaces only that placeholder and edits the Telegram message. `setWebhook` asks for `callback_query` only. Google Chat keeps the card it already got |
 | 15 | Admin Delete erased production lines and responders for good (a deleted line orphaned its work centers) | Delete now **archives** (`archived_at`, migration `0005`): hidden from the tablet, wallboard, pickers and Admin lists; refused (409) while the line or responder has open alerts; **Archived** list with Restore in Admin (`ArchivedList.jsx`). Work centers stay with an archived line and return with it. A new line can't reuse an archived line's name. `PRAGMA foreign_keys` stays off by decision (option A, Oct 29 2026) (fix-15) |
 | 27 | Telegram calls sometimes failed ~0.25 s in ("connect ETIMEDOUT …; ENETUNREACH 2001:…"): Node tries IPv4 for 250 ms, then IPv6, which Railway lacks. Alert #72 (Oct 29) never reached Telegram; Acknowledge pop-ups failed Oct 28 and 29 | `services/network.js`: IPv4 gets 2 s (`setDefaultAutoSelectFamilyAttemptTimeout`) and is tried first (`ipv4first`), for fetch and axios alike. `sendTelegram` (new alert) retries once after 2 s, only when the connection itself failed (`isConnectError`), so it can't double-post (fix-27) |
+| 28 | Tablet CANCEL REQUEST recorded no reason | Tablet asks "Why cancel this … alert?" with one-tap reasons **Pressed by mistake / Problem cleared itself / Test / Other** (Other = short text) and **Keep alert open** (`TabletCancelDialog.jsx`, labels approved Oct 29 2026); stored as "Cancelled by Operator (tablet): <reason>". A failed cancel keeps the alert screen up with a red reason. Backend still accepts a cancel without a reason (old tablets until they reload) (feat-tablet-cancel-reason) |
 
 ### Open
 
-None. Not a defect yet: the work-center delete icon in Admin → Production Lines has no action (work centers can only be set inactive).
+None. The dead work-center delete icon in Admin → Production Lines was removed (Director, Oct 29 2026); work centers are set inactive instead.
 
 ## Testing
 

@@ -166,7 +166,7 @@ export async function resolveAlert(
 //------------------------------------------------------
 
 // reason / cancelledBy: from the supervisor and dashboard
-// cancel dialog (#26). The tablet cancels without them.
+// cancel dialog (#26) and the tablet's one-tap reasons.
 export async function cancelAlert(id, { reason, cancelledBy } = {}) {
 
     const response = await fetch(
