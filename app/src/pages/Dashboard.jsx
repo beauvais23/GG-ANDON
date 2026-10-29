@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 
-import {
-  Box,
-  Paper,
-  Typography
-} from "@mui/material";
+import { Box } from "@mui/material";
 
 import Header from "../components/Header";
-import AlertList from "../components/AlertList";
 import DashboardStats from "../components/DashboardStats";
+import AlertBoard from "../components/AlertBoard";
+import ResponderPanel from "../components/ResponderPanel";
 import ResolveDialog from "../components/ResolveDialog";
 import NeedsNotePanel from "../components/NeedsNotePanel";
 import CancelDialog from "../components/CancelDialog";
@@ -21,7 +18,19 @@ import {
 } from "../services/api";
 
 import useClock from "../hooks/useClock";
-import { getResponseTeam } from "../api/responseTeam";
+import useResponseTeam from "../hooks/useResponseTeam";
+import { alertStats } from "../utils/alertTime";
+import { tokens } from "../theme/theme";
+
+//------------------------------------------------------
+// Dashboard (/dashboard), rebuilt in E3 from the same
+// parts as the Response Center, without the alarm and
+// filters.
+// #29: the status strip got no numbers and the alert
+// cards no elapsed time. #30: there was no responder
+// picker, so every action was recorded under the first
+// person on the team list.
+//------------------------------------------------------
 
 export default function Dashboard() {
 
@@ -30,163 +39,57 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState([]);
   const [resolving, setResolving] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
 
-  const [responseTeam, setResponseTeam] = useState([]);
-
-  const [selectedResponder, setSelectedResponder] =
-    useState("");
-
-
-  //------------------------------------------------------
-  // Load Response Team
-  //------------------------------------------------------
-
-  useEffect(() => {
-
-    async function loadResponseTeam() {
-
-      try {
-
-        const team =
-          await getResponseTeam();
-
-        setResponseTeam(team);
-
-        if (
-          team.length > 0 &&
-          !selectedResponder
-        ) {
-
-          setSelectedResponder(
-            team[0].name
-          );
-
-        }
-
-      }
-
-      catch (err) {
-
-        console.error(
-          "Failed to load response team:",
-          err
-        );
-
-      }
-
-    }
-
-    loadResponseTeam();
-
-  }, [selectedResponder]);
-
-
-  //------------------------------------------------------
-  // Load Alerts
-  //------------------------------------------------------
+  const { team, actingAs, setActingAs } = useResponseTeam();
 
   async function loadAlerts() {
 
     try {
 
-      const data =
-        await getActiveAlerts();
+      const data = await getActiveAlerts();
 
-      setAlerts(
-        Array.isArray(data)
-          ? data
-          : (data.alerts || [])
-      );
+      setAlerts(Array.isArray(data) ? data : (data.alerts || []));
 
     }
 
     catch (err) {
 
-      console.error(
-        "Failed to load alerts:",
-        err
-      );
+      console.error("Failed to load alerts:", err);
 
     }
 
   }
 
-
-  //------------------------------------------------------
-  // Auto Refresh
-  //------------------------------------------------------
-
+  // Alerts every 5 s (was every 1 s); timers tick every second.
   useEffect(() => {
 
     loadAlerts();
 
-    const timer =
-      setInterval(
-        loadAlerts,
-        1000
-      );
+    const poll = setInterval(loadAlerts, 5000);
+    const tick = setInterval(() => setNow(Date.now()), 1000);
 
-    return () =>
-      clearInterval(timer);
+    return () => {
+      clearInterval(poll);
+      clearInterval(tick);
+    };
 
   }, []);
 
-
-  //------------------------------------------------------
-  // Acknowledge Alert
-  //------------------------------------------------------
-
   async function handleAcknowledge(id) {
 
-    try {
+    if (!actingAs) return;
 
-      if (!selectedResponder) {
+    await acknowledgeAlert(id, actingAs);
 
-        console.error(
-          "No responder selected."
-        );
-
-        return;
-
-      }
-
-      await acknowledgeAlert(
-        id,
-        selectedResponder
-      );
-
-      await loadAlerts();
-
-    }
-
-    catch (err) {
-
-      console.error(
-        "Dashboard acknowledge error:",
-        err
-      );
-
-    }
+    await loadAlerts();
 
   }
-
-
-  //------------------------------------------------------
-  // Resolve Alert
-  //------------------------------------------------------
 
   // Opens the note dialog; submitResolve does the resolve.
   function handleResolve(id) {
 
-    if (!selectedResponder) {
-
-      console.error(
-        "No responder selected."
-      );
-
-      return;
-
-    }
+    if (!actingAs) return;
 
     setResolving(alerts.find(a => a.id === id) || { id });
 
@@ -201,10 +104,7 @@ export default function Dashboard() {
 
   async function submitCancel(id, reason) {
 
-    const result = await cancelAlert(id, {
-      reason,
-      cancelledBy: selectedResponder
-    });
+    const result = await cancelAlert(id, { reason, cancelledBy: actingAs });
 
     await loadAlerts();
 
@@ -214,11 +114,7 @@ export default function Dashboard() {
 
   async function submitResolve(id, note) {
 
-    const result = await resolveAlert(
-      id,
-      selectedResponder,
-      note
-    );
+    const result = await resolveAlert(id, actingAs, note);
 
     await loadAlerts();
 
@@ -226,139 +122,52 @@ export default function Dashboard() {
 
   }
 
-
-  //------------------------------------------------------
-  // Render
-  //------------------------------------------------------
-
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        background: "#0B0D10"
-      }}
-    >
 
-      <Header
-        time={clock.time}
-      />
+    <Box sx={{ minHeight: "100vh", bgcolor: tokens.ground }}>
 
-      <Paper
-        elevation={2}
-        sx={{
-          p: 4,
-          m: 3,
-          borderRadius: 4
-        }}
-      >
+      <Header time={clock.time} />
 
+      <Box sx={{ maxWidth: 1600, mx: "auto", px: 3, py: 2.5, display: "flex", flexWrap: "wrap", gap: 2.5, alignItems: "flex-start" }}>
 
-        {/*================================================*/}
-        {/* PAGE HEADER */}
-        {/*================================================*/}
+        <Box component="main" sx={{ flex: "999 1 560px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2.5 }}>
 
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 4
-          }}
-        >
+          <DashboardStats {...alertStats(alerts, now)} />
 
-          <Box>
+          <AlertBoard
+            alerts={alerts}
+            now={now}
+            onAcknowledge={handleAcknowledge}
+            onResolve={handleResolve}
+            onCancel={handleCancel}
+          />
 
-            <Typography
-              variant="h3"
-              sx={{
-                fontWeight: "bold"
-              }}
-            >
-              Production Response Center
-            </Typography>
-
-            <Typography
-              variant="h6"
-              sx={{
-                color: "text.secondary"
-              }}
-            >
-              Live Manufacturing Alerts
-            </Typography>
-
-          </Box>
-
-
-          <Box
-            sx={{
-              textAlign: "right"
-            }}
-          >
-
-            <Typography
-              variant="h2"
-              sx={{
-                color: "error.main",
-                fontWeight: "bold"
-              }}>
-              {alerts.length}
-            </Typography>
-
-            <Typography
-              sx={{
-                color: "text.secondary"
-              }}
-            >
-              Active Alerts
-            </Typography>
-
-          </Box>
+          <NeedsNotePanel responder={actingAs} />
 
         </Box>
 
+        <Box component="aside" sx={{ flex: "1 1 300px" }}>
+          <ResponderPanel team={team} actingAs={actingAs} setActingAs={setActingAs} />
+        </Box>
 
-        {/*================================================*/}
-        {/* DASHBOARD STATS */}
-        {/*================================================*/}
-
-        <DashboardStats
-          alerts={alerts}
-        />
-
-
-        {/*================================================*/}
-        {/* ALERT LIST */}
-        {/*================================================*/}
-
-        <AlertList
-          alerts={alerts}
-          responseTeamMember={selectedResponder}
-          responseTeam={responseTeam}
-          onResolve={handleResolve}
-          onCancel={handleCancel}
-          onAcknowledge={handleAcknowledge}
-        />
-
-
-      </Paper>
-
-      <NeedsNotePanel responder={selectedResponder} />
+      </Box>
 
       <ResolveDialog
         alert={resolving}
-        responder={selectedResponder}
+        responder={actingAs}
         onClose={() => setResolving(null)}
         onResolve={submitResolve}
       />
 
       <CancelDialog
         alert={cancelling}
-        responder={selectedResponder}
+        responder={actingAs}
         onClose={() => setCancelling(null)}
         onCancel={submitCancel}
       />
 
     </Box>
+
   );
 
 }

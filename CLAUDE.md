@@ -194,12 +194,12 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 15 | Admin Delete erased production lines and responders for good (a deleted line orphaned its work centers) | Delete now **archives** (`archived_at`, migration `0005`): hidden from the tablet, wallboard, pickers and Admin lists; refused (409) while the line or responder has open alerts; **Archived** list with Restore in Admin (`ArchivedList.jsx`). Work centers stay with an archived line and return with it. A new line can't reuse an archived line's name. `PRAGMA foreign_keys` stays off by decision (option A, Oct 29 2026) (fix-15) |
 | 27 | Telegram calls sometimes failed ~0.25 s in ("connect ETIMEDOUT …; ENETUNREACH 2001:…"): Node tries IPv4 for 250 ms, then IPv6, which Railway lacks. Alert #72 (Oct 29) never reached Telegram; Acknowledge pop-ups failed Oct 28 and 29 | `services/network.js`: IPv4 gets 2 s (`setDefaultAutoSelectFamilyAttemptTimeout`) and is tried first (`ipv4first`), for fetch and axios alike. `sendTelegram` (new alert) retries once after 2 s, only when the connection itself failed (`isConnectError`), so it can't double-post (fix-27) |
 | 28 | Tablet CANCEL REQUEST recorded no reason | Tablet asks "Why cancel this … alert?" with one-tap reasons **Pressed by mistake / Problem cleared itself / Test / Other** (Other = short text) and **Keep alert open** (`TabletCancelDialog.jsx`, labels approved Oct 29 2026); stored as "Cancelled by Operator (tablet): <reason>". A failed cancel keeps the alert screen up with a red reason. Backend still accepts a cancel without a reason (old tablets until they reload) (feat-tablet-cancel-reason) |
+| 29 | `/dashboard` stat tiles showed no numbers and its alert cards no elapsed time (wrong props to `DashboardStats`; `AlertList` never passed `elapsed`) | E3: both pages use `utils/alertTime.js` (`alertStats`, `elapsed`) and the shared `AlertBoard` (e3-response-dashboard) |
+| 30 | `/dashboard` had no responder picker: Acknowledge, Resolve and Cancel were always recorded under the first person on the team list | E3: "Acting as" picker on both pages (`ResponderPanel.jsx`, `hooks/useResponseTeam.js`); the choice is remembered per browser (`localStorage` `actingAs`); team availability refreshes every 30 s (e3-response-dashboard) |
 
 ### Open
 
-| # | Defect | Location |
-|---|---|---|
-| 29 | `/dashboard` stat tiles show no numbers and its alert cards no elapsed time: it passes `alerts` to `DashboardStats` (which expects `active`, `waiting`, …) and `AlertList` never passes `elapsed`. `/supervisor` is correct. Fix planned in E3 | `pages/Dashboard.jsx`, `components/AlertList.jsx` |
+None.
 
 The dead work-center delete icon in Admin → Production Lines was removed (Director, Oct 29 2026); work centers are set inactive instead.
 

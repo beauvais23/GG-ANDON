@@ -1,26 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import {
-  Box,
-  Paper,
-  Stack,
-  Typography,
-  Chip,
-  Button
-} from "@mui/material";
-
-import { Link } from "react-router-dom";
+import { Box, Button } from "@mui/material";
 
 import Header from "../components/Header";
 import DashboardStats from "../components/DashboardStats";
-import ActiveAlertCard from "../components/ActiveAlertCard";
-import ResponderSelector from "../components/ResponderSelector";
-import ResponseTeamPanel from "../components/ResponseTeamPanel";
+import AlertBoard from "../components/AlertBoard";
+import ResponderPanel from "../components/ResponderPanel";
 import ResolveDialog from "../components/ResolveDialog";
 import NeedsNotePanel from "../components/NeedsNotePanel";
 import CancelDialog from "../components/CancelDialog";
 
 import useClock from "../hooks/useClock";
+import useResponseTeam from "../hooks/useResponseTeam";
 
 import {
   getActiveAlerts,
@@ -29,8 +20,13 @@ import {
   cancelAlert
 } from "../services/api";
 
-import alertTypes from "../config/alertTypes";
-import { getResponseTeam } from "../api/responseTeam";
+import { alertStats, isCritical } from "../utils/alertTime";
+import { labelSx, tokens } from "../theme/theme";
+
+//------------------------------------------------------
+// Response Center (/supervisor), restyled in E3 to the
+// approved mockup. Alarm, sound and polling unchanged.
+//------------------------------------------------------
 
 export default function ProductionResponseCenter() {
 
@@ -39,9 +35,10 @@ export default function ProductionResponseCenter() {
   const [alerts, setAlerts] = useState([]);
   const [resolving, setResolving] = useState(null);
   const [cancelling, setCancelling] = useState(null);
-const [responseTeam, setResponseTeam] = useState([]);
-const [selectedResponder, setSelectedResponder] = useState("");
-const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedType, setSelectedType] = useState("ALL");
+  const [now, setNow] = useState(() => Date.now());
+
+  const { team, actingAs: selectedResponder, setActingAs } = useResponseTeam();
 
 const previousAlertIds = useRef(new Set());
 const audioContextRef = useRef(null);
@@ -97,45 +94,9 @@ useEffect(() => {
 
 useEffect(() => {
 
-  const timer = setInterval(() => {
-
-    setAlerts(current => [...current]);
-
-  }, 1000);
+  const timer = setInterval(() => setNow(Date.now()), 1000);
 
   return () => clearInterval(timer);
-
-}, []);
-
-//--------------------------------------------------------
-// Response Team
-//--------------------------------------------------------
-
-useEffect(() => {
-
-  async function loadTeam() {
-
-    try {
-
-      const team = await getResponseTeam();
-
-      setResponseTeam(team);
-
-      if (team.length > 0) {
-
-        setSelectedResponder(team[0].name);
-
-      }
-
-    } catch (err) {
-
-      console.error(err);
-
-    }
-
-  }
-
-  loadTeam();
 
 }, []);
 
@@ -189,47 +150,6 @@ useEffect(() => {
   };
 
 }, []);
-
-//--------------------------------------------------------
-// Helpers
-//--------------------------------------------------------
-
-function elapsed(requested) {
-
-  const seconds = Math.max(
-    0,
-    Math.floor((Date.now() - Number(requested)) / 1000)
-  );
-
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-
-  if (h > 0) {
-
-    return `${h}:${m.toString().padStart(2, "0")}:${s
-      .toString()
-      .padStart(2, "0")}`;
-
-  }
-
-  return `${m.toString().padStart(2, "0")}:${s
-    .toString()
-    .padStart(2, "0")}`;
-
-}
-
-//--------------------------------------------------------
-// Critical Alert Helper
-//--------------------------------------------------------
-
-function isCritical(requested) {
-
-  return (
-    (Date.now() - Number(requested)) / 1000 >= 600
-  );
-
-}
 
 //--------------------------------------------------------
 // Audible Alarm
@@ -396,8 +316,8 @@ async function loadAlerts() {
 
     data.sort((a, b) => {
 
-      const aCritical = isCritical(a.requested);
-      const bCritical = isCritical(b.requested);
+      const aCritical = isCritical(a);
+      const bCritical = isCritical(b);
 
       if (aCritical !== bCritical) {
 
@@ -478,58 +398,10 @@ async function loadAlerts() {
 }
 
   //--------------------------------------------------------
-  // Dashboard Stats
+  // Status strip
   //--------------------------------------------------------
 
-  const filteredAlerts = useMemo(() => {
-
-    if (selectedType === "ALL") return alerts;
-
-    return alerts.filter(
-      a => a.type === selectedType
-    );
-
-  }, [alerts, selectedType]);
-
-  const activeCount = alerts.length;
-
-  const waitingCount =
-    alerts.filter(a => a.status === "ACTIVE").length;
-
-  const acknowledgedCount =
-    alerts.filter(a => a.status === "ACKNOWLEDGED").length;
-
-  const oldestAlert =
-    alerts.length
-      ? elapsed(alerts[0].requested)
-      : "00:00";
-
-  const averageAge = (() => {
-
-    if (!alerts.length) return "00:00";
-
-    const totalSeconds = alerts.reduce((sum, alert) => {
-
-      return (
-        sum +
-        Math.floor(
-          (Date.now() - Number(alert.requested)) / 1000
-        )
-
-      );
-
-    }, 0);
-
-    const avg = Math.floor(totalSeconds / alerts.length);
-
-    const mins = Math.floor(avg / 60);
-    const secs = avg % 60;
-
-    return `${mins.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
-
-  })();
+  const stats = alertStats(alerts, now);
 
   //--------------------------------------------------------
   // Actions
@@ -584,497 +456,76 @@ async function loadAlerts() {
 
   }
 
+  function toggleSilence() {
+
+    const silenced = !alarmSilenced;
+
+    alarmSilencedRef.current = silenced;
+    setAlarmSilenced(silenced);
+
+  }
+
   //--------------------------------------------------------
   // Render
   //--------------------------------------------------------
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        bgcolor: "#0B0D10"
-      }}
-    >
+
+    <Box sx={{ minHeight: "100vh", bgcolor: tokens.ground }}>
 
       <Header time={clock.time} />
 
-      <Box
-        sx={{
-          maxWidth: 1800,
-          mx: "auto",
-          p: 3
-        }}
-      >
+      <Box sx={{ maxWidth: 1600, mx: "auto", px: 3, py: 2.5, display: "flex", flexDirection: "column", gap: 2.5 }}>
 
-        {/*================================================*/}
-        {/* PAGE HEADER */}
-        {/*================================================*/}
+        {/* Connection and sound */}
+        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2 }}>
 
-        <Paper
-  elevation={3}
-  sx={{
-    mb: 3,
-    p: 3,
-    borderRadius: 4,
-    background:
-      "linear-gradient(135deg,#1E293B,#334155)",
-    color: "white"
-  }}
->
-
-  <Box>
-
-    <Stack
-      direction="row"
-      sx={{
-        justifyContent: "space-between",
-        alignItems: "flex-start"
-      }}>
-
-      <Box>
-
-        <Typography
-          variant="h3"
-          sx={{
-            fontWeight: 800
-          }}
-        >
-          Production Response Center
-        </Typography>
-
-        <Typography
-          sx={{
-            mt: 0.5,
-            opacity: 0.85,
-            mb: 3
-          }}
-        >
-          Live Manufacturing Incident Dashboard
-        </Typography>
-
-      </Box>
-
-      <Stack
-        spacing={1}
-        sx={{
-          alignItems: "flex-end"
-        }}
-      >
-
-        <Stack
-  direction="row"
-  spacing={1}
-  sx={{
-    alignItems: "center"
-  }}
->
-
-  <Chip
-    color={serverOnline ? "success" : "error"}
-    label={
-      serverOnline
-        ? "SYSTEM ONLINE"
-        : "SERVER OFFLINE"
-    }
-    sx={{
-      fontWeight: 700
-    }}
-  />
-
-  {!soundEnabled && (
-
-    <Button
-      variant="contained"
-      color="warning"
-      size="small"
-      onClick={enableSound}
-      sx={{
-        fontWeight: 700
-      }}
-    >
-      ENABLE SOUND
-    </Button>
-
-  )}
-
-  {soundEnabled && (
-
-    <Button
-      variant="outlined"
-      color="inherit"
-      size="small"
-      onClick={() => {
-
-  const newValue = !alarmSilenced;
-
-  alarmSilencedRef.current = newValue;
-
-  setAlarmSilenced(newValue);
-
-}}
-      sx={{
-        fontWeight: 700,
-        borderColor: "rgba(255,255,255,.5)",
-        color: "white"
-      }}
-    >
-      {alarmSilenced
-        ? "🔇 ALARM SILENCED"
-        : "🔊 SILENCE ALARM"}
-    </Button>
-
-  )}
-
-  
-
-</Stack>
-
-        <Stack
-          direction="row"
-          spacing={1}
-        >
-
-          <Button
-            component={Link}
-            to="/"
-            variant="contained"
-            color="warning"
-            size="small"
-            sx={{
-              height: 34,
-              minWidth: 105,
-              borderRadius: 2,
-              fontWeight: 700,
-              textTransform: "none"
-            }}
-          >
-            Operator
-          </Button>
-
-          <Button
-            component={Link}
-            to="/wallboard"
-            variant="contained"
-            size="small"
-            sx={{
-              height: 34,
-              minWidth: 105,
-              borderRadius: 2,
-              fontWeight: 700,
-              textTransform: "none"
-            }}
-          >
-            Wallboard
-          </Button>
-
-          <Button
-            component={Link}
-            to="/executive"
-            variant="contained"
-            color="secondary"
-            size="small"
-            sx={{
-              height: 34,
-              minWidth: 115,
-              borderRadius: 2,
-              fontWeight: 700,
-              textTransform: "none"
-            }}
-          >
-            Executive
-          </Button>
-
-        </Stack>
-
-      </Stack>
-
-    </Stack>
-
-  </Box>
-
-</Paper>
-
-        {/*================================================*/}
-        {/* MAIN LAYOUT */}
-        {/*================================================*/}
-
-        <Stack
-          direction="row"
-          spacing={3}
-          sx={{
-            alignItems: "flex-start"
-          }}
-        >
-
-          {/* LEFT COLUMN */}
-
-          <Box sx={{ flex: 1 }}>
-
-            <DashboardStats
-              active={activeCount}
-              waiting={waitingCount}
-              acknowledged={acknowledgedCount}
-              oldest={oldestAlert}
-              average={averageAge}
-            />
-
-            {/*================================================*/}
-            {/* FILTERS */}
-            {/*================================================*/}
-
-            <Paper
-              elevation={3}
-              sx={{
-                mt: 3,
-                p: 2.5,
-                borderRadius: 4
-              }}
-            >
-
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  mb: 2
-                }}>
-                Active Alert Filters
-              </Typography>
-
-              <Stack
-  direction="row"
-  spacing={1}
-  useFlexGap
-  sx={{
-    flexWrap: "wrap"
-  }}
->
-
-                {[
-                  "ALL",
-                  ...Object.keys(alertTypes)
-                ].map(type => (
-
-                  <Chip
-                    key={type}
-                    clickable
-                    label={type}
-                    color={
-                      selectedType === type
-                        ? "primary"
-                        : "default"
-                    }
-                    onClick={() =>
-                      setSelectedType(type)
-                    }
-                    sx={{
-                      height: 36,
-                      px: 1.5,
-                      fontWeight: 700
-                    }}
-                  />
-
-                ))}
-
-              </Stack>
-
-            </Paper>
-
-            {/*================================================*/}
-            {/* ACTIVE ALERTS */}
-            {/*================================================*/}
-
-            <Paper
-              elevation={3}
-              sx={{
-                mt: 3,
-                p: 3,
-                borderRadius: 4
-              }}
-            >
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto 1fr",
-                  alignItems: "center",
-                  mb: 3
-                }}
-              >
-
-                <Typography
-                  variant="h5"
-                  sx={{
-                    fontWeight: 700
-                  }}
-                >
-                  Active Manufacturing Alerts
-                </Typography>
-
-                <Chip
-                  color="error"
-                  label={`${filteredAlerts.length} ACTIVE`}
-                  sx={{
-                    fontWeight: 700
-                  }}
-                />
-
-                <Box />
-
-              </Box>
-
-              {filteredAlerts.length === 0 ? (
-
-                <Box
-                  sx={{
-                    py: 10,
-                    textAlign: "center"
-                  }}
-                >
-
-                  <Typography
-                    variant="h6"
-                    sx={{
-                      color: "text.secondary"
-                    }}
-                  >
-                    No Active Manufacturing Alerts
-                  </Typography>
-
-                </Box>
-
-              ) : (
-
-                <Stack spacing={2.5}>
-
-                  {filteredAlerts.map(alert => (
-
-                    <ActiveAlertCard
-                      key={alert.id}
-                      alert={alert}
-                      elapsed={elapsed(alert.requested)}
-                      onAcknowledge={() =>
-                        handleAcknowledge(alert.id)
-                      }
-                      onResolve={() =>
-                        handleResolve(alert.id)
-                      }
-                      onCancel={() =>
-                        handleCancel(alert.id)
-                      }
-                    />
-
-                  ))}
-
-                </Stack>
-
-              )}
-
-            </Paper>
-
+          <Box sx={{ ...labelSx, display: "flex", alignItems: "center", gap: 1, color: serverOnline ? tokens.muted : "#FF8A80" }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: serverOnline ? tokens.online : "#FF6B61", boxShadow: `0 0 6px ${serverOnline ? tokens.online : "#FF6B61"}` }} />
+            {serverOnline ? "Live · refresh 5 s" : "Server offline: alerts not updating"}
           </Box>
-          {/*================================================*/}
-          {/* RIGHT COLUMN */}
-          {/*================================================*/}
 
-          <Box
-            sx={{
-              width: 340,
-              flexShrink: 0,
-              position: "sticky",
-              top: 16
-            }}
-          >
+          <Box sx={{ flexGrow: 1 }} />
 
-            <Paper
-              elevation={3}
-              sx={{
-                p: 2.5,
-                borderRadius: 4,
-                mb: 2
-              }}
-            >
+          {!soundEnabled && (
+            <Button variant="outlined" onClick={enableSound} sx={{ color: "#F2C232", borderColor: "#5C4A12" }}>
+              Enable sound
+            </Button>
+          )}
 
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  mb: 2
-                }}>
-                Active Responder
-              </Typography>
+          {soundEnabled && (
+            <Button variant="outlined" color="inherit" onClick={toggleSilence} aria-pressed={alarmSilenced}>
+              {alarmSilenced ? "Alarm silenced: turn on" : "Silence alarm"}
+            </Button>
+          )}
 
-              <ResponderSelector
-                responder={selectedResponder}
-                setResponder={setSelectedResponder}
-                responseTeam={responseTeam}
-              />
+        </Box>
 
-            </Paper>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2.5, alignItems: "flex-start" }}>
 
-            <ResponseTeamPanel
-              responseTeam={responseTeam}
+          <Box component="main" sx={{ flex: "999 1 560px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2.5 }}>
+
+            <DashboardStats {...stats} />
+
+            <AlertBoard
+              alerts={alerts}
+              now={now}
+              filter={selectedType}
+              onFilter={setSelectedType}
+              onAcknowledge={handleAcknowledge}
+              onResolve={handleResolve}
+              onCancel={handleCancel}
             />
+
+            <NeedsNotePanel responder={selectedResponder} />
 
           </Box>
 
-        </Stack>
+          <Box component="aside" sx={{ flex: "1 1 300px" }}>
+            <ResponderPanel team={team} actingAs={selectedResponder} setActingAs={setActingAs} />
+          </Box>
 
-        <NeedsNotePanel responder={selectedResponder} />
-
-        {/*================================================*/}
-        {/* FOOTER STATUS */}
-        {/*================================================*/}
-
-        <Paper
-          elevation={2}
-          sx={{
-            mt: 3,
-            p: 2,
-            borderRadius: 4
-          }}
-        >
-
-          <Stack
-            direction="row"
-            sx={{
-              justifyContent: "space-between",
-              alignItems: "center"
-            }}>
-
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{
-                alignItems: "center"
-              }}
-            >
-
-              <Box
-                sx={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: "50%",
-                  bgcolor: "#43A047"
-                }}
-              />
-
-              <Typography sx={{
-                fontWeight: 600
-              }}>
-                Connected to ManufacturingOS
-              </Typography>
-
-            </Stack>
-
-            <Typography sx={{
-              color: "text.secondary"
-            }}>
-              Auto Refresh Every 5 Seconds
-            </Typography>
-
-          </Stack>
-
-        </Paper>
+        </Box>
 
       </Box>
 
@@ -1093,6 +544,7 @@ async function loadAlerts() {
       />
 
     </Box>
+
   );
 
-}              
+}

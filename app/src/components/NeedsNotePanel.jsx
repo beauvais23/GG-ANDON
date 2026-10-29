@@ -2,16 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
     Box,
-    Button,
-    Chip,
-    Paper,
-    Stack,
-    Typography
+    Button
 } from "@mui/material";
 
 import EditNoteIcon from "@mui/icons-material/EditNote";
 
 import ResolveDialog from "./ResolveDialog";
+
+import { ALERT_COLORS, FALLBACK_COLOR } from "../config/alertColors";
+import { tokens } from "../theme/theme";
 
 import {
     addAlertNote,
@@ -90,62 +89,53 @@ export default function NeedsNotePanel({ responder }) {
 
     return (
 
-        <Paper
-            elevation={2}
-            sx={{ mt: 3, p: 3, borderRadius: 4 }}
-        >
+        <Box component="section" aria-label="Needs a resolution note" sx={{ bgcolor: tokens.panel, border: `1px solid ${tokens.line}` }}>
 
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>
+            <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, px: 2.25, py: 1.75, borderBottom: `1px solid ${tokens.line}` }}>
 
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-
+                <Box component="h2" sx={{ m: 0, fontFamily: tokens.display, fontWeight: 700, fontSize: 20, letterSpacing: "2px", textTransform: "uppercase" }}>
                     Needs a resolution note
+                </Box>
 
-                </Typography>
+                <Box component="span" sx={{ fontFamily: tokens.mono, fontSize: 13, px: 1, py: 0.25, color: "#F2C232", bgcolor: "#3D2E06", border: "1px solid #5C4A12" }}>
+                    {alerts.length}
+                </Box>
 
-                <Chip label={alerts.length} color="warning" size="small" />
+                <Box component="span" sx={{ color: tokens.muted, fontSize: 14 }}>
+                    Resolved from Telegram, which can't take a note. Add what fixed it.
+                </Box>
 
             </Box>
 
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {alerts.map(alert => {
 
-                Resolved from Telegram, which can't take a note. Add what fixed it.
+                const colors = ALERT_COLORS[alert.type] || FALLBACK_COLOR;
 
-            </Typography>
-
-            <Stack spacing={1}>
-
-                {alerts.map(alert => (
+                return (
 
                     <Box
                         key={alert.id}
                         sx={{
                             display: "flex",
+                            flexWrap: "wrap",
                             alignItems: "center",
                             justifyContent: "space-between",
-                            gap: 2,
-                            px: 2,
-                            py: 1.25,
-                            borderRadius: 2,
-                            bgcolor: "action.hover"
+                            gap: "12px 24px",
+                            px: 2.25,
+                            py: 2,
+                            borderLeft: `6px solid ${colors.edge}`,
+                            borderBottom: `1px solid ${tokens.line}`
                         }}
                     >
 
                         <Box>
-
-                            <Typography sx={{ fontWeight: 600 }}>
-
+                            <Box sx={{ fontWeight: 600 }}>
                                 #{alert.id} · {alert.type} · {alert.production_line} / {alert.work_center}
-
-                            </Typography>
-
-                            <Typography variant="body2" color="text.secondary">
-
+                            </Box>
+                            <Box sx={{ fontSize: 14, color: tokens.muted }}>
                                 Resolved {resolvedAt(alert.resolved)}
                                 {alert.resolved_by ? ` by ${alert.resolved_by}` : ""}
-
-                            </Typography>
-
+                            </Box>
                         </Box>
 
                         <Button
@@ -153,18 +143,16 @@ export default function NeedsNotePanel({ responder }) {
                             color="warning"
                             startIcon={<EditNoteIcon />}
                             onClick={() => setEditing(alert)}
-                            sx={{ flexShrink: 0 }}
+                            sx={{ flexShrink: 0, height: 44, fontSize: 16, letterSpacing: "2px" }}
                         >
-
                             Add note
-
                         </Button>
 
                     </Box>
 
-                ))}
+                );
 
-            </Stack>
+            })}
 
             <ResolveDialog
                 alert={editing}
@@ -176,7 +164,7 @@ export default function NeedsNotePanel({ responder }) {
                 savingLabel="Saving…"
             />
 
-        </Paper>
+        </Box>
 
     );
 
