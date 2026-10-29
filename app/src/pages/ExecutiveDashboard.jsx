@@ -19,6 +19,7 @@ import Header from "../components/Header";
 import useClock from "../hooks/useClock";
 import { getExecutiveDashboard } from "../services/api";
 import { labelSx, tokens } from "../theme/theme";
+import { alertLabel } from "../config/alertColors";
 
 //------------------------------------------------------
 // Executive Dashboard (E4). KPI strip, then four
@@ -162,7 +163,7 @@ export default function ExecutiveDashboard() {
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={pareto} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                                 <CartesianGrid stroke={GRID} vertical={false} />
-                                <XAxis dataKey="type" tick={AXIS} axisLine={{ stroke: tokens.line }} tickLine={false} />
+                                <XAxis dataKey="type" tick={AXIS} axisLine={{ stroke: tokens.line }} tickLine={false} tickFormatter={alertLabel} />
                                 <YAxis allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
                                 <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<DarkTooltip unit="alerts" />} />
                                 <Bar dataKey="total" fill={tokens.blue} radius={[4, 4, 0, 0]} maxBarSize={48} />

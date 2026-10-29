@@ -5,7 +5,7 @@ import { Box } from "@mui/material";
 import Header from "../components/Header";
 import useClock from "../hooks/useClock";
 import { getActiveAlerts } from "../services/api";
-import { ALERT_COLORS, FALLBACK_COLOR } from "../config/alertColors";
+import { ALERT_COLORS, FALLBACK_COLOR, alertLabel } from "../config/alertColors";
 import { ageSeconds, alertStats, elapsed } from "../utils/alertTime";
 import { labelSx, tokens } from "../theme/theme";
 
@@ -174,7 +174,7 @@ export default function Wallboard() {
 
                 <Box sx={{ display: "flex", alignItems: "baseline", gap: 2 }}>
                   <Box component="span" sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: 44, letterSpacing: "2px", color: colors.edge, lineHeight: 1 }}>
-                    {alert.type}
+                    {alertLabel(alert.type)}
                   </Box>
                   <Box component="span" sx={{ fontFamily: tokens.mono, fontSize: 20, color: tokens.muted }}>#{alert.id}</Box>
                 </Box>

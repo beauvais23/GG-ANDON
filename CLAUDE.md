@@ -134,6 +134,7 @@ Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET wit
 ## Locked decisions
 
 - **Event types (7):** Downtime, Quality, Material Shortage, Maintenance/Equipment, Safety, Near Miss, Supervisor Assist.
+  Codes (Option B, Oct 29 2026): `QUALITY`, `MAINTENANCE`, `MATERIAL`, `SUPERVISOR`, `SAFETY`, `DOWNTIME`, `NEAR_MISS` (`server/services/alertTypes.js`; anything else is refused at create; shown as "NEAR MISS"). Tablet: five big buttons + DOWNTIME / NEAR MISS beside the station chips.
   Existing `SUPERVISOR` alerts map to Supervisor Assist; `QUALITY`, `MAINTENANCE`, `MATERIAL`, and `SAFETY` map to their counterparts.
 - **Roles for routing:** Production Lead (per line group), Production Manager, Manufacturing Manager, Director of Manufacturing,
   Leadership (VP Engineering, President), CI and Safety Specialist, Procurement, Warehouse Manager, Inventory and Controls, Engineering.

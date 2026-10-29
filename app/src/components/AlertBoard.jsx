@@ -3,13 +3,14 @@ import { Box, ButtonBase } from "@mui/material";
 import ActiveAlertCard from "./ActiveAlertCard";
 import { elapsed } from "../utils/alertTime";
 import { tokens } from "../theme/theme";
+import { alertLabel } from "../config/alertColors";
 
 //------------------------------------------------------
 // Open alerts as rows, with optional type filters (E3).
 // Used by the Response Center and the Dashboard.
 //------------------------------------------------------
 
-const TYPES = ["ALL", "QUALITY", "MAINTENANCE", "MATERIAL", "SUPERVISOR", "SAFETY"];
+const TYPES = ["ALL", "QUALITY", "MAINTENANCE", "MATERIAL", "SUPERVISOR", "SAFETY", "DOWNTIME", "NEAR_MISS"];
 
 function Filter({ type, selected, onSelect }) {
 
@@ -30,7 +31,7 @@ function Filter({ type, selected, onSelect }) {
                 border: `1px solid ${selected ? tokens.blueText : tokens.lineStrong}`
             }}
         >
-            {type.toLowerCase()}
+            {alertLabel(type).toLowerCase()}
         </ButtonBase>
 
     );

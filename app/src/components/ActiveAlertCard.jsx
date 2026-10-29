@@ -1,6 +1,6 @@
 import { Box, Button } from "@mui/material";
 
-import { ALERT_COLORS, FALLBACK_COLOR } from "../config/alertColors";
+import { ALERT_COLORS, FALLBACK_COLOR, alertLabel } from "../config/alertColors";
 import { isCritical } from "../utils/alertTime";
 import { labelSx, tokens } from "../theme/theme";
 
@@ -54,7 +54,7 @@ export default function ActiveAlertCard({
 
         <Box
             component="article"
-            aria-label={`${alert.type} alert #${alert.id}`}
+            aria-label={`${alertLabel(alert.type)} alert #${alert.id}`}
             sx={{
                 // Fixed columns on wide screens so rows line up;
                 // wraps on narrower ones.
@@ -73,7 +73,7 @@ export default function ActiveAlertCard({
             <Box sx={{ flex: "1 1 200px", minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 }}>
                 <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5 }}>
                     <Box component="span" sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: 26, letterSpacing: "2px", color: colors.edge }}>
-                        {alert.type}
+                        {alertLabel(alert.type)}
                     </Box>
                     <Box component="span" sx={{ fontFamily: tokens.mono, fontSize: 13, color: tokens.muted }}>
                         #{alert.id}
