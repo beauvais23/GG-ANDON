@@ -11,7 +11,7 @@ Read this file fully before changing anything.
    Claude never opens, merges or pushes to `react-v2`, and never changes the Railway **production** environment (deploys, variables, settings).
    Claude **may merge PRs into `staging`** after the Director of Manufacturing replies "approved" on that PR (approval Oct 28 2026). For promotions, Claude prepares a pre-filled `react-v2`...`staging` compare link; the Director creates and merges that PR.
 2. Production deploys may happen during shift hours (Mon–Thu 6:00–16:30 ET). **Standing approval from the Director of Manufacturing, Oct 28 2026**; no per-release approval is needed.
-   A redeploy still causes a short backend outage (about 35 s, Oct 27), so for an in-shift release Claude states the cost first (outage, floor-visible changes, age of the newest backup) and recommends the lunch break (11:00–11:30) or 16:45 ET or later. See "Promotion pre-flight".
+   **Mid-shift is the default (Director, Oct 29 2026):** Claude no longer recommends waiting for lunch or 16:45 ET unless the Director says not to deploy mid-shift for a given release. A redeploy still causes a short backend outage (about 35 s, Oct 27), so for an in-shift release Claude still states the cost (outage, floor-visible changes, age of the newest backup). See "Promotion pre-flight".
    This rule is about *when*. Who merges is unchanged by it: see hard rule 1.
 3. No secrets in code, commits, logs, or test fixtures. Env vars are referenced by name only.
 4. No real people's names in committed code or seed files. People, roles, and Slack IDs are entered through the Admin UI per environment.
@@ -87,7 +87,7 @@ The Railway plan has **no volume backups** (Hobby). Backups are written to the s
 
 1. All tests pass on the staging tip (green CI ✓ on the latest `staging` commit); staging deploy logs are clean.
 2. **Every required production variable for this release exists in Railway production before the merge**, and the staged-changes banner is gone. Check the table above for anything new in this release.
-3. Timing: any time (hard rule 2, standing approval). In-shift: warn the floor first and prefer the lunch break (11:00–11:30); otherwise 16:45 ET or later. Write "In-shift deploy (standing approval)" in the PR description when merging during a shift.
+3. Timing: any time, mid-shift included, unless the Director says otherwise for that release (hard rule 2). In-shift: warn the floor first. Write "In-shift deploy (standing approval)" in the PR description when merging during a shift.
 4. Watch the backend log for: `Database backup … before-NNNN` (if migrations), `Migration applied`, `Notifications Enabled`, `Telegram webhook configured`.
 5. Download the new `before-NNNN` backup from `/admin` → Backups to Drive.
 6. Smoke test **on the production URL** (not staging, which never notifies): tablet alert → Telegram + Chat delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (tablet CANCEL REQUEST, or CANCEL on `/supervisor` with a reason; cancelled alerts are excluded from MTTR).
