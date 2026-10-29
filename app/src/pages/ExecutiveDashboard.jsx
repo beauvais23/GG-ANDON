@@ -1,14 +1,6 @@
 import { useEffect, useState } from "react";
 
-import {
-    Box,
-    Grid,
-    Paper,
-    Stack,
-    Typography,
-    Chip,
-    Divider
-} from "@mui/material";
+import { Box } from "@mui/material";
 
 import {
     ResponsiveContainer,
@@ -25,8 +17,74 @@ import {
 
 import Header from "../components/Header";
 import useClock from "../hooks/useClock";
-
 import { getExecutiveDashboard } from "../services/api";
+import { labelSx, tokens } from "../theme/theme";
+
+//------------------------------------------------------
+// Executive Dashboard (E4). KPI strip, then four
+// single-series charts: one color each (G&G blue), no
+// legend (the title names the series), recessive grid,
+// dark tooltip. Times are working minutes (#18); the
+// dashed line is the 2-minute acknowledge target.
+//------------------------------------------------------
+
+const ACK_TARGET_MIN = 2;
+const AXIS = { fill: tokens.muted, fontSize: 12, fontFamily: tokens.body };
+const GRID = "#1E242B";
+
+const minutes = seconds => Math.round((Number(seconds) || 0) / 6) / 10;
+
+function Kpi({ label, value, unit, note, noteColor }) {
+
+    return (
+
+        <Box sx={{ bgcolor: tokens.panel, px: 2.25, py: 2, borderRight: `1px solid ${tokens.line}`, borderBottom: `1px solid ${tokens.line}` }}>
+            <Box sx={{ ...labelSx, fontSize: 12 }}>{label}</Box>
+            <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, mt: 0.5 }}>
+                <Box component="span" sx={{ fontFamily: tokens.mono, fontSize: 36, lineHeight: 1.1 }}>{value}</Box>
+                {unit && <Box component="span" sx={{ fontSize: 14, color: tokens.muted }}>{unit}</Box>}
+            </Box>
+            {note && <Box sx={{ ...labelSx, fontSize: 11, mt: 0.5, color: noteColor }}>{note}</Box>}
+        </Box>
+
+    );
+
+}
+
+function ChartPanel({ title, subtitle, children, empty }) {
+
+    return (
+
+        <Box component="section" aria-label={title} sx={{ bgcolor: tokens.panel, border: `1px solid ${tokens.line}`, display: "flex", flexDirection: "column" }}>
+            <Box sx={{ px: 2.25, py: 1.5, borderBottom: `1px solid ${tokens.line}` }}>
+                <Box component="h2" sx={{ m: 0, fontFamily: tokens.display, fontWeight: 700, fontSize: 18, letterSpacing: "2px", textTransform: "uppercase" }}>{title}</Box>
+                {subtitle && <Box sx={{ fontSize: 13, color: tokens.muted }}>{subtitle}</Box>}
+            </Box>
+            <Box sx={{ height: 280, p: 1.5 }}>
+                {empty
+                    ? <Box sx={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: tokens.muted }}>No data yet</Box>
+                    : children}
+            </Box>
+        </Box>
+
+    );
+
+}
+
+function DarkTooltip({ active, payload, label, unit }) {
+
+    if (!active || !payload?.length) return null;
+
+    return (
+
+        <Box sx={{ bgcolor: tokens.raised, border: `1px solid ${tokens.lineStrong}`, px: 1.5, py: 1, fontSize: 13 }}>
+            <Box sx={{ color: tokens.muted }}>{label}</Box>
+            <Box sx={{ fontFamily: tokens.mono, color: tokens.text }}>{payload[0].value}{unit ? ` ${unit}` : ""}</Box>
+        </Box>
+
+    );
+
+}
 
 export default function ExecutiveDashboard() {
 
@@ -34,709 +92,127 @@ export default function ExecutiveDashboard() {
 
     const [dashboard, setDashboard] = useState(null);
 
-    async function loadDashboard() {
-
-        try {
-
-            const data = await getExecutiveDashboard();
-
-            setDashboard(data);
-
-        }
-
-        catch (err) {
-
-            console.error(err);
-
-        }
-
-    }
-
     useEffect(() => {
 
-        loadDashboard();
+        async function load() {
 
-        const timer = setInterval(loadDashboard,5000);
+            try {
+                setDashboard(await getExecutiveDashboard());
+            } catch (err) {
+                console.error(err);
+            }
+
+        }
+
+        load();
+
+        const timer = setInterval(load, 5000);
 
         return () => clearInterval(timer);
 
-    },[]);
+    }, []);
 
-    if (!dashboard) {
+    const k = dashboard?.kpis || {};
+    const ack = minutes(k.avgResponseSeconds);
+    const res = minutes(k.avgResolutionSeconds);
+    const onTarget = ack <= ACK_TARGET_MIN;
 
-        return (
+    const pareto = [...(dashboard?.pareto || [])].sort((a, b) => b.total - a.total);
+    const monthly = dashboard?.monthlyTrend || [];
+    const ackTrend = (dashboard?.responseTrend || []).map(r => ({ month: r.month, value: minutes(r.responseSeconds) }));
+    const resTrend = (dashboard?.resolutionTrend || []).map(r => ({ month: r.month, value: minutes(r.resolutionSeconds) }));
 
-            <Box
-                sx={{
-                    minHeight:"100vh",
-                    bgcolor:"#0B0D10"
-                }}
-            >
+    return (
 
-                <Header time={clock.time} />
+        <Box sx={{ minHeight: "100vh", bgcolor: tokens.ground }}>
 
-                <Box sx={{p:5}}>
+            <Header time={clock.time} />
 
-                    <Typography variant="h4">
+            <Box sx={{ maxWidth: 1600, mx: "auto", px: 3, py: 2.5, display: "flex", flexDirection: "column", gap: 2.5 }}>
 
-                        Loading Executive Dashboard...
+                {!dashboard && <Box sx={{ ...labelSx, fontSize: 16 }}>Loading…</Box>}
 
-                    </Typography>
+                <Box
+                    component="section"
+                    aria-label="Key numbers"
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))", lg: "repeat(6, minmax(0, 1fr))" },
+                        borderTop: `1px solid ${tokens.line}`,
+                        borderLeft: `1px solid ${tokens.line}`
+                    }}
+                >
+                    <Kpi label="Total alerts" value={k.totalAlerts ?? "–"} />
+                    <Kpi label="Open now" value={k.activeAlerts ?? "–"} />
+                    <Kpi label="Acknowledged" value={k.acknowledgedAlerts ?? "–"} />
+                    <Kpi label="Resolved" value={k.resolvedAlerts ?? "–"} />
+                    <Kpi
+                        label="Avg acknowledge"
+                        value={ack}
+                        unit="work min"
+                        note={onTarget ? `✓ At or under ${ACK_TARGET_MIN} min target` : `▲ Over ${ACK_TARGET_MIN} min target`}
+                        noteColor={onTarget ? "#5CC97A" : "#FF8A80"}
+                    />
+                    <Kpi label="Avg resolution (MTTR)" value={res} unit="work min" />
+                </Box>
+
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" }, gap: 2.5 }}>
+
+                    <ChartPanel title="Alerts by type" subtitle="All time, most frequent first" empty={!pareto.length}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={pareto} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                                <CartesianGrid stroke={GRID} vertical={false} />
+                                <XAxis dataKey="type" tick={AXIS} axisLine={{ stroke: tokens.line }} tickLine={false} />
+                                <YAxis allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<DarkTooltip unit="alerts" />} />
+                                <Bar dataKey="total" fill={tokens.blue} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </ChartPanel>
+
+                    <ChartPanel title="Alerts per month" subtitle="New York months" empty={!monthly.length}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={monthly} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                                <CartesianGrid stroke={GRID} vertical={false} />
+                                <XAxis dataKey="month" tick={AXIS} axisLine={{ stroke: tokens.line }} tickLine={false} />
+                                <YAxis allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<DarkTooltip unit="alerts" />} />
+                                <Bar dataKey="total" fill={tokens.blue} radius={[4, 4, 0, 0]} maxBarSize={48} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </ChartPanel>
+
+                    <ChartPanel title="Avg acknowledge time by month" subtitle={`Working minutes · dashed line = ${ACK_TARGET_MIN} min target`} empty={!ackTrend.length}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={ackTrend} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+                                <CartesianGrid stroke={GRID} vertical={false} />
+                                <XAxis dataKey="month" tick={AXIS} axisLine={{ stroke: tokens.line }} tickLine={false} />
+                                <YAxis tick={AXIS} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{ stroke: tokens.lineStrong }} content={<DarkTooltip unit="work min" />} />
+                                <ReferenceLine y={ACK_TARGET_MIN} stroke={tokens.muted} strokeDasharray="6 4" />
+                                <Line type="monotone" dataKey="value" stroke={tokens.blueText} strokeWidth={2} dot={{ r: 4, fill: tokens.blueText, stroke: tokens.panel, strokeWidth: 2 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </ChartPanel>
+
+                    <ChartPanel title="Avg resolution time (MTTR) by month" subtitle="Working minutes" empty={!resTrend.length}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={resTrend} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+                                <CartesianGrid stroke={GRID} vertical={false} />
+                                <XAxis dataKey="month" tick={AXIS} axisLine={{ stroke: tokens.line }} tickLine={false} />
+                                <YAxis tick={AXIS} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{ stroke: tokens.lineStrong }} content={<DarkTooltip unit="work min" />} />
+                                <Line type="monotone" dataKey="value" stroke={tokens.blueText} strokeWidth={2} dot={{ r: 4, fill: tokens.blueText, stroke: tokens.panel, strokeWidth: 2 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </ChartPanel>
 
                 </Box>
 
             </Box>
 
-        );
-
-    }
-
-    return (
-        <Box
-            sx={{
-                minHeight:"100vh",
-                bgcolor:"#0B0D10"
-            }}
-        >
-
-            <Header time={clock.time} />
-
-            <Box
-  sx={{
-    width: "100%",
-    maxWidth: "100%",
-    px: 4,
-    py: 3,
-    bgcolor: "#0B0D10"
-  }}
->
-
-{/* ======================================= */}
-{/* HERO HEADER                             */}
-{/* ======================================= */}
-
-<Paper
-    elevation={5}
-    sx={{
-        p: 2.5,
-        borderRadius: 3,
-        mb: 2.5,
-        background:
-            "linear-gradient(135deg,#1E3A8A,#312E81)",
-        color: "white"
-    }}
->
-
-    <Grid
-        container
-        sx={{
-            alignItems: "center"
-        }}
-    >
-
-        <Grid
-            size={{ xs: 12, md: 8 }}
-        >
-
-            <Typography
-                sx={{
-                    fontSize: 46,
-                    fontWeight: 800,
-                    lineHeight: 1.05
-                }}
-            >
-                Executive Operations Dashboard
-            </Typography>
-
-            <Typography
-                sx={{
-                    mt: 0.75,
-                    fontSize: 18,
-                    opacity: 0.9
-                }}
-            >
-                Live Manufacturing Performance Analytics
-            </Typography>
-
-        </Grid>
-
-
-        <Grid
-    size={{ xs: 12, md: 4 }}
-    sx={{
-        display: "flex",
-        justifyContent: {
-            xs: "flex-start",
-            md: "flex-end"
-        },
-        alignItems: "center"
-    }}
->
-    <Chip
-        label="SYSTEM ONLINE"
-        color="success"
-        size="medium"
-        sx={{
-            fontWeight: 700,
-            fontSize: 14,
-            px: 1,
-            py: 2.5
-        }}
-    />
-</Grid>
-
-    </Grid>
-
-</Paper>
-
-
-{/* ======================================= */}
-{/* KPI DASHBOARD                           */}
-{/* ======================================= */}
-
-<Grid
-    container
-    spacing={2}
-    sx={{
-        mb: 2.5
-    }}
->
-
-    {[
-        {
-            title: "TOTAL ALERTS",
-            value: dashboard.kpis.totalAlerts,
-            color: "#2563EB",
-            icon: "📊"
-        },
-
-        {
-            title: "ACTIVE ALERTS",
-            value: dashboard.kpis.activeAlerts,
-            color: "#DC2626",
-            icon: "🚨"
-        },
-
-        {
-            title: "ACKNOWLEDGED",
-            value: dashboard.kpis.acknowledgedAlerts,
-            color: "#16A34A",
-            icon: "✔"
-        },
-
-        {
-    title:"AVG ACKNOWLEDGE (WORK MIN)",
-    value:`${(
-        dashboard.kpis.avgResponseSeconds / 60
-    ).toFixed(1)} min`,
-    color:
-        dashboard.kpis.avgResponseSeconds <= 120
-            ? "#16A34A"
-            : "#DC2626",
-    icon:
-        dashboard.kpis.avgResponseSeconds <= 120
-            ? "⚡"
-            : "⚠️"
-},
-
-        {
-            title: "AVG RESOLUTION (WORK MIN)",
-            value: `${Math.round(
-                dashboard.kpis.avgResolutionSeconds / 60
-            )} min`,
-            color: "#8B5CF6",
-            icon: "⏱"
-        },
-
-        {
-            title: "SYSTEM STATUS",
-            value: "ONLINE",
-            color: "#10B981",
-            icon: "🟢"
-        }
-
-    ].map(card => (
-
-        <Grid
-            key={card.title}
-            size={{
-                xs: 12,
-                sm: 6,
-                lg: 2
-            }}
-        >
-
-            <Paper
-                elevation={4}
-                sx={{
-                    position: "relative",
-                    overflow: "hidden",
-                    borderRadius: 3,
-                    p: 1.5,
-                    height: 105,
-
-                    transition: ".2s",
-
-                    "&:hover": {
-                        transform: "translateY(-3px)",
-                        boxShadow: 7
-                    }
-                }}
-            >
-
-                {/* Accent Bar */}
-
-                <Box
-                    sx={{
-                        position: "absolute",
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 7,
-                        bgcolor: card.color
-                    }}
-                />
-
-
-                <Stack
-                    spacing={0.5}
-                    sx={{
-                        alignItems: "center",
-                        justifyContent: "center",
-                        height: "100%"
-                    }}>
-
-                    <Typography
-                        sx={{
-                            fontSize: 27,
-                            lineHeight: 1
-                        }}
-                    >
-                        {card.icon}
-                    </Typography>
-
-
-                    <Typography
-                        sx={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: "text.secondary",
-                            lineHeight: 1
-                        }}
-                    >
-                        {card.title}
-                    </Typography>
-
-
-                    <Typography
-                        sx={{
-                            fontSize: 29,
-                            fontWeight: 800,
-                            color: card.color,
-                            lineHeight: 1
-                        }}
-                    >
-                        {card.value}
-                    </Typography>
-
-                </Stack>
-
-            </Paper>
-
-        </Grid>
-
-    ))}
-
-</Grid>
-
-
-{/* ====================================================== */}
-{/* EXECUTIVE ANALYTICS                                   */}
-{/* ====================================================== */}
-
-<Grid
-    container
-    spacing={2}
->
-
-    {/* ================================================== */}
-    {/* ALERT PARETO                                      */}
-    {/* ================================================== */}
-
-    <Grid
-        size={{
-            xs: 12,
-            sm: 6,
-            lg: 3
-        }}
-    >
-
-        <Paper
-            elevation={4}
-            sx={{
-                p: 1.5,
-                borderRadius: 3,
-                height: 425,
-                overflow: "hidden"
-            }}
-        >
-
-            <Typography
-                sx={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    mb: 0.5
-                }}
-            >
-                Alert Pareto
-            </Typography>
-
-
-            <ResponsiveContainer
-                width="100%"
-                height={360}
-            >
-
-                <BarChart
-                    data={dashboard.pareto}
-                    margin={{
-                        top: 5,
-                        right: 5,
-                        left: -15,
-                        bottom: 5
-                    }}
-                >
-
-                    <CartesianGrid
-                        strokeDasharray="3 3"
-                    />
-
-                    <XAxis
-                        dataKey="type"
-                        tick={{
-                            fontSize: 10
-                        }}
-                    />
-
-                    <YAxis
-                        tick={{
-                            fontSize: 10
-                        }}
-                    />
-
-                    <Tooltip />
-
-                    <Bar
-                        dataKey="total"
-                        fill="#2563EB"
-                        radius={[5, 5, 0, 0]}
-                    />
-
-                </BarChart>
-
-            </ResponsiveContainer>
-
-        </Paper>
-
-    </Grid>
-
-
-    {/* ================================================== */}
-    {/* MONTHLY ALERT TREND                               */}
-    {/* ================================================== */}
-
-    <Grid
-        size={{
-            xs: 12,
-            sm: 6,
-            lg: 3
-        }}
-    >
-
-        <Paper
-            elevation={4}
-            sx={{
-                p: 1.5,
-                borderRadius: 3,
-                height: 425,
-                overflow: "hidden"
-            }}
-        >
-
-            <Typography
-                sx={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    mb: 0.5
-                }}
-            >
-                Monthly Alert Trend
-            </Typography>
-
-
-            <ResponsiveContainer
-                width="100%"
-                height={360}
-            >
-
-                <BarChart
-                    data={dashboard.monthlyTrend}
-                    margin={{
-                        top: 5,
-                        right: 5,
-                        left: -15,
-                        bottom: 5
-                    }}
-                >
-
-                    <CartesianGrid
-                        strokeDasharray="3 3"
-                    />
-
-                    <XAxis
-                        dataKey="month"
-                        tick={{
-                            fontSize: 10
-                        }}
-                    />
-
-                    <YAxis
-                        tick={{
-                            fontSize: 10
-                        }}
-                    />
-
-                    <Tooltip />
-
-                    <Bar
-                        dataKey="total"
-                        fill="#16A34A"
-                        radius={[5, 5, 0, 0]}
-                    />
-
-                </BarChart>
-
-            </ResponsiveContainer>
-
-        </Paper>
-
-    </Grid>
-
-
-{/* ================================================== */}
-{/* AVERAGE ACKNOWLEDGE TIME                           */}
-{/* ================================================== */}
-
-<Grid
-    size={{
-        xs: 12,
-        sm: 6,
-        lg: 3
-    }}
->
-
-    <Paper
-        elevation={4}
-        sx={{
-            p: 1.5,
-            borderRadius: 3,
-            height: 425,
-            overflow: "hidden"
-        }}
-    >
-
-        <Typography
-            sx={{
-                fontSize: 18,
-                fontWeight: 700,
-                mb: 0.5
-            }}
-        >
-            Average Acknowledge Time (working minutes)
-        </Typography>
-
-
-        <ResponsiveContainer
-            width="100%"
-            height={360}
-        >
-
-            <LineChart
-                data={dashboard.responseTrend}
-                margin={{
-                    top: 10,
-                    right: 5,
-                    left: -15,
-                    bottom: 5
-                }}
-            >
-
-                <CartesianGrid
-                    strokeDasharray="3 3"
-                />
-
-                <XAxis
-                    dataKey="month"
-                    tick={{
-                        fontSize: 10
-                    }}
-                />
-
-                <YAxis
-                    tick={{
-                        fontSize: 10
-                    }}
-                    tickFormatter={(value) =>
-                        `${Math.round(value / 60)}`
-                    }
-                />
-
-                <Tooltip
-                    formatter={(value) => [
-                        `${(value / 60).toFixed(1)} min`,
-                        "Acknowledge Time"
-                    ]}
-                />
-
-                {/* 2 MINUTE TARGET */}
-
-                <ReferenceLine
-                    y={120}
-                    stroke="#DC2626"
-                    strokeDasharray="6 4"
-                    strokeWidth={2}
-                    label={{
-                        value: "Target ≤ 2 min",
-                        position: "insideTopRight",
-                        fill: "#DC2626",
-                        fontSize: 10,
-                        fontWeight: 700
-                    }}
-                />
-
-                <Line
-                    type="monotone"
-                    dataKey="responseSeconds"
-                    stroke="#F59E0B"
-                    strokeWidth={3}
-                    dot={{
-                        r: 4
-                    }}
-                    activeDot={{
-                        r: 6
-                    }}
-                />
-
-            </LineChart>
-
-        </ResponsiveContainer>
-
-    </Paper>
-
-</Grid>
-
-
-{/* ================================================== */}
-{/* MTTR                                               */}
-{/* ================================================== */}
-
-<Grid
-    size={{
-        xs: 12,
-        sm: 6,
-        lg: 3
-    }}
->
-
-    <Paper
-        elevation={4}
-        sx={{
-            p: 1.5,
-            borderRadius: 3,
-            height: 425,
-            overflow: "hidden"
-        }}
-    >
-
-        <Typography
-            sx={{
-                fontSize: 18,
-                fontWeight: 700,
-                mb: 0.5
-            }}
-        >
-            Mean Time To Resolve (MTTR, working minutes)
-        </Typography>
-
-
-        <ResponsiveContainer
-            width="100%"
-            height={360}
-        >
-
-            <LineChart
-                data={dashboard.resolutionTrend}
-                margin={{
-                    top: 10,
-                    right: 5,
-                    left: -15,
-                    bottom: 5
-                }}
-            >
-
-                <CartesianGrid
-                    strokeDasharray="3 3"
-                />
-
-                <XAxis
-                    dataKey="month"
-                    tick={{
-                        fontSize: 10
-                    }}
-                />
-
-                <YAxis
-                    tick={{
-                        fontSize: 10
-                    }}
-                    tickFormatter={(value) =>
-                        `${Math.round(value / 60)}`
-                    }
-                />
-
-                <Tooltip
-                    formatter={(value) => [
-                        `${(value / 60).toFixed(1)} min`,
-                        "Resolution Time"
-                    ]}
-                />
-
-                <Line
-                    type="monotone"
-                    dataKey="resolutionSeconds"
-                    stroke="#8B5CF6"
-                    strokeWidth={3}
-                    dot={{
-                        r: 4
-                    }}
-                    activeDot={{
-                        r: 6
-                    }}
-                />
-
-            </LineChart>
-
-        </ResponsiveContainer>
-
-    </Paper>
-
-</Grid>
-
-</Grid>
-
-</Box>
-
         </Box>
+
     );
 
 }
