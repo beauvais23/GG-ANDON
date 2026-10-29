@@ -47,7 +47,6 @@ import {
 
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
@@ -785,13 +784,6 @@ function moveLineDown(lineId) {
             }}
         >
             <EditIcon fontSize="small" />
-        </IconButton>
-
-        <IconButton
-            size="small"
-            color="error"
-        >
-            <DeleteIcon fontSize="small" />
         </IconButton>
 
     </Stack>
