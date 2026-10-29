@@ -18,6 +18,7 @@ const jwt = require("jsonwebtoken");
 const { tempDir } = require("./helpers");
 const {
     syncOffsite,
+    downloadFromDrive,
     offsiteStatus,
     alertIfStale,
     resetOffsiteState
@@ -102,11 +103,26 @@ async function fakeFetch(url, options = {}) {
 
         assert.equal(u.searchParams.get("supportsAllDrives"), "true");
 
-        const folder = /^'(.+)' in parents/.exec(u.searchParams.get("q"))[1];
+        const q = u.searchParams.get("q");
+        const folder = /'([^']+)' in parents/.exec(q)[1];
+        const name = /name = '([^']+)'/.exec(q)?.[1];
 
         return json(200, {
-            files: drive.filter(f => f.parents.includes(folder)).map(f => ({ name: f.name }))
+            files: drive
+                .map((f, id) => ({ ...f, id: String(id) }))
+                .filter(f => f.parents.includes(folder) && (!name || f.name === name))
+                .map(f => ({ id: f.id, name: f.name }))
         });
+
+    }
+
+    if (u.pathname.startsWith("/drive/v3/files/") && u.searchParams.get("alt") === "media") {
+
+        calls.push("download");
+
+        const file = drive[Number(u.pathname.split("/").pop())];
+
+        return new Response(file.bytes, { status: 200 });
 
     }
 
@@ -340,5 +356,42 @@ test("stale alert: Google Chat once per New York day, production only", async ()
 
     // Not stale: nothing.
     assert.equal(await alertIfStale(T("2026-10-28T12:00:00Z")), false);
+
+});
+
+//------------------------------------------------------
+// Download (RESTORE_FROM_DRIVE, #22 part 2)
+//------------------------------------------------------
+
+test("download: finds the file by name in the folder and writes the exact bytes", async () => {
+
+    configure();
+
+    drive.push({ name: OLD, parents: [FOLDER], bytes: Buffer.from("old") });
+    drive.push({ name: DAILY, parents: ["other-folder"], bytes: Buffer.from("wrong folder") });
+    drive.push({ name: DAILY, parents: [FOLDER], bytes: Buffer.from([9, 8, 7, 0, 255]) });
+
+    const target = path.join(dir, "restore-here");
+    const result = await downloadFromDrive(DAILY, target);
+
+    assert.equal(result.sizeBytes, 5);
+    assert.deepEqual([...fs.readFileSync(path.join(target, DAILY))], [9, 8, 7, 0, 255]);
+    assert.deepEqual(fs.readdirSync(target), [DAILY]); // no .partial left
+
+});
+
+test("download: a name that is not in the folder is a clear error, nothing written", async () => {
+
+    configure();
+
+    await assert.rejects(downloadFromDrive(DAILY, dir), /not found in the Google Drive backup folder/);
+    assert.deepEqual(fs.readdirSync(dir), []);
+
+});
+
+test("download: not configured is a clear error, no network call", async () => {
+
+    await assert.rejects(downloadFromDrive(DAILY, dir), /off-site backup not configured/);
+    assert.deepEqual(calls, []);
 
 });

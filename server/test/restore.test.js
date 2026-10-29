@@ -58,6 +58,9 @@ beforeEach(() => {
 afterEach(() => {
 
     delete process.env.RESTORE_BACKUP;
+    delete process.env.RESTORE_FROM_DRIVE;
+    delete process.env.GDRIVE_SERVICE_ACCOUNT_JSON;
+    delete process.env.GDRIVE_BACKUP_FOLDER_ID;
 
 });
 
@@ -172,5 +175,119 @@ test("restoring the oldest of 14 backups works (pruning runs after the copy)", (
 
     assert.equal(readValue(dbPath), "good");
     assert.equal(fs.readdirSync(backupDir).filter(f => f.startsWith("andon-")).length, 14);
+
+});
+
+//------------------------------------------------------
+// RESTORE_FROM_DRIVE (#22 part 2). The download itself is
+// tested in offsiteBackup.test.js; here a fake downloader
+// stands in for the child process.
+//------------------------------------------------------
+
+const DRIVE_FILE = "andon-20261028T210500Z-daily-2026-10-28.db";
+
+function fakeDownload(value, calls = []) {
+
+    return (name, dir) => {
+
+        calls.push(name);
+        fs.mkdirSync(dir, { recursive: true });
+        writeDb(path.join(dir, name), value);
+
+        return true;
+
+    };
+
+}
+
+test("RESTORE_FROM_DRIVE: downloads the file, then restores it with a snapshot first", () => {
+
+    process.env.RESTORE_FROM_DRIVE = DRIVE_FILE;
+
+    const calls = [];
+    const record = restoreIfRequested(dbPath, { download: fakeDownload("from drive", calls) });
+
+    assert.deepEqual(calls, [DRIVE_FILE]);
+    assert.equal(readValue(dbPath), "from drive");
+    assert.equal(record.file, DRIVE_FILE);
+    assert.equal(readValue(path.join(backupDir, record.snapshotOfPrevious)), "bad");
+
+});
+
+test("RESTORE_FROM_DRIVE: next boot with the variable still set does not download or restore again", () => {
+
+    process.env.RESTORE_FROM_DRIVE = DRIVE_FILE;
+
+    restoreIfRequested(dbPath, { download: fakeDownload("from drive") });
+    setValue(dbPath, "new work after the restore");
+
+    const calls = [];
+
+    assert.equal(restoreIfRequested(dbPath, { download: fakeDownload("again", calls) }), null);
+    assert.deepEqual(calls, []);
+    assert.equal(readValue(dbPath), "new work after the restore");
+
+});
+
+test("RESTORE_FROM_DRIVE: failed download skips the restore and keeps the current database", () => {
+
+    process.env.RESTORE_FROM_DRIVE = DRIVE_FILE;
+
+    assert.equal(restoreIfRequested(dbPath, { download: () => false }), null);
+    assert.equal(readValue(dbPath), "bad");
+
+});
+
+test("RESTORE_FROM_DRIVE: lost volume (no database, no backup folder) is rebuilt from Drive", () => {
+
+    fs.rmSync(path.dirname(dbPath), { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(dbPath)); // the new, empty volume
+
+    process.env.RESTORE_FROM_DRIVE = DRIVE_FILE;
+
+    const record = restoreIfRequested(dbPath, { download: fakeDownload("from drive") });
+
+    assert.equal(readValue(dbPath), "from drive");
+    assert.equal(record.snapshotOfPrevious, null);
+
+});
+
+test("RESTORE_BACKUP and RESTORE_FROM_DRIVE both set: nothing is downloaded or restored", () => {
+
+    process.env.RESTORE_BACKUP = "andon-20261027T100000Z-before-0002.db";
+    process.env.RESTORE_FROM_DRIVE = DRIVE_FILE;
+
+    const calls = [];
+
+    assert.equal(restoreIfRequested(dbPath, { download: fakeDownload("x", calls) }), null);
+    assert.deepEqual(calls, []);
+    assert.equal(readValue(dbPath), "bad");
+
+});
+
+test("RESTORE_FROM_DRIVE: names that are not backup files are rejected before any download", () => {
+
+    for (const bad of ["../andon.db", "andon-x.db' or name != '", "secret.txt"]) {
+
+        process.env.RESTORE_FROM_DRIVE = bad;
+
+        const calls = [];
+
+        assert.equal(restoreIfRequested(dbPath, { download: fakeDownload("x", calls) }), null, bad);
+        assert.deepEqual(calls, [], bad);
+
+    }
+
+    assert.equal(readValue(dbPath), "bad");
+
+});
+
+test("RESTORE_FROM_DRIVE with the real child process: Drive not configured -> skipped, boots normally", () => {
+
+    process.env.RESTORE_FROM_DRIVE = DRIVE_FILE;
+
+    assert.equal(restoreIfRequested(dbPath), null);
+    assert.equal(readValue(dbPath), "bad");
+    assert.equal(fs.existsSync(path.join(backupDir, DRIVE_FILE)), false);
 
 });

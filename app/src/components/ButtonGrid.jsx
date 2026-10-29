@@ -34,6 +34,10 @@ export default function ButtonGrid() {
 
   const [duplicateMessage, setDuplicateMessage] = useState("");
 
+  // Shown whenever an alert was NOT created (#25). Before this, a
+  // refused or failed request left the tablet silent.
+  const [errorMessage, setErrorMessage] = useState("");
+
   const { startAlert } = useAlert();
 
   const {
@@ -41,10 +45,28 @@ export default function ButtonGrid() {
   } = useProductionLine();
 
   const {
-  workCenter
+  workCenter,
+  workCenters,
+  workCentersLoaded
 } = useWorkCenter();
 
+  const noWorkCenters = workCentersLoaded && workCenters.length === 0;
+
   async function handleAlert(type) {
+
+  setErrorMessage("");
+
+  if (!workCenter) {
+
+    setErrorMessage(
+      noWorkCenters
+        ? `${type} alert NOT sent: no work centers are set up for ${productionLine}. Call your lead.`
+        : `${type} alert NOT sent: choose a work center first.`
+    );
+
+    return;
+
+  }
 
   try {
 
@@ -75,11 +97,24 @@ export default function ButtonGrid() {
 
     }
 
+    else {
+
+      setErrorMessage(
+        `${type} alert NOT sent: ${response.message || "the server refused it."} Call your lead.`
+      );
+
+    }
+
   }
 
   catch (error) {
 
     console.error(error);
+
+    // No answer, or not JSON (e.g. the backend restarting during a deploy).
+    setErrorMessage(
+      `${type} alert NOT sent: no connection to the server. Try again, or call your lead.`
+    );
 
   }
 
@@ -88,6 +123,12 @@ export default function ButtonGrid() {
   return (
 
     <>
+
+    {noWorkCenters && (
+      <Alert severity="error" variant="filled" sx={{ mx: 2, mb: 2, fontSize: "1.3rem" }}>
+        No work centers are set up for {productionLine}. Alerts cannot be sent from this line. Call your lead.
+      </Alert>
+    )}
 
     <Grid
       container
@@ -167,6 +208,22 @@ export default function ButtonGrid() {
         sx={{ fontSize: "1.4rem", alignItems: "center" }}
       >
         {duplicateMessage}
+      </Alert>
+    </Snackbar>
+
+    <Snackbar
+      open={Boolean(errorMessage)}
+      autoHideDuration={15000}
+      onClose={() => setErrorMessage("")}
+      anchorOrigin={{ vertical: "top", horizontal: "center" }}
+    >
+      <Alert
+        severity="error"
+        variant="filled"
+        onClose={() => setErrorMessage("")}
+        sx={{ fontSize: "1.4rem", alignItems: "center" }}
+      >
+        {errorMessage}
       </Alert>
     </Snackbar>
 
