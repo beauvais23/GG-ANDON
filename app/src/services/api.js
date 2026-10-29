@@ -189,6 +189,41 @@ export async function cancelAlert(id, { reason, cancelledBy } = {}) {
 }
 
 //------------------------------------------------------
+// Resolution notes for Telegram resolves (#14b)
+//------------------------------------------------------
+
+export async function getAlertsNeedingNote() {
+
+    const response = await fetch(
+        `${API_URL}/alerts/needs-note`,
+        {
+            headers: getAuthHeaders(),
+        }
+    );
+
+    return handleResponse(response);
+}
+
+export async function addAlertNote(id, note, addedBy) {
+
+    const response = await fetch(
+        `${API_URL}/alerts/${id}/note`,
+        {
+            method: "PATCH",
+
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
+
+            body: JSON.stringify({ note, addedBy }),
+        }
+    );
+
+    return handleResponse(response);
+}
+
+//------------------------------------------------------
 // Work Centers
 //------------------------------------------------------
 

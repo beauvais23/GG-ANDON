@@ -28,14 +28,6 @@ const {
 } = require("./services/notificationManager");
 
 const { updateTelegram } = require("./services/telegramUpdate");
-const {
-    TELEGRAM_DEFAULT_NOTE,
-    NOTE_MAX,
-    telegramName,
-    promptForNote,
-    noteReplyAlertId,
-    replyInThread
-} = require("./services/telegramNote");
 
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
@@ -548,6 +540,78 @@ authenticateToken,
 
     }
 );
+
+//------------------------------------------------------
+// Resolution notes for Telegram resolves (#14b)
+//
+// A Telegram resolve can't carry text, so it saves
+// TELEGRAM_DEFAULT_NOTE. These alerts are listed under
+// "Needs a resolution note" until someone adds the note.
+//------------------------------------------------------
+
+app.get("/alerts/needs-note", authenticateToken, (req, res) => {
+
+    res.json(statements.getAlertsNeedingNote.all(TELEGRAM_DEFAULT_NOTE));
+
+});
+
+app.patch("/alerts/:id/note", authenticateToken, (req, res) => {
+
+    const { note, addedBy } = req.body || {};
+    const clean = typeof note === "string" ? note.trim() : "";
+
+    if (!clean || clean.length > 500) {
+
+        return res.status(400).json({
+            success: false,
+            message: "A note of 1 to 500 characters is required."
+        });
+
+    }
+
+    const alert = statements.getAlert.get(req.params.id);
+
+    if (!alert) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Alert not found."
+        });
+
+    }
+
+    const by = typeof addedBy === "string" ? addedBy.trim() : "";
+
+    const text = by && by !== alert.resolved_by
+        ? `${clean} (note by ${by})`
+        : clean;
+
+    // Only replaces the Telegram placeholder: first note wins,
+    // a web resolve's note is never overwritten.
+    const saved = statements.saveTelegramNote.run(
+        text,
+        Date.now(),
+        alert.id,
+        TELEGRAM_DEFAULT_NOTE
+    ).changes === 1;
+
+    if (!saved) {
+
+        return res.status(409).json({
+            success: false,
+            message: `Alert #${alert.id} already has a resolution note.`
+        });
+
+    }
+
+    console.log(`✓ Resolution note added to Alert #${alert.id}${by ? ` by ${by}` : ""}`);
+
+    // The Telegram channel message shows the note under RESOLUTION.
+    queueNotification(alert.id, "note added", () => updateTelegram(alert));
+
+    res.json({ success: true, alert: statements.getAlert.get(alert.id) });
+
+});
 
 //------------------------------------------------------
 // Executive Dashboard
@@ -2423,6 +2487,11 @@ app.get("/admin/backups/:file", authenticateToken, requireAdmin, (req, res) => {
 // Telegram Webhook
 //------------------------------------------------------
 
+// Telegram resolves save this note until someone adds the real one
+// in the app ("Needs a resolution note" on /supervisor, /dashboard).
+const TELEGRAM_DEFAULT_NOTE = "Resolved from Telegram";
+const TELEGRAM_NOTE_WHERE = "Response Center or Dashboard → Needs a resolution note";
+
 // Telegram echoes the secret_token we pass to setWebhook in this
 // header. No secret configured, or no match: reject (fail closed).
 function isFromTelegram(req) {
@@ -2440,64 +2509,6 @@ function isFromTelegram(req) {
 
 }
 
-//------------------------------------------------------
-// Telegram note reply (#14b): a group message that
-// replies to our "what fixed alert #N?" prompt.
-// Always answers 200; Telegram resends anything else.
-//------------------------------------------------------
-
-async function handleTelegramNoteReply(message, alertId) {
-
-    const alert = statements.getAlert.get(alertId);
-    const text = typeof message.text === "string" ? message.text.trim() : "";
-    const replier = telegramName(message.from);
-
-    let answer;
-
-    if (!alert) {
-
-        answer = `Alert #${alertId} was not found.`;
-
-    } else if (!text) {
-
-        answer = `Note not saved: reply with text (not a photo or sticker).`;
-
-    } else if (text.length > NOTE_MAX) {
-
-        answer = `Note not saved: ${text.length} characters, the limit is ${NOTE_MAX}. Reply again, shorter.`;
-
-    } else {
-
-        const note = replier === alert.resolved_by
-            ? text
-            : `${text} (note by ${replier})`;
-
-        const saved = statements.saveTelegramNote.run(
-            note,
-            Date.now(),
-            alert.id,
-            TELEGRAM_DEFAULT_NOTE
-        ).changes === 1;
-
-        answer = saved
-            ? `✔ Note saved on alert #${alert.id}.`
-            : `Alert #${alert.id} already has a note. Nothing changed.`;
-
-        if (saved) {
-
-            console.log(`✓ Telegram note saved on Alert #${alert.id} by ${replier}`);
-
-        }
-
-    }
-
-    queueNotification(alertId, "telegram note", async () => {
-        await updateTelegram({ id: alertId });
-        await replyInThread(message, answer);
-    });
-
-}
-
 app.post("/telegram/webhook", async (req, res) => {
 
     if (!isFromTelegram(req)) {
@@ -2508,16 +2519,6 @@ app.post("/telegram/webhook", async (req, res) => {
     // anything posted here (it can't be from our bot).
     if (!notificationsEnabled()) {
         return res.sendStatus(200);
-    }
-
-    const noteAlertId = noteReplyAlertId(req.body.message);
-
-    if (noteAlertId) {
-
-        await handleTelegramNoteReply(req.body.message, noteAlertId);
-
-        return res.sendStatus(200);
-
     }
 
     const callback = req.body.callback_query;
@@ -2570,14 +2571,15 @@ app.post("/telegram/webhook", async (req, res) => {
             await notifyResolved(alert);
             await updateTelegram(alert);
         });
-
-        // Own step: a failed Google Chat call above must not skip it (#14b).
-        queueNotification(alert.id, "telegram note prompt", () =>
-            promptForNote(alert, callback.from));
-
         console.log(`✓ Telegram resolved Alert #${alertId} by ${responder}`);
 
-        await answerTelegramCallback(callback, "Resolved ✔");
+        // A button can't carry text, and the ANDON Telegram is a
+        // channel (no replies), so the note is added in the app (#14b).
+        await answerTelegramCallback(
+            callback,
+            `Resolved ✔ Add what fixed it in ManufacturingOS: ${TELEGRAM_NOTE_WHERE}.`,
+            true
+        );
 
         return res.sendStatus(200);
 
@@ -2673,7 +2675,11 @@ async function answerTelegramCallback(callback, text, showAlert = false) {
 
     } catch (error) {
 
-        console.error("Telegram answerCallbackQuery failed:", error.message);
+        // Telegram's own reason (e.g. "Bad Request: ...") is in the body.
+        console.error(
+            "Telegram answerCallbackQuery failed:",
+            error.response?.data?.description || error.message
+        );
 
     }
 
@@ -2751,8 +2757,8 @@ async function configureTelegramWebhook() {
 
                 secret_token: secret,
 
-                // Button presses, plus replies to the note prompt (#14b).
-                allowed_updates: ["callback_query", "message"]
+                // Button presses only; the channel can't reply (#14b).
+                allowed_updates: ["callback_query"]
 
             },
 
