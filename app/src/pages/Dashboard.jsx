@@ -10,6 +10,7 @@ import Header from "../components/Header";
 import AlertList from "../components/AlertList";
 import DashboardStats from "../components/DashboardStats";
 import ResolveDialog from "../components/ResolveDialog";
+import NeedsNotePanel from "../components/NeedsNotePanel";
 import CancelDialog from "../components/CancelDialog";
 
 import {
@@ -340,6 +341,8 @@ export default function Dashboard() {
 
 
       </Paper>
+
+      <NeedsNotePanel responder={selectedResponder} />
 
       <ResolveDialog
         alert={resolving}
