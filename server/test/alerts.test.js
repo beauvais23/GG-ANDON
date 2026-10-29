@@ -288,6 +288,10 @@ test("cancel with a reason stores who and why; the tablet's plain cancel still w
     assert.equal(cancelled.body.alert.status, "CANCELLED");
     assert.equal(cancelled.body.alert.resolution_notes, `Cancelled by ${RESPONDER}: Smoke test after release`);
 
+    // #19: a cancel is not a resolve.
+    assert.equal(cancelled.body.alert.resolved, null);
+    assert.ok(cancelled.body.alert.cancelled_at > 0);
+
     // Tablet: no body, no note.
     const tablet = await raise("QUALITY");
     const plain = await request(app).patch(`/alerts/${tablet.body.alert.id}/cancel`).set(floor);

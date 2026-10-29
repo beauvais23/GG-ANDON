@@ -194,6 +194,12 @@ ______________________________
         message += `Resolved ....... <b>${formatDate(alert.resolved)}</b>\n`;
     }
 
+    // Cancelled alerts have no resolved time (#19).
+    if (alert.cancelled_at) {
+
+        message += `Cancelled ...... <b>${formatDate(alert.cancelled_at)}</b>\n`;
+    }
+
     //--------------------------------------------------
     // Resolution Section
     //--------------------------------------------------
@@ -203,7 +209,7 @@ ______________________________
         message += `
 ______________________________
 
-📝 <b>RESOLUTION</b>
+📝 <b>${alert.status === "CANCELLED" ? "CANCEL REASON" : "RESOLUTION"}</b>
 
 ${resolution}
 

@@ -29,7 +29,7 @@ Read this file fully before changing anything.
 |---|---|---|
 | Backend | `server/index.js` (~2,470 lines, all routes inline) | Express 5, JWT auth, better-sqlite3. Exports `app`; listens only when run directly |
 | DB layer | `server/database.js` | Opens the DB, runs `restoreIfRequested` then `migrateUp`, seeds empty tables, prepares statements. Registers SQL function `ny_month()` |
-| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability` |
+| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved` |
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit) |
@@ -189,6 +189,7 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 | 22 | Backups were only on the Railway volume | Every backup copied to the G&G ANDON Shared Drive (feat-22, `offsiteBackup.js`); `RESTORE_FROM_DRIVE` restores from Drive at boot (feat-22b, `restore.js` + `fetchFromDrive.js`) |
 | 25 | Tablet stayed silent when an alert was NOT created (backend 400/500, no connection, line with no work centers) | `ButtonGrid.jsx`: red "<TYPE> alert NOT sent: <reason>. Call your lead." banner; persistent warning when the line has no work centers (`workCentersLoaded` in `WorkCenterContext`) (fix-25) |
 | 26 | Only the tablet could cancel an alert; once the tablet moved on, a false alarm or test could only be resolved (counted in MTTR) | CANCEL button with a required reason on `/supervisor` and `/dashboard` (`CancelDialog.jsx`); `PATCH /alerts/:id/cancel` accepts optional `reason` (1–500) + `cancelledBy`, stored as `resolution_notes` "Cancelled by <name>: <reason>" (fix-26) |
+| 19 | Cancel wrote `resolved` too, so Telegram/Google Chat showed a cancelled alert as "Resolved" with its duration | `cancelAlert` sets only `cancelled_at`; formatters end a cancelled alert at `cancelled_at` and label the note "Cancel reason"; migration `0004` clears the copied `resolved` on old cancelled rows (fix-19) |
 
 ### Open (line references at commit 5e304a6)
 
@@ -196,7 +197,6 @@ Phase 0.5 (PRs #2–#8, promoted Oct 27 2026) fixed #1–#12. Later fixes are ma
 |---|---|---|
 | 14b | Telegram resolves have no real note (a button can't carry text) | `server/index.js` Telegram resolve path writes "Resolved from Telegram" |
 | 15 | Hard deletes; `PRAGMA foreign_keys` off | `server/index.js:780` (production lines), `2039` (responders); no `foreign_keys` pragma in `database.js` |
-| 19 | Cancel still writes `resolved` (notification formatters read it) | `database.js` `cancelAlert`; `alertFormatter.js`, `notificationFormatter.js`, `telegram.js`, `googleChat.js` |
 | 21 | Reorder routes return 500 (not 400) on an empty body | `server/index.js:682, 964` |
 
 ## Testing
