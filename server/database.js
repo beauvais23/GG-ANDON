@@ -313,6 +313,17 @@ saveTelegramNote: db.prepare(`
         AND resolution_notes=?
 `),
 
+// "Clear all" on Needs a resolution note.
+clearAllTelegramNotes: db.prepare(`
+    UPDATE alerts
+    SET
+        resolution_notes=?,
+        updated_at=?
+    WHERE
+        status='RESOLVED'
+        AND resolution_notes=?
+`),
+
 cancelAlert: db.prepare(`
     UPDATE alerts
     SET

@@ -223,6 +223,46 @@ export async function addAlertNote(id, note, addedBy) {
     return handleResponse(response);
 }
 
+// Needs a resolution note: clear one alert, or all of them,
+// without a note.
+export async function clearAlertNote(id, clearedBy) {
+
+    const response = await fetch(
+        `${API_URL}/alerts/${id}/note/clear`,
+        {
+            method: "PATCH",
+
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
+
+            body: JSON.stringify({ clearedBy }),
+        }
+    );
+
+    return handleResponse(response);
+}
+
+export async function clearAllAlertNotes(clearedBy) {
+
+    const response = await fetch(
+        `${API_URL}/alerts/needs-note/clear`,
+        {
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json",
+                ...getAuthHeaders(),
+            },
+
+            body: JSON.stringify({ clearedBy }),
+        }
+    );
+
+    return handleResponse(response);
+}
+
 //------------------------------------------------------
 // Work Centers
 //------------------------------------------------------

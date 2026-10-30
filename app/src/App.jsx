@@ -1,10 +1,10 @@
 import {
     Routes,
-    Route
+    Route,
+    Navigate
 } from "react-router-dom";
 
 import Home from "./pages/Home";
-import Dashboard from "./pages/Dashboard";
 import ProductionResponseCenter from "./pages/ProductionResponseCenter";
 import Wallboard from "./pages/Wallboard";
 import AdminPage from "./pages/AdminPage";
@@ -50,13 +50,12 @@ function App() {
                 }
             />
 
+            {/* /dashboard was a copy of the Response Center
+                (removed Oct 30 2026); old bookmarks land there. */}
+
             <Route
                 path="/dashboard"
-                element={
-                    <ProtectedRoute>
-                        <Dashboard />
-                    </ProtectedRoute>
-                }
+                element={<Navigate to="/supervisor" replace />}
             />
 
             <Route

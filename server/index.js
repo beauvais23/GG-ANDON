@@ -627,6 +627,69 @@ app.patch("/alerts/:id/note", authenticateToken, (req, res) => {
 
 });
 
+// Clear without a note: the alert leaves the list and keeps
+// a note saying it was cleared, and by whom.
+function clearedNote(by) {
+
+    const name = typeof by === "string" ? by.trim().slice(0, 100) : "";
+
+    return `${TELEGRAM_DEFAULT_NOTE}; no note${name ? ` (cleared by ${name})` : " (cleared)"}`;
+
+}
+
+app.patch("/alerts/:id/note/clear", authenticateToken, (req, res) => {
+
+    const { clearedBy } = req.body || {};
+
+    const alert = statements.getAlert.get(req.params.id);
+
+    if (!alert) {
+
+        return res.status(404).json({
+            success: false,
+            message: "Alert not found."
+        });
+
+    }
+
+    const cleared = statements.saveTelegramNote.run(
+        clearedNote(clearedBy),
+        Date.now(),
+        alert.id,
+        TELEGRAM_DEFAULT_NOTE
+    ).changes === 1;
+
+    if (!cleared) {
+
+        return res.status(409).json({
+            success: false,
+            message: `Alert #${alert.id} already has a resolution note.`
+        });
+
+    }
+
+    console.log(`✓ Needs-a-note cleared for Alert #${alert.id}`);
+
+    res.json({ success: true, alert: statements.getAlert.get(alert.id) });
+
+});
+
+app.post("/alerts/needs-note/clear", authenticateToken, (req, res) => {
+
+    const { clearedBy } = req.body || {};
+
+    const cleared = statements.clearAllTelegramNotes.run(
+        clearedNote(clearedBy),
+        Date.now(),
+        TELEGRAM_DEFAULT_NOTE
+    ).changes;
+
+    console.log(`✓ Needs-a-note cleared for ${cleared} alert(s)`);
+
+    res.json({ success: true, cleared });
+
+});
+
 //------------------------------------------------------
 // Executive Dashboard
 //------------------------------------------------------
