@@ -12,7 +12,9 @@ const {
 // Google Chat Card
 //------------------------------------------------------
 
-async function sendGoogleChatCard(alert, event) {
+// webhook: the space to post to. Defaults to the ANDON space;
+// Near Miss alerts pass the Near Miss space (notificationManager).
+async function sendGoogleChatCard(alert, event, webhook = process.env.GOOGLE_CHAT_WEBHOOK) {
 
     if (!notificationsEnabled()) {
 
@@ -20,8 +22,6 @@ async function sendGoogleChatCard(alert, event) {
         return;
 
     }
-
-    const webhook = process.env.GOOGLE_CHAT_WEBHOOK;
 
     if (!webhook) {
 

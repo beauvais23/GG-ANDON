@@ -3,14 +3,14 @@ import { useState } from "react";
 import {
     Box,
     Button,
-    Collapse,
-    Stack,
-    Typography
+    Collapse
 } from "@mui/material";
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import UnarchiveIcon from "@mui/icons-material/Unarchive";
+
+import { tokens } from "../../theme/theme";
 
 //------------------------------------------------------
 // Archived items with Restore (#15)
@@ -45,13 +45,14 @@ export default function ArchivedList({
 
     return (
 
-        <Box sx={{ mt: 3 }}>
+        <Box sx={{ px: 1.25, py: 0.75 }}>
 
             <Button
                 size="small"
                 color="inherit"
                 startIcon={open ? <ExpandMoreIcon /> : <ChevronRightIcon />}
                 onClick={() => setOpen(!open)}
+                sx={{ color: tokens.muted }}
             >
 
                 Archived {label} ({items.length})
@@ -60,56 +61,39 @@ export default function ArchivedList({
 
             <Collapse in={open}>
 
-                <Stack spacing={1} sx={{ mt: 1 }}>
+                {items.map(item => (
 
-                    {items.map(item => (
+                    <Box
+                        key={item.id}
+                        sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 2,
+                            px: 1,
+                            py: 1,
+                            borderTop: `1px solid ${tokens.line}`,
+                            opacity: 0.85
+                        }}
+                    >
 
-                        <Box
-                            key={item.id}
-                            sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: 2,
-                                px: 2,
-                                py: 1,
-                                borderRadius: 1,
-                                bgcolor: "action.hover"
-                            }}
-                        >
-
-                            <Box>
-
-                                <Typography fontWeight={600}>
-
-                                    {item.name}
-
-                                </Typography>
-
-                                <Typography variant="body2" color="text.secondary">
-
-                                    Archived {archivedOn(item.archived_at)}
-
-                                </Typography>
-
-                            </Box>
-
-                            <Button
-                                size="small"
-                                variant="outlined"
-                                startIcon={<UnarchiveIcon />}
-                                onClick={() => onRestore(item)}
-                            >
-
-                                Restore
-
-                            </Button>
-
+                        <Box>
+                            <Box sx={{ fontWeight: 600 }}>{item.name}</Box>
+                            <Box sx={{ fontSize: 13, color: tokens.muted }}>Archived {archivedOn(item.archived_at)}</Box>
                         </Box>
 
-                    ))}
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<UnarchiveIcon />}
+                            onClick={() => onRestore(item)}
+                        >
+                            Restore
+                        </Button>
 
-                </Stack>
+                    </Box>
+
+                ))}
 
             </Collapse>
 

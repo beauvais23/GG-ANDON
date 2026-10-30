@@ -57,6 +57,7 @@ The Railway plan has **no volume backups** (Hobby). Backups are written to the s
 | Backend | `APP_ENV` | yes | `production` only in production. Anything else disables all Telegram/Google Chat traffic and `setWebhook` |
 | Backend | `TELEGRAM_WEBHOOK_SECRET` | production | 1–256 chars `A-Z a-z 0-9 _ -`. Missing/invalid → webhook rejects every call (Telegram buttons dead) |
 | Backend | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GOOGLE_CHAT_WEBHOOK` | production only | Never set in staging. `TELEGRAM_CHAT_ID` is a Telegram **channel** (no member replies; only button presses reach the bot) |
+| Backend | `GOOGLE_CHAT_NEAR_MISS_WEBHOOK` | production only | Webhook of the **Near Miss & Safety Incident Alert** Chat space. NEAR_MISS alerts go only there (no Telegram, no ANDON Chat space). Missing → NEAR_MISS falls back to the usual channels with a log warning. Never set in staging |
 | Backend | `SERVER_URL` | staging | Unset in production; falls back to the prod URL (`server/config.js:5-7`) |
 | Backend | `SUPERVISOR_URL` | staging | Unset in production; falls back to the prod frontend (`server/config.js:11-13`) |
 | Backend | `JWT_EXPIRES_IN` | no | Default `12h`. A malformed value breaks every login |
@@ -139,6 +140,7 @@ Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET wit
 - **Roles for routing:** Production Lead (per line group), Production Manager, Manufacturing Manager, Director of Manufacturing,
   Leadership (VP Engineering, President), CI and Safety Specialist, Procurement, Warehouse Manager, Inventory and Controls, Engineering.
 - **Special routing:** Safety and Near Miss events notify CI and Safety immediately. Material Shortage events notify Procurement and the Warehouse Manager.
+  **Near Miss channel (Director, Oct 30 2026):** NEAR_MISS alerts post only to the Near Miss & Safety Incident Alert Google Chat space (`GOOGLE_CHAT_NEAR_MISS_WEBHOOK`, `services/notificationManager.js`); acknowledge/resolve them on `/supervisor`. The same space gets Near Miss & Safety Incident Form reports from an Apps Script on the response sheet (outside this repo). Poster reports never become ANDON alerts.
 - **Escalation:** the admin-configurable matrix ships in **shadow mode** first. It logs who would have been notified and sends nothing.
   It goes live only after thresholds are confirmed from shadow data.
 - **Quality capture / NCM sync:** dropped. The NCM failure-code list is used only as the reason-code list for hour-by-hour failures.
@@ -205,6 +207,8 @@ None.
 The dead work-center delete icon in Admin → Production Lines was removed (Director, Oct 29 2026); work centers are set inactive instead.
 
 Oct 30 2026 (Director's page notes): `/dashboard` removed (a copy of the Response Center; the route redirects to `/supervisor`). The Admin page's link buttons were removed (PAGES replaces them). **Needs a resolution note** has **Clear** (per alert) and **Clear all** (with a confirm): `PATCH /alerts/:id/note/clear`, `POST /alerts/needs-note/clear` save "Resolved from Telegram; no note (cleared by <name>)", and a note can't be added afterward.
+
+E5 (Oct 30 2026): Login and Admin in the industrial look. Admin = top bar + tabs (Responders, Production lines, Backups) + `Footer`; panels share `components/admin/adminUi.jsx` (`AdminPanel`, `StatStrip`, `SearchBar`, `AdminRow`, `Light`, `Tag`). The unused responder grid that lived in `AdminPage.jsx` was removed.
 
 ## Testing
 

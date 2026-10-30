@@ -9,9 +9,6 @@ import AddWorkCenterDialog from "./AddWorkCenterDialog";
 import { getWorkCenters } from "../../api/workCenters";
 
 import Collapse from "@mui/material/Collapse";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemText from "@mui/material/ListItemText";
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -29,19 +26,18 @@ import {
 } from "../../api/productionLines";
 
 import ArchivedList from "./ArchivedList";
+import { AdminPanel, EmptyRow, Light, SearchBar, StatStrip, Tag, AdminRow } from "./adminUi";
+
+import { tokens } from "../../theme/theme";
 import ArchiveIcon from "@mui/icons-material/Archive";
 
 import { useEffect, useState } from "react";
 
 import {
-    Paper,
-    Typography,
-    Stack,
-    Button,
-    Chip,
-    IconButton,
     Box,
-    TextField
+    Button,
+    IconButton,
+    Tooltip
 } from "@mui/material";
 
 
@@ -490,336 +486,202 @@ function moveLineDown(lineId) {
 
     
     //------------------------------------------------------
-    // Render
+    // Render (E5)
     //------------------------------------------------------
 
+    const iconSx = { color: tokens.muted, "&:hover": { color: tokens.text } };
+
     return (
-        <Paper
-            elevation={3}
-            sx={{
-                p: 4,
-                borderRadius: 3,
-                bgcolor: "#0B0D10"
-            }}
+
+        <AdminPanel
+            title="Production lines"
+            meta="Lines and work centers on the tablet, in this order"
+            action={
+                <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
+                    Add production line
+                </Button>
+            }
         >
 
-            {/* Header */}
-
-            <Stack
-                direction="row"
-                sx={{
-                    alignItems: "center",
-                    mb: 3
-                }}>
-
-                <Box sx={{ flexGrow: 1 }}>
-
-                    <Typography
-                        variant="h5"
-                        sx={{
-                            fontWeight: 700
-                        }}
-                    >
-                        Production Lines
-                    </Typography>
-
-                    <Typography
-                        variant="body2"
-                        sx={{
-                            color: "text.secondary"
-                        }}
-                    >
-                        {lines.length} Total • {activeCount} Active • {inactiveCount} Inactive • {facilityCount} Facility{facilityCount !== 1 ? "ies" : ""}
-                    </Typography>
-
-                </Box>
-
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={() => setAddOpen(true)}
-                >
-                    Add Production Line
-                </Button>
-
-            </Stack>
-
-            {/* Search */}
-
-            <TextField
-                fullWidth
-                placeholder="Search Production Lines..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                sx={{ mb: 3 }}
+            <StatStrip
+                items={[
+                    { label: "Lines", value: lines.length },
+                    { label: "Active", value: activeCount, color: tokens.online },
+                    { label: "Inactive", value: inactiveCount },
+                    { label: "Facilities", value: facilityCount }
+                ]}
             />
 
-            {/* Search */}
+            <SearchBar value={search} onChange={setSearch} placeholder="Search line, facility or description" />
 
-            {loading && (
-                <Typography>Loading...</Typography>
+            {loading && <EmptyRow>Loading production lines…</EmptyRow>}
+
+            {!loading && filteredLines.length === 0 && (
+                <EmptyRow>{lines.length ? "No lines match the search." : "No production lines yet."}</EmptyRow>
             )}
 
-            {!loading &&
-    filteredLines.map((line, index) => (
+            {!loading && filteredLines.map(line => {
 
-        <Paper
-            key={line.id}
-            elevation={2}
-            sx={{
-                px: 3,
-                py: 2,
-                mb: 2.5,
-                borderRadius: 3,
-                transition: "all .25s ease",
-                "&:hover": {
-                    boxShadow: 6,
-                    transform: "translateY(-2px)"
-                }
-            }}
-        >
+                const position = lines.findIndex(l => l.id === line.id);
+                const centers = workCenters[line.id] || [];
+                const open = Boolean(expandedLines[line.id]);
 
-            <Stack
-                direction="row"
-                sx={{
-                    justifyContent: "space-between",
-                    alignItems: "flex-start"
-                }}>
+                return (
 
-                {/* LEFT SIDE */}
+                    <Box key={line.id}>
 
-                <Stack
-                    spacing={1}
-                    sx={{ flex: 1 }}
-                >
+                        <AdminRow inactive={!line.active} sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "minmax(240px, 2fr) 110px 150px 120px 200px" } }}>
 
-                    <Stack
-    direction="row"
-    spacing={1}
-    sx={{
-        alignItems: "center"
-    }}
->
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flex: "1 1 240px" }}>
 
-    <IconButton
-    onClick={() => toggleExpanded(line.id)}
->
+                                <IconButton
+                                    size="small"
+                                    aria-label={`${open ? "Hide" : "Show"} work centers for ${line.name}`}
+                                    aria-expanded={open}
+                                    onClick={() => toggleExpanded(line.id)}
+                                    sx={iconSx}
+                                >
+                                    {open ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                                </IconButton>
 
-    {expandedLines[line.id]
+                                <Box sx={{ width: 4, alignSelf: "stretch", minHeight: 28, bgcolor: line.color || tokens.blue, flexShrink: 0 }} title="Line color" />
 
-        ? <ExpandMoreIcon />
+                                <Box sx={{ minWidth: 0 }}>
+                                    <Box sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: 20, letterSpacing: "1px", textTransform: "uppercase", lineHeight: 1.2 }}>
+                                        {line.name}
+                                    </Box>
+                                    {line.description && (
+                                        <Box sx={{ fontSize: 13, color: tokens.muted }}>{line.description}</Box>
+                                    )}
+                                </Box>
 
-        : <ChevronRightIcon />
+                            </Box>
 
-    }
+                            <Box><Tag>{line.facility}</Tag></Box>
 
-</IconButton>
+                            <Box sx={{ fontFamily: tokens.mono, fontSize: 13, color: tokens.muted }}>
+                                {centers.length} work center{centers.length === 1 ? "" : "s"}
+                            </Box>
 
-    <Typography
-        variant="h5"
-        sx={{
-            fontWeight: 700
-        }}
-    >
-        {line.name}
-    </Typography>
+                            <Light color={line.active ? tokens.online : tokens.muted} label={line.active ? "Active" : "Inactive"} />
 
-</Stack>
+                            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
 
-                    <Typography sx={{
-                        color: "text.secondary"
-                    }}>
-                        {line.description || "No description"}
-                    </Typography>
+                                <Tooltip title="Move up">
+                                    <span>
+                                        <IconButton size="small" aria-label={`Move ${line.name} up`} disabled={position === 0} onClick={() => moveLineUp(line.id)} sx={iconSx}>
+                                            <KeyboardArrowUpIcon fontSize="small" />
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
 
-                    <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{
-                            alignItems: "center"
-                        }}
-                    >
+                                <Tooltip title="Move down">
+                                    <span>
+                                        <IconButton size="small" aria-label={`Move ${line.name} down`} disabled={position === lines.length - 1} onClick={() => moveLineDown(line.id)} sx={iconSx}>
+                                            <KeyboardArrowDownIcon fontSize="small" />
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
 
-                        <Chip
-                            label={line.facility}
-                            size="small"
-                            variant="outlined"
-                        />
+                                <Tooltip title="Edit line">
+                                    <IconButton
+                                        size="small"
+                                        aria-label={`Edit ${line.name}`}
+                                        onClick={() => {
+                                            setSelectedLine(line);
+                                            setEditOpen(true);
+                                        }}
+                                        sx={iconSx}
+                                    >
+                                        <EditIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
 
-                        
+                                <Tooltip title="Archive line">
+                                    <IconButton
+                                        size="small"
+                                        aria-label={`Archive ${line.name}`}
+                                        onClick={() => {
+                                            setDeleteLine(line);
+                                            setDeleteOpen(true);
+                                        }}
+                                        sx={{ color: tokens.muted, "&:hover": { color: "#FFA040" } }}
+                                    >
+                                        <ArchiveIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
 
-                    </Stack>
+                            </Box>
 
-                </Stack>
+                        </AdminRow>
 
-                {/* RIGHT SIDE */}
+                        <Collapse in={open}>
 
-                <Stack
-                    spacing={2}
-                    sx={{
-                        alignItems: "flex-end"
-                    }}
-                >
+                            <Box sx={{ bgcolor: tokens.ground, borderBottom: `1px solid ${tokens.line}` }}>
 
-                    <Chip
-                        label={line.active ? "ACTIVE" : "INACTIVE"}
-                        color={line.active ? "success" : "default"}
-                        size="small"
-                    />
+                                {centers.length === 0 && (
+                                    <Box sx={{ pl: 9, py: 1.25, color: tokens.muted, fontSize: 14 }}>No work centers. The tablet can't raise alerts on this line until one is added.</Box>
+                                )}
 
-                    <Stack
-    direction="row"
-    spacing={0.5}
-    sx={{
-        alignItems: "center"
-    }}
->
+                                {centers.map((wc, i) => (
 
-    <IconButton
-        size="small"
-        disabled={lines.findIndex(l => l.id === line.id) === 0}
-        onClick={() => moveLineUp(line.id)}
-    >
-        <KeyboardArrowUpIcon />
-    </IconButton>
+                                    <Box
+                                        key={wc.id}
+                                        sx={{ display: "flex", alignItems: "center", gap: 2, pl: 9, pr: 2.25, py: 0.75, borderTop: i ? `1px solid ${tokens.line}` : "none", opacity: wc.active ? 1 : 0.6 }}
+                                    >
 
-    <IconButton
-        size="small"
-        disabled={
-    lines.findIndex(l => l.id === line.id) === lines.length - 1
-}
-        onClick={() => moveLineDown(line.id)}
-    >
-        <KeyboardArrowDownIcon />
-    </IconButton>
+                                        <Box sx={{ fontFamily: tokens.mono, fontSize: 12, color: tokens.muted, width: 20 }}>{String(i + 1).padStart(2, "0")}</Box>
 
-    <Box
-        sx={{
-            width: 34,
-            height: 34,
-            bgcolor: line.color,
-            borderRadius: 2,
-            border: "1px solid #bbb",
-            boxShadow: 2,
-            mx: 1
-        }}
-    />
+                                        <Box sx={{ flex: 1, fontWeight: 500 }}>{wc.name}</Box>
 
-    <IconButton
-        onClick={() => {
-            setSelectedLine(line);
-            setEditOpen(true);
-        }}
-    >
-        <EditIcon />
-    </IconButton>
+                                        {!wc.active && <Light color={tokens.muted} label="Inactive" />}
 
-    <IconButton
-        color="warning"
-        title="Archive line"
-        onClick={() => {
-            setDeleteLine(line);
-            setDeleteOpen(true);
-        }}
-    >
-        <ArchiveIcon />
-    </IconButton>
+                                        <IconButton size="small" aria-label={`Move ${wc.name} up`} disabled={i === 0} onClick={() => moveWorkCenterUp(line.id, wc.id)} sx={iconSx}>
+                                            <KeyboardArrowUpIcon fontSize="small" />
+                                        </IconButton>
 
-</Stack>
+                                        <IconButton size="small" aria-label={`Move ${wc.name} down`} disabled={i === centers.length - 1} onClick={() => moveWorkCenterDown(line.id, wc.id)} sx={iconSx}>
+                                            <KeyboardArrowDownIcon fontSize="small" />
+                                        </IconButton>
 
-                </Stack>
+                                        <IconButton
+                                            size="small"
+                                            aria-label={`Edit ${wc.name}`}
+                                            onClick={() => {
+                                                setSelectedWorkCenter(wc);
+                                                setEditWorkCenterOpen(true);
+                                            }}
+                                            sx={iconSx}
+                                        >
+                                            <EditIcon fontSize="small" />
+                                        </IconButton>
 
-            </Stack>
+                                    </Box>
 
-           <Collapse in={expandedLines[line.id]}>
+                                ))}
 
-    <List dense>
+                                <Box sx={{ pl: 8, py: 1, borderTop: `1px solid ${tokens.line}` }}>
+                                    <Button
+                                        size="small"
+                                        startIcon={<AddIcon />}
+                                        onClick={() => {
+                                            setSelectedProductionLine(line);
+                                            setAddWorkCenterOpen(true);
+                                        }}
+                                    >
+                                        Add work center
+                                    </Button>
+                                </Box>
 
-        {(workCenters[line.id] || []).map((wc) => (
+                            </Box>
 
-            <ListItem
-                key={wc.id}
-                secondaryAction={
+                        </Collapse>
 
-    <Stack
-        direction="row"
-        spacing={0.5}
-    >
+                    </Box>
 
-        <IconButton
-            size="small"
-            disabled={
-                (workCenters[line.id] || []).findIndex(
-                    x => x.id === wc.id
-                ) === 0
-            }
-            onClick={() =>
-                moveWorkCenterUp(line.id, wc.id)
-            }
-        >
-            <KeyboardArrowUpIcon fontSize="small" />
-        </IconButton>
+                );
 
-        <IconButton
-            size="small"
-            disabled={
-                (workCenters[line.id] || []).findIndex(
-                    x => x.id === wc.id
-                ) === (workCenters[line.id] || []).length - 1
-            }
-            onClick={() =>
-                moveWorkCenterDown(line.id, wc.id)
-            }
-        >
-            <KeyboardArrowDownIcon fontSize="small" />
-        </IconButton>
-
-        <IconButton
-            size="small"
-            onClick={() => {
-
-                setSelectedWorkCenter(wc);
-                setEditWorkCenterOpen(true);
-
-            }}
-        >
-            <EditIcon fontSize="small" />
-        </IconButton>
-
-    </Stack>
-
-}
-            >
-
-                <ListItemText
-                    primary={wc.name}
-                />
-
-            </ListItem>
-
-        ))}
-
-        <Button
-    startIcon={<AddIcon />}
-    sx={{ ml: 2, mt: 1 }}
-    onClick={() => {
-
-        setSelectedProductionLine(line);
-        setAddWorkCenterOpen(true);
-
-    }}
->
-    Add Work Center
-</Button>
-
-    </List>
-
-</Collapse>
-
-        </Paper>
-
-    ))
-}
+            })}
 
             <AddWorkCenterDialog
                 open={addWorkCenterOpen}
@@ -881,8 +743,7 @@ function moveLineDown(lineId) {
     onSave={handleUpdateWorkCenter}
 />
 
-        </Paper>
+        </AdminPanel>
     );
 
 }
-
