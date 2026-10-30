@@ -1,4 +1,4 @@
-// Alert timing shared by the Response Center and Dashboard (E3).
+// Alert timing shared by the Response Center and Wallboard (E3).
 
 // Seconds since the alert was raised.
 export function ageSeconds(requested, now = Date.now()) {

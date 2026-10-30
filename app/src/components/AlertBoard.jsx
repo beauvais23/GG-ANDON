@@ -7,7 +7,7 @@ import { alertLabel } from "../config/alertColors";
 
 //------------------------------------------------------
 // Open alerts as rows, with optional type filters (E3).
-// Used by the Response Center and the Dashboard.
+// Used by the Response Center.
 //------------------------------------------------------
 
 const TYPES = ["ALL", "QUALITY", "MAINTENANCE", "MATERIAL", "SUPERVISOR", "SAFETY", "DOWNTIME", "NEAR_MISS"];

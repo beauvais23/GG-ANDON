@@ -4,8 +4,7 @@ import { labelSx, tokens } from "../theme/theme";
 
 //------------------------------------------------------
 // Status strip (E3): five numbers in one hairline grid.
-// Same props as before; /dashboard now passes them too
-// (#29).
+// Same props as before.
 //------------------------------------------------------
 
 function Stat({ label, value, color }) {

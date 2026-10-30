@@ -216,3 +216,60 @@ test("the Telegram channel is no longer sent a reply prompt", async () => {
     }
 
 });
+
+test("Clear removes one alert from the list with a cleared note; a noted or unknown alert is refused", async () => {
+
+    const id = await raiseAndAck("QUALITY");
+    await telegramResolve(id);
+
+    const keep = await raiseAndAck("SAFETY");
+    await telegramResolve(keep);
+
+    const res = await request(app).patch(`/alerts/${id}/note/clear`).set(floor)
+        .send({ clearedBy: "Other Lead" });
+
+    assert.equal(res.status, 200, res.text);
+    assert.equal(await noteOf(id), "Resolved from Telegram; no note (cleared by Other Lead)");
+
+    const list = await needsNote();
+
+    assert.ok(!list.includes(id) && list.includes(keep), "only the cleared alert leaves");
+
+    // Cleared: a note can no longer be added, and clearing again is refused.
+    assert.equal((await addNote(id, { note: "late note" })).status, 409);
+    assert.equal((await request(app).patch(`/alerts/${id}/note/clear`).set(floor).send({})).status, 409);
+    assert.equal((await request(app).patch("/alerts/999999/note/clear").set(floor).send({})).status, 404);
+
+    const web = await raiseAndAck("MATERIAL");
+    await request(app).patch(`/alerts/${web}/resolve`).set(floor)
+        .send({ resolvedBy: RESOLVER_NAME, resolutionNotes: "Fixed on the web" });
+
+    assert.equal((await request(app).patch(`/alerts/${web}/note/clear`).set(floor).send({})).status, 409);
+    assert.equal(await noteOf(web), "Fixed on the web");
+
+});
+
+test("Clear all empties the list and touches only Telegram placeholders", async () => {
+
+    const a = await raiseAndAck("QUALITY");
+    await telegramResolve(a);
+
+    const web = await raiseAndAck("MAINTENANCE");
+    await request(app).patch(`/alerts/${web}/resolve`).set(floor)
+        .send({ resolvedBy: RESOLVER_NAME, resolutionNotes: "Fixed on the web" });
+
+    const before = (await needsNote()).length;
+
+    assert.ok(before >= 1);
+
+    const res = await request(app).post("/alerts/needs-note/clear").set(floor).send({});
+
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.body.cleared, before);
+    assert.deepEqual(await needsNote(), []);
+    assert.equal(await noteOf(a), "Resolved from Telegram; no note (cleared)");
+    assert.equal(await noteOf(web), "Fixed on the web");
+
+    assert.equal((await request(app).post("/alerts/needs-note/clear").send({})).status, 401);
+
+});
