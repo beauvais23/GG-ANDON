@@ -140,7 +140,9 @@ function responseStats(alerts) {
 
         const requested = Number(alert.requested);
 
-        if (!requested)
+        // Near misses are reports, not calls for help (Oct 30 2026):
+        // they never wait for a responder, so they stay out of MTTA/MTTR.
+        if (!requested || alert.type === "NEAR_MISS")
             continue;
 
         const month = monthNY(requested);

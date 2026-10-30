@@ -167,7 +167,7 @@ test("the other six types are unchanged: ANDON Chat space + Telegram", async () 
 
 });
 
-test("without GOOGLE_CHAT_NEAR_MISS_WEBHOOK a NEAR MISS falls back to the usual channels", async () => {
+test("without GOOGLE_CHAT_NEAR_MISS_WEBHOOK a NEAR MISS falls back to the ANDON Chat space (never Telegram: nothing to acknowledge)", async () => {
 
     delete process.env.GOOGLE_CHAT_NEAR_MISS_WEBHOOK;
 
@@ -176,7 +176,7 @@ test("without GOOGLE_CHAT_NEAR_MISS_WEBHOOK a NEAR MISS falls back to the usual 
     await notifyCreated(alert);
 
     assert.deepEqual(chat(), [`chat:${ANDON_CHAT}`]);
-    assert.deepEqual(telegram(), ["telegram:sendMessage"]);
+    assert.deepEqual(telegram(), []);
     assert.ok(console.warn.mock.calls.some(c => /GOOGLE_CHAT_NEAR_MISS_WEBHOOK not set/.test(c.arguments[0])));
 
 });
