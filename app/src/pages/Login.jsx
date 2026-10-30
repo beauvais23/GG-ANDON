@@ -8,13 +8,13 @@ import {
 import {
     Box,
     Button,
-    Paper,
     TextField,
-    Typography,
     Alert
 } from "@mui/material";
 
 import config from "../config/config";
+
+import { labelSx, tokens } from "../theme/theme";
 
 export default function Login() {
 
@@ -190,207 +190,103 @@ export default function Login() {
     }
 
     //------------------------------------------------------
-    // Render
+    // Render (E5)
     //------------------------------------------------------
 
     return (
 
         <Box
-
             sx={{
-
                 minHeight: "100vh",
-
                 display: "flex",
-
+                flexDirection: "column",
                 alignItems: "center",
-
                 justifyContent: "center",
-
-                backgroundColor:
-                    "#0B0D10",
-
-                padding: 2
-
+                gap: 2,
+                bgcolor: tokens.ground,
+                p: 2
             }}
-
         >
 
-            <Paper
-
-                elevation={4}
-
+            <Box
+                component="main"
                 sx={{
-
                     width: "100%",
-
                     maxWidth: 420,
-
-                    padding: 4
-
+                    bgcolor: tokens.panel,
+                    border: `1px solid ${tokens.line}`,
+                    borderTop: `4px solid ${tokens.blue}`
                 }}
-
             >
 
-                <Typography
+                {/* G&G mark */}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 3.5, pt: 3.5 }} aria-label="G&G Industrial Lighting">
+                    <Box sx={{ width: 6, height: 34, bgcolor: tokens.blue }} />
+                    <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
+                        <Box component="span" sx={{ fontFamily: tokens.display, fontWeight: 700, fontSize: 26, letterSpacing: "1px" }}>
+                            G&amp;G
+                        </Box>
+                        <Box component="span" sx={{ ...labelSx, fontSize: 11, letterSpacing: "2.5px" }}>
+                            Industrial Lighting
+                        </Box>
+                    </Box>
+                </Box>
 
-                    variant="h4"
+                <Box sx={{ px: 3.5, pt: 3 }}>
+                    <Box component="h1" sx={{ m: 0, fontFamily: tokens.display, fontWeight: 700, fontSize: 34, letterSpacing: "2px", textTransform: "uppercase", lineHeight: 1 }}>
+                        ManufacturingOS
+                    </Box>
+                    <Box sx={{ ...labelSx, mt: 0.75 }}>
+                        Production Response System · Malta
+                    </Box>
+                </Box>
 
-                    fontWeight={700}
+                <Box component="form" onSubmit={handleSubmit} sx={{ px: 3.5, pt: 2, pb: 3.5 }}>
 
-                    gutterBottom
-
-                    sx={{
-
-                        textAlign: "center"
-
-                    }}
-
-                >
-
-                    G&G ANDON
-
-                </Typography>
-
-                <Typography
-
-                    variant="body1"
-
-                    color="text.secondary"
-
-                    sx={{
-
-                        mb: 3,
-
-                        textAlign: "center"
-
-                    }}
-
-                >
-
-                    ManufacturingOS
-
-                </Typography>
-
-                {error && (
-
-                    <Alert
-
-                        severity="error"
-
-                        sx={{
-
-                            mb: 2
-
-                        }}
-
-                    >
-
-                        {error}
-
-                    </Alert>
-
-                )}
-
-                <Box
-
-                    component="form"
-
-                    onSubmit={handleSubmit}
-
-                >
+                    {error && (
+                        <Alert severity="error" sx={{ mt: 1.5 }}>
+                            {error}
+                        </Alert>
+                    )}
 
                     <TextField
-
                         fullWidth
-
                         label="Username"
-
                         value={username}
-
-                        onChange={(event) =>
-
-                            setUsername(
-                                event.target.value
-                            )
-
-                        }
-
+                        onChange={(event) => setUsername(event.target.value)}
                         margin="normal"
-
                         autoComplete="username"
-
                         autoFocus
-
                     />
 
                     <TextField
-
                         fullWidth
-
                         label="Password"
-
                         type="password"
-
                         value={password}
-
-                        onChange={(event) =>
-
-                            setPassword(
-                                event.target.value
-                            )
-
-                        }
-
+                        onChange={(event) => setPassword(event.target.value)}
                         margin="normal"
-
                         autoComplete="current-password"
-
                     />
 
                     <Button
-
                         fullWidth
-
                         type="submit"
-
                         variant="contained"
-
                         size="large"
-
-                        disabled={
-
-                            loading ||
-
-                            !username ||
-
-                            !password
-
-                        }
-
-                        sx={{
-
-                            mt: 3
-
-                        }}
-
+                        disabled={loading || !username || !password}
+                        sx={{ mt: 2.5, height: 52, fontSize: 18, letterSpacing: "3px" }}
                     >
-
-                        {
-
-                            loading
-
-                                ? "Signing In..."
-
-                                : "Sign In"
-
-                        }
-
+                        {loading ? "Signing in…" : "Sign in"}
                     </Button>
 
                 </Box>
 
-            </Paper>
+            </Box>
+
+            <Box sx={{ ...labelSx, fontSize: 11 }}>
+                Floor tablets and screens use the production login
+            </Box>
 
         </Box>
 

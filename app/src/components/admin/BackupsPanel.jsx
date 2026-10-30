@@ -5,8 +5,6 @@ import {
     Box,
     Button,
     Chip,
-    Paper,
-    Stack,
     Table,
     TableBody,
     TableCell,
@@ -17,6 +15,8 @@ import {
 
 import DownloadIcon from "@mui/icons-material/Download";
 import RefreshIcon from "@mui/icons-material/Refresh";
+
+import { AdminPanel } from "./adminUi";
 
 import {
     getBackups,
@@ -154,28 +154,17 @@ export default function BackupsPanel() {
 
     return (
 
-        <Paper sx={{ p: 3 }}>
-
-            <Stack
-                direction="row"
-                justifyContent="space-between"
-                alignItems="center"
-                sx={{ mb: 1 }}
-            >
-
-                <Typography variant="h6">
-                    Database Backups
-                </Typography>
-
-                <Button
-                    startIcon={<RefreshIcon />}
-                    onClick={load}
-                    disabled={loading}
-                >
+        <AdminPanel
+            title="Database backups"
+            meta="Newest 14 daily + 14 other, on the Railway volume"
+            action={
+                <Button startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
                     Refresh
                 </Button>
+            }
+        >
 
-            </Stack>
+        <Box sx={{ p: 2.25 }}>
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 These files live on the same Railway volume as the database.
@@ -275,7 +264,9 @@ export default function BackupsPanel() {
 
             )}
 
-        </Paper>
+        </Box>
+
+        </AdminPanel>
 
     );
 
