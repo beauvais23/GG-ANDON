@@ -1,15 +1,9 @@
 import { useEffect, useState } from "react";
 
 import {
-    Paper,
-    Typography,
-    Stack,
-    Button,
-    TextField,
-    Avatar,
-    Chip,
-    IconButton,
     Box,
+    Button,
+    IconButton,
     Tooltip
 } from "@mui/material";
 
@@ -27,76 +21,38 @@ import {
 } from "../../api/responseTeam";
 
 import ArchivedList from "./ArchivedList";
+import { AdminPanel, EmptyRow, Light, SearchBar, StatStrip, Tag, AdminRow } from "./adminUi";
+
+import { tokens } from "../../theme/theme";
 
 import AddResponderDialog from "../AddResponderDialog";
 import EditResponderDialog from "../EditResponderDialog";
 import DeleteResponderDialog from "../DeleteResponderDialog";
 
 //------------------------------------------------------
-// Responder Status Helpers
+// Status lights (same colors as the Response Center)
 //------------------------------------------------------
 
-function getAvailabilityColor(status) {
+const LIGHTS = {
+    available: "#3FB950",
+    responding: tokens.blueText,
+    busy: "#FF6B61",
+    away: "#F2C232"
+};
 
-    switch ((status || "").toLowerCase()) {
+function availabilityLight(responder) {
 
-        case "available":
-            return "success";
+    if (!responder.active)
+        return { color: tokens.muted, label: "Inactive" };
 
-        case "responding":
-            return "primary";
+    const label = responder.availability || "Available";
 
-        case "busy":
-            return "error";
-
-        case "away":
-            return "warning";
-
-        default:
-            return "default";
-
-    }
+    return { color: LIGHTS[label.toLowerCase()] || tokens.muted, label };
 
 }
 
-function getAvailabilityLabel(responder) {
-
-    if (!responder.active) {
-        return "Inactive";
-    }
-
-    return responder.availability || "Available";
-
-}
-
-function getDepartmentColor(department) {
-
-    switch (department) {
-
-        case "Leadership":
-            return "secondary";
-
-        case "Operations":
-            return "primary";
-
-        case "Engineering":
-            return "info";
-
-        case "Quality":
-            return "success";
-
-        case "Safety":
-            return "warning";
-
-        case "Maintenance":
-            return "error";
-
-        default:
-            return "default";
-
-    }
-
-}
+// Name · department · phone · status · actions, aligned on wide screens.
+const COLUMNS = { md: "minmax(220px, 2fr) minmax(140px, 1fr) minmax(130px, 1fr) 130px 96px" };
 
 //------------------------------------------------------
 // Component
@@ -320,528 +276,104 @@ export default function RespondersPanel() {
         });
 
     //------------------------------------------------------
-    // Avatar Initials
-    //------------------------------------------------------
-
-    function initials(name) {
-
-        return (name || "")
-            .split(" ")
-            .filter(Boolean)
-            .map(word => word[0])
-            .join("")
-            .substring(0, 2)
-            .toUpperCase();
-
-    }
-
-    //------------------------------------------------------
-    // Render
+    // Render (E5)
     //------------------------------------------------------
 
     return (
 
-        <Paper
-            elevation={3}
-            sx={{
-                p: 4,
-                borderRadius: 3,
-                bgcolor: "#0B0D10"
-            }}
+        <AdminPanel
+            title="Response team"
+            meta="Who can acknowledge, resolve and cancel alerts"
+            action={
+                <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
+                    Add responder
+                </Button>
+            }
         >
 
-            {/* Header */}
-
-            <Stack
-                direction="row"
-                sx={{
-                    alignItems: "center",
-                    mb: 4
-                }}
-            >
-
-                <Box>
-
-                    <Typography
-                        variant="h5"
-                        sx={{
-                            fontWeight: 700
-                        }}
-                    >
-                        Response Team
-                    </Typography>
-
-                    <Typography
-                        variant="body2"
-                        sx={{
-                            color: "text.secondary"
-                        }}
-                    >
-                        Manage responder availability and contact information.
-                    </Typography>
-
-                </Box>
-
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    sx={{
-                        ml: "auto"
-                    }}
-                    onClick={() =>
-                        setAddOpen(true)
-                    }
-                >
-                    Add Responder
-                </Button>
-
-            </Stack>
-
-            {/* Statistics */}
-
-            <Stack
-                direction="row"
-                spacing={2}
-                sx={{
-                    mb: 3
-                }}
-            >
-
-                <Paper
-                    sx={{
-                        flex: 1,
-                        p: 2
-                    }}
-                >
-
-                    <Typography
-                        variant="h4"
-                        sx={{
-                            fontWeight: 700
-                        }}
-                    >
-                        {responders.length}
-                    </Typography>
-
-                    <Typography
-                        sx={{
-                            color: "text.secondary"
-                        }}
-                    >
-                        Total Responders
-                    </Typography>
-
-                </Paper>
-
-                <Paper
-                    sx={{
-                        flex: 1,
-                        p: 2
-                    }}
-                >
-
-                    <Typography
-                        variant="h4"
-                        sx={{
-                            fontWeight: 700
-                        }}
-                    >
-                        {activeCount}
-                    </Typography>
-
-                    <Typography
-                        sx={{
-                            color: "text.secondary"
-                        }}
-                    >
-                        Active
-                    </Typography>
-
-                </Paper>
-
-                <Paper
-                    sx={{
-                        flex: 1,
-                        p: 2
-                    }}
-                >
-
-                    <Typography
-                        variant="h4"
-                        sx={{
-                            fontWeight: 700,
-                            color: "success.main"
-                        }}
-                    >
-                        {availableCount}
-                    </Typography>
-
-                    <Typography
-                        sx={{
-                            color: "text.secondary"
-                        }}
-                    >
-                        Available
-                    </Typography>
-
-                </Paper>
-
-                <Paper
-                    sx={{
-                        flex: 1,
-                        p: 2
-                    }}
-                >
-
-                    <Typography
-                        variant="h4"
-                        sx={{
-                            fontWeight: 700,
-                            color: "primary.main"
-                        }}
-                    >
-                        {respondingCount}
-                    </Typography>
-
-                    <Typography
-                        sx={{
-                            color: "text.secondary"
-                        }}
-                    >
-                        Responding
-                    </Typography>
-
-                </Paper>
-
-                <Paper
-                    sx={{
-                        flex: 1,
-                        p: 2
-                    }}
-                >
-
-                    <Typography
-                        variant="h4"
-                        sx={{
-                            fontWeight: 700
-                        }}
-                    >
-                        {departmentCount}
-                    </Typography>
-
-                    <Typography
-                        sx={{
-                            color: "text.secondary"
-                        }}
-                    >
-                        Departments
-                    </Typography>
-
-                </Paper>
-
-            </Stack>
-
-            {/* Search */}
-
-            <TextField
-                fullWidth
-                placeholder="Search responders..."
-                value={search}
-                onChange={(event) =>
-                    setSearch(event.target.value)
-                }
-                sx={{
-                    mb: 4,
-                    bgcolor: "#14181D"
-                }}
+            <StatStrip
+                items={[
+                    { label: "Responders", value: responders.length },
+                    { label: "Active", value: activeCount },
+                    { label: "Available", value: availableCount, color: LIGHTS.available },
+                    { label: "Responding", value: respondingCount, color: LIGHTS.responding },
+                    { label: "Departments", value: departmentCount }
+                ]}
             />
 
-            {/* Loading */}
+            <SearchBar value={search} onChange={setSearch} placeholder="Search name, title, department or status" />
 
-            {loading && (
+            {loading && <EmptyRow>Loading response team…</EmptyRow>}
 
-                <Typography>
-
-                    Loading response team...
-
-                </Typography>
-
+            {!loading && filteredResponders.length === 0 && (
+                <EmptyRow>{responders.length ? "No responders match the search." : "No responders yet. Add the first one."}</EmptyRow>
             )}
 
-            {/* Empty State */}
+            {!loading && filteredResponders.map(responder => {
 
-            {!loading &&
-                filteredResponders.length === 0 && (
+                const status = availabilityLight(responder);
 
-                    <Paper
-                        sx={{
-                            p: 4,
-                            textAlign: "center"
-                        }}
+                return (
+
+                    <AdminRow
+                        key={responder.id}
+                        inactive={!responder.active}
+                        sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: COLUMNS }}
                     >
 
-                        <Typography
-                            sx={{
-                                color: "text.secondary"
-                            }}
-                        >
-                            No responders found.
-                        </Typography>
+                        <Box sx={{ minWidth: 0, flex: "1 1 220px" }}>
+                            <Box sx={{ fontWeight: 600 }}>{responder.name}</Box>
+                            {responder.job_title && (
+                                <Box sx={{ fontSize: 13, color: tokens.muted }}>{responder.job_title}</Box>
+                            )}
+                        </Box>
 
-                    </Paper>
+                        <Box>
+                            {responder.department ? <Tag>{responder.department}</Tag> : <Box component="span" sx={{ color: tokens.muted }}>—</Box>}
+                        </Box>
 
-                )}
+                        <Box sx={{ fontFamily: tokens.mono, fontSize: 13, color: tokens.muted }}>
+                            {responder.phone || "—"}
+                        </Box>
 
-            {/* Responder Cards */}
+                        <Light color={status.color} label={status.label} />
 
-            {!loading &&
-                filteredResponders.map(
-                    responder => (
+                        <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
 
-                        <Paper
-                            key={responder.id}
-                            elevation={2}
-                            sx={{
-                                px: 4,
-                                py: 3,
-                                mb: 2,
-                                borderRadius: 3,
-                                opacity:
-                                    responder.active
-                                        ? 1
-                                        : 0.65
-                            }}
-                        >
-
-                            <Stack
-                                direction="row"
-                                sx={{
-                                    justifyContent:
-                                        "space-between",
-
-                                    alignItems:
-                                        "center"
-                                }}
-                            >
-
-                                {/* Left Side */}
-
-                                <Stack
-                                    direction="row"
-                                    spacing={2}
-                                    sx={{
-                                        flex: 1,
-                                        alignItems:
-                                            "center"
+                            <Tooltip title="Edit responder">
+                                <IconButton
+                                    size="small"
+                                    aria-label={`Edit ${responder.name}`}
+                                    onClick={() => {
+                                        setSelectedResponder(responder);
+                                        setEditOpen(true);
                                     }}
                                 >
+                                    <EditIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
 
-                                    <Avatar
-                                        sx={{
-                                            width: 54,
-                                            height: 54,
-
-                                            bgcolor:
-                                                responder.active
-                                                    ? "#1976d2"
-                                                    : "grey.500",
-
-                                            fontWeight: 700
-                                        }}
-                                    >
-                                        {initials(
-                                            responder.name
-                                        )}
-                                    </Avatar>
-
-                                    <Box>
-
-                                        <Stack
-                                            direction="row"
-                                            spacing={1}
-                                            sx={{
-                                                alignItems:
-                                                    "center",
-                                                mb: 0.5
-                                            }}
-                                        >
-
-                                            <Typography
-                                                variant="h6"
-                                                sx={{
-                                                    fontWeight: 700
-                                                }}
-                                            >
-                                                {
-                                                    responder.name
-                                                }
-                                            </Typography>
-
-                                            {!responder.active && (
-
-                                                <Chip
-                                                    label="INACTIVE"
-                                                    size="small"
-                                                    variant="outlined"
-                                                />
-
-                                            )}
-
-                                        </Stack>
-
-                                        <Typography
-                                            sx={{
-                                                color:
-                                                    "text.secondary"
-                                            }}
-                                        >
-                                            {
-                                                responder.job_title ||
-                                                "No job title"
-                                            }
-                                        </Typography>
-
-                                        <Stack
-                                            direction="row"
-                                            spacing={1}
-                                            sx={{
-                                                mt: 1,
-                                                alignItems:
-                                                    "center"
-                                            }}
-                                        >
-
-                                            <Chip
-                                                label={
-                                                    responder.department ||
-                                                    "No Department"
-                                                }
-                                                size="small"
-                                                color={
-                                                    getDepartmentColor(
-                                                        responder.department
-                                                    )
-                                                }
-                                            />
-
-                                            {responder.phone && (
-
-                                                <Typography
-                                                    variant="caption"
-                                                    sx={{
-                                                        color:
-                                                            "text.secondary"
-                                                    }}
-                                                >
-                                                    {
-                                                        responder.phone
-                                                    }
-                                                </Typography>
-
-                                            )}
-
-                                        </Stack>
-
-                                    </Box>
-
-                                </Stack>
-
-                                {/* Right Side */}
-
-                                <Stack
-                                    spacing={1.5}
-                                    sx={{
-                                        alignItems:
-                                            "flex-end"
+                            <Tooltip title="Archive responder">
+                                <IconButton
+                                    size="small"
+                                    aria-label={`Archive ${responder.name}`}
+                                    sx={{ color: tokens.muted, "&:hover": { color: "#FFA040" } }}
+                                    onClick={() => {
+                                        setDeleteResponderItem(responder);
+                                        setDeleteOpen(true);
                                     }}
                                 >
+                                    <ArchiveIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
 
-                                    <Chip
-                                        label={
-                                            getAvailabilityLabel(
-                                                responder
-                                            ).toUpperCase()
-                                        }
-                                        color={
-                                            responder.active
-                                                ? getAvailabilityColor(
-                                                    responder.availability
-                                                )
-                                                : "default"
-                                        }
-                                        size="small"
-                                        sx={{
-                                            fontWeight: 700,
-                                            px: 1,
-                                            height: 28,
-                                            letterSpacing: 0.5
-                                        }}
-                                    />
+                        </Box>
 
-                                    <Stack
-                                        direction="row"
-                                        spacing={1}
-                                    >
+                    </AdminRow>
 
-                                        <Tooltip
-                                            title="Edit responder"
-                                        >
+                );
 
-                                            <IconButton
-                                                onClick={() => {
-
-                                                    setSelectedResponder(
-                                                        responder
-                                                    );
-
-                                                    setEditOpen(
-                                                        true
-                                                    );
-
-                                                }}
-                                            >
-
-                                                <EditIcon />
-
-                                            </IconButton>
-
-                                        </Tooltip>
-
-                                        <Tooltip
-                                            title="Archive responder"
-                                        >
-
-                                            <IconButton
-                                                color="warning"
-                                                onClick={() => {
-
-                                                    setDeleteResponderItem(
-                                                        responder
-                                                    );
-
-                                                    setDeleteOpen(
-                                                        true
-                                                    );
-
-                                                }}
-                                            >
-
-                                                <ArchiveIcon />
-
-                                            </IconButton>
-
-                                        </Tooltip>
-
-                                    </Stack>
-
-                                </Stack>
-
-                            </Stack>
-
-                        </Paper>
-
-                    )
-                )}
+            })}
 
             {/* Add Dialog */}
 
@@ -889,7 +421,7 @@ export default function RespondersPanel() {
                 onDelete={handleDelete}
             />
 
-        </Paper>
+        </AdminPanel>
 
     );
 

@@ -206,6 +206,8 @@ The dead work-center delete icon in Admin → Production Lines was removed (Dire
 
 Oct 30 2026 (Director's page notes): `/dashboard` removed (a copy of the Response Center; the route redirects to `/supervisor`). The Admin page's link buttons were removed (PAGES replaces them). **Needs a resolution note** has **Clear** (per alert) and **Clear all** (with a confirm): `PATCH /alerts/:id/note/clear`, `POST /alerts/needs-note/clear` save "Resolved from Telegram; no note (cleared by <name>)", and a note can't be added afterward.
 
+E5 (Oct 30 2026): Login and Admin in the industrial look. Admin = top bar + tabs (Responders, Production lines, Backups) + `Footer`; panels share `components/admin/adminUi.jsx` (`AdminPanel`, `StatStrip`, `SearchBar`, `AdminRow`, `Light`, `Tag`). The unused responder grid that lived in `AdminPage.jsx` was removed.
+
 ## Testing
 
 - Use `node:test` + `supertest` against a temporary SQLite file (`server/test/helpers.js` → `loadApp()`). Never use the real DB.
