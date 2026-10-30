@@ -2,10 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
     Box,
-    Button
+    Button,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle
 } from "@mui/material";
 
 import EditNoteIcon from "@mui/icons-material/EditNote";
+import ClearIcon from "@mui/icons-material/Clear";
 
 import ResolveDialog from "./ResolveDialog";
 
@@ -14,6 +19,8 @@ import { tokens } from "../theme/theme";
 
 import {
     addAlertNote,
+    clearAlertNote,
+    clearAllAlertNotes,
     getAlertsNeedingNote
 } from "../services/api";
 
@@ -25,6 +32,10 @@ import {
 // so those alerts are saved as "Resolved from Telegram"
 // and listed here until someone adds what fixed it.
 // Hidden when the list is empty.
+//
+// Clear / Clear all take an alert off the list without a
+// note; it is saved as "Resolved from Telegram; no note
+// (cleared by <name>)".
 //------------------------------------------------------
 
 const REFRESH_MS = 30000;
@@ -45,6 +56,8 @@ export default function NeedsNotePanel({ responder }) {
 
     const [alerts, setAlerts] = useState([]);
     const [editing, setEditing] = useState(null);
+    const [confirmAll, setConfirmAll] = useState(false);
+    const [error, setError] = useState("");
 
     const load = useCallback(async () => {
 
@@ -84,6 +97,27 @@ export default function NeedsNotePanel({ responder }) {
 
     }
 
+    async function clear(run) {
+
+        setError("");
+
+        try {
+
+            const result = await run();
+
+            if (result?.success === false)
+                setError(result.message || "Could not clear.");
+
+        } catch (err) {
+
+            setError(err.message || "Could not clear.");
+
+        }
+
+        await load();
+
+    }
+
     if (!alerts.length)
         return null;
 
@@ -101,11 +135,27 @@ export default function NeedsNotePanel({ responder }) {
                     {alerts.length}
                 </Box>
 
-                <Box component="span" sx={{ color: tokens.muted, fontSize: 14 }}>
+                <Box component="span" sx={{ color: tokens.muted, fontSize: 14, flex: 1 }}>
                     Resolved from Telegram, which can't take a note. Add what fixed it.
                 </Box>
 
+                <Button
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<ClearIcon />}
+                    onClick={() => setConfirmAll(true)}
+                    sx={{ height: 36, letterSpacing: "1.5px", color: tokens.muted, borderColor: tokens.lineStrong }}
+                >
+                    Clear all
+                </Button>
+
             </Box>
+
+            {error && (
+                <Box role="alert" sx={{ px: 2.25, py: 1, color: "#FF7B72", borderBottom: `1px solid ${tokens.line}` }}>
+                    {error}
+                </Box>
+            )}
 
             {alerts.map(alert => {
 
@@ -138,15 +188,30 @@ export default function NeedsNotePanel({ responder }) {
                             </Box>
                         </Box>
 
-                        <Button
-                            variant="contained"
-                            color="warning"
-                            startIcon={<EditNoteIcon />}
-                            onClick={() => setEditing(alert)}
-                            sx={{ flexShrink: 0, height: 44, fontSize: 16, letterSpacing: "2px" }}
-                        >
-                            Add note
-                        </Button>
+                        <Box sx={{ display: "flex", gap: 1.5, flexShrink: 0 }}>
+
+                            <Button
+                                variant="outlined"
+                                color="inherit"
+                                startIcon={<ClearIcon />}
+                                onClick={() => clear(() => clearAlertNote(alert.id, responder || undefined))}
+                                aria-label={`Clear alert #${alert.id} without a note`}
+                                sx={{ height: 44, fontSize: 16, letterSpacing: "2px", color: tokens.muted, borderColor: tokens.lineStrong }}
+                            >
+                                Clear
+                            </Button>
+
+                            <Button
+                                variant="contained"
+                                color="warning"
+                                startIcon={<EditNoteIcon />}
+                                onClick={() => setEditing(alert)}
+                                sx={{ height: 44, fontSize: 16, letterSpacing: "2px" }}
+                            >
+                                Add note
+                            </Button>
+
+                        </Box>
 
                     </Box>
 
@@ -163,6 +228,35 @@ export default function NeedsNotePanel({ responder }) {
                 submitLabel="Save note"
                 savingLabel="Saving…"
             />
+
+            <Dialog open={confirmAll} onClose={() => setConfirmAll(false)}>
+
+                <DialogTitle>Clear all {alerts.length} without a note?</DialogTitle>
+
+                <DialogContent sx={{ color: tokens.muted }}>
+                    They leave this list and keep "no note" as their resolution note. A note can't be added afterward.
+                </DialogContent>
+
+                <DialogActions>
+
+                    <Button color="inherit" onClick={() => setConfirmAll(false)}>
+                        Keep them
+                    </Button>
+
+                    <Button
+                        variant="contained"
+                        color="warning"
+                        onClick={() => {
+                            setConfirmAll(false);
+                            clear(() => clearAllAlertNotes(responder || undefined));
+                        }}
+                    >
+                        Clear all
+                    </Button>
+
+                </DialogActions>
+
+            </Dialog>
 
         </Box>
 

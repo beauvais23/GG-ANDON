@@ -6,14 +6,10 @@ import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 import {
     Box,
     Typography,
-    Paper,
-    Button,
-    Stack,
     Card,
     CardContent,
     Snackbar,
@@ -509,61 +505,6 @@ return (
 >
     ManufacturingOS Configuration
 </Typography>
-
-<Paper
-    elevation={2}
-    sx={{
-        p: 2,
-        mb: 3,
-        borderRadius: 3
-    }}
->
-    <Stack
-        direction="row"
-        spacing={1.5}
-        sx={{
-            flexWrap: "wrap",
-            gap: 1.5
-        }}
-    >
-
-        <Button
-            component={Link}
-            to="/"
-            variant="contained"
-        >
-            Operator Assistance
-        </Button>
-
-        <Button
-            component={Link}
-            to="/supervisor"
-            variant="contained"
-            color="primary"
-        >
-            Production Response Center
-        </Button>
-
-        <Button
-            component={Link}
-            to="/wallboard"
-            variant="contained"
-            color="secondary"
-        >
-            TV Wallboard
-        </Button>
-
-        <Button
-            component={Link}
-            to="/executive"
-            variant="contained"
-            color="success"
-        >
-            Executive Dashboard
-        </Button>
-
-    </Stack>
-</Paper>
 
             <Tabs
                 value={adminSection}
