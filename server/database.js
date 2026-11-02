@@ -380,6 +380,68 @@ getLoggedNearMisses: db.prepare(`
     LIMIT ?
 `),
 
+//--------------------------------------------------
+// Escalation matrix, shadow mode (0006)
+//--------------------------------------------------
+
+getEscalationRules: db.prepare(`
+    SELECT * FROM escalation_rules
+    ORDER BY alert_type <> '*', alert_type, CASE step WHEN 'START' THEN 0 WHEN 'UNACK' THEN 1 ELSE 2 END, minutes, role
+`),
+
+getActiveEscalationRules: db.prepare(`
+    SELECT * FROM escalation_rules WHERE active = 1
+`),
+
+getEscalationRule: db.prepare(`
+    SELECT * FROM escalation_rules WHERE id = ?
+`),
+
+insertEscalationRule: db.prepare(`
+    INSERT INTO escalation_rules (alert_type, step, minutes, role, active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 1, ?, ?)
+`),
+
+updateEscalationRule: db.prepare(`
+    UPDATE escalation_rules SET minutes = ?, active = ?, updated_at = ? WHERE id = ?
+`),
+
+deleteEscalationRule: db.prepare(`
+    DELETE FROM escalation_rules WHERE id = ?
+`),
+
+getRoutingTeam: db.prepare(`
+    SELECT id, name, department, job_title, role, line_group, active
+    FROM response_team
+    WHERE archived_at IS NULL
+    ORDER BY name
+`),
+
+setResponderRole: db.prepare(`
+    UPDATE response_team SET role = ?, line_group = ?, updated_at = ?
+    WHERE id = ? AND archived_at IS NULL
+`),
+
+getLineGroups: db.prepare(`
+    SELECT name, line_group
+    FROM production_lines
+    WHERE archived_at IS NULL
+`),
+
+getAlertsSince: db.prepare(`
+    SELECT * FROM alerts WHERE requested >= ?
+`),
+
+logEscalation: db.prepare(`
+    INSERT OR IGNORE INTO escalation_log
+    (alert_id, rule_id, alert_type, production_line, step, minutes, role, recipients, fired_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`),
+
+getEscalationLog: db.prepare(`
+    SELECT * FROM escalation_log WHERE fired_at >= ? ORDER BY fired_at DESC LIMIT ?
+`),
+
 saveTelegramMessageId: db.prepare(`
     UPDATE alerts
     SET
