@@ -76,6 +76,16 @@ async function updateTelegram(alert) {
 
     const result = await response.json();
 
+    // Both the webhook and the notification update the message after a
+    // button press; the second, identical edit is refused. Nothing is lost.
+    if (!result.ok && /message is not modified/i.test(result.description || "")) {
+
+        console.log(`Telegram message #${alert.telegram_message_id} already up to date`);
+
+        return;
+
+    }
+
     if (!result.ok) {
 
         console.error("Telegram Update Failed:");
