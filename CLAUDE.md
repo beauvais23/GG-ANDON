@@ -57,7 +57,7 @@ The Railway plan has **no volume backups** (Hobby). Backups are written to the s
 | Backend | `APP_ENV` | yes | `production` only in production. Anything else disables all Telegram/Google Chat traffic and `setWebhook` |
 | Backend | `TELEGRAM_WEBHOOK_SECRET` | production | 1–256 chars `A-Z a-z 0-9 _ -`. Missing/invalid → webhook rejects every call (Telegram buttons dead) |
 | Backend | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GOOGLE_CHAT_WEBHOOK` | production only | Never set in staging. `TELEGRAM_CHAT_ID` is a Telegram **channel** (no member replies; only button presses reach the bot) |
-| Backend | `GOOGLE_CHAT_NEAR_MISS_WEBHOOK` | production only | Webhook of the **Near Miss & Safety Incident Alert** Chat space. NEAR_MISS alerts go only there (no Telegram, no ANDON Chat space). Missing → NEAR_MISS falls back to the usual channels with a log warning. Never set in staging |
+| Backend | `GOOGLE_CHAT_NEAR_MISS_WEBHOOK` | production only | Webhook of the **Near Miss & Safety Incident Alert** Chat space. NEAR_MISS alerts go only there (no Telegram, no ANDON Chat space). Missing → NEAR_MISS posts to the ANDON Chat space (never Telegram) with a log warning. Never set in staging |
 | Backend | `SERVER_URL` | staging | Unset in production; falls back to the prod URL (`server/config.js:5-7`) |
 | Backend | `SUPERVISOR_URL` | staging | Unset in production; falls back to the prod frontend (`server/config.js:11-13`) |
 | Backend | `JWT_EXPIRES_IN` | no | Default `12h`. A malformed value breaks every login |
