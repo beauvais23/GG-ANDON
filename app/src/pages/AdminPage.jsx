@@ -8,6 +8,7 @@ import Footer from "../components/Footer";
 import RespondersPanel from "../components/admin/RespondersPanel";
 import ProductionLinesPanel from "../components/admin/ProductionLinesPanel";
 import BackupsPanel from "../components/admin/BackupsPanel";
+import NearMissesPanel from "../components/admin/NearMissesPanel";
 
 import useClock from "../hooks/useClock";
 
@@ -17,13 +18,14 @@ import { tokens } from "../theme/theme";
 // Administration (E5)
 //
 // Top bar title says ADMINISTRATION; the tabs hold the
-// three panels. The old responder grid that lived here
+// panels. The old responder grid that lived here
 // (unused since the panels were added) is removed.
 //------------------------------------------------------
 
 const SECTIONS = [
     { value: "responders", label: "Responders", Panel: RespondersPanel },
     { value: "productionLines", label: "Production lines", Panel: ProductionLinesPanel },
+    { value: "nearMisses", label: "Near misses", Panel: NearMissesPanel },
     { value: "backups", label: "Backups", Panel: BackupsPanel }
 ];
 

@@ -369,6 +369,17 @@ cancelLoggedNearMiss: db.prepare(`
         AND resolution_notes=?
 `),
 
+// Admin → Near misses (Void). Newest first.
+getLoggedNearMisses: db.prepare(`
+    SELECT id, production_line, work_center, requested
+    FROM alerts
+    WHERE type='NEAR_MISS'
+      AND status='RESOLVED'
+      AND resolution_notes=?
+    ORDER BY requested DESC
+    LIMIT ?
+`),
+
 saveTelegramMessageId: db.prepare(`
     UPDATE alerts
     SET
