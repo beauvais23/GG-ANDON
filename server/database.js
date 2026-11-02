@@ -334,6 +334,41 @@ cancelAlert: db.prepare(`
     WHERE id=?
 `),
 
+// NEAR_MISS is saved already closed: no acknowledge, no wait.
+logNearMiss: db.prepare(`
+    UPDATE alerts
+    SET
+        status='RESOLVED',
+        resolved=requested,
+        resolved_by=?,
+        resolution_notes=?,
+        updated_at=?,
+        duration_seconds=0
+    WHERE
+        id=?
+        AND status='ACTIVE'
+        AND type='NEAR_MISS'
+`),
+
+// "Pressed by mistake" on a logged near miss: cancelled, and the
+// copied resolve time cleared like any cancel (#19).
+cancelLoggedNearMiss: db.prepare(`
+    UPDATE alerts
+    SET
+        status='CANCELLED',
+        cancelled_at=?,
+        updated_at=?,
+        resolved=NULL,
+        resolved_by=NULL,
+        duration_seconds=NULL,
+        resolution_notes=?
+    WHERE
+        id=?
+        AND status='RESOLVED'
+        AND type='NEAR_MISS'
+        AND resolution_notes=?
+`),
+
 saveTelegramMessageId: db.prepare(`
     UPDATE alerts
     SET

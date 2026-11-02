@@ -6,6 +6,7 @@ import StationBar from "../components/StationBar";
 import ButtonGrid from "../components/ButtonGrid";
 import RaiseFeedback from "../components/RaiseFeedback";
 import AlertScreen from "../components/AlertScreen";
+import NearMissLogged from "../components/NearMissLogged";
 
 import useClock from "../hooks/useClock";
 import useRaiseAlert from "../hooks/useRaiseAlert";
@@ -35,7 +36,15 @@ export default function Home() {
 
       <Header time={clock.time} />
 
-      {activeAlert ? (
+      {activeAlert?.type === "NEAR_MISS" && activeAlert.status !== "ACTIVE" ? (
+
+        // Logged closed by the backend: a thank-you screen, not a wait.
+        <NearMissLogged
+          alert={activeAlert}
+          onDone={clearAlert}
+        />
+
+      ) : activeAlert ? (
 
         <AlertScreen
           alert={activeAlert}
