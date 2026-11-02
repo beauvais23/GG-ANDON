@@ -183,3 +183,47 @@ test("the Google Chat card for a logged near miss reads REPORTED, with no respon
 
 });
 
+
+test("Admin Void: lists logged near misses and voids one after the Undo window, admin only, reason required", async () => {
+
+    const admin = { Authorization: `Bearer ${(await request(app).post("/auth/login").send({ username: "test_admin", password: "test-admin-pw" })).body.token}` };
+
+    const { id } = (await raise("NEAR_MISS")).body.alert;
+
+    // Past the tablet's 10-minute Undo.
+    require("../database").db.prepare("UPDATE alerts SET requested = requested - 3600000 WHERE id = ?").run(id);
+
+    const list = await request(app).get("/admin/near-misses").set(admin);
+
+    assert.equal(list.status, 200);
+    assert.ok(list.body.some(a => a.id === id));
+
+    // Floor login can't list or void.
+    assert.equal((await request(app).get("/admin/near-misses").set(floor)).status, 403);
+    assert.equal((await request(app).post(`/admin/near-misses/${id}/void`).set(floor).send({ reason: "Test" })).status, 403);
+
+    // A reason is required.
+    for (const body of [{}, { reason: "" }, { reason: "   " }, { reason: "x".repeat(501) }])
+        assert.equal((await request(app).post(`/admin/near-misses/${id}/void`).set(admin).send(body)).status, 400);
+
+    const res = await request(app).post(`/admin/near-misses/${id}/void`).set(admin).send({ reason: "Test press" });
+
+    assert.equal(res.status, 200, res.text);
+
+    const after = statements.getAlert.get(id);
+
+    assert.equal(after.status, "CANCELLED");
+    assert.equal(after.resolved, null);
+    assert.equal(after.resolution_notes, "Voided by Admin: Test press");
+    assert.ok(!(await request(app).get("/admin/near-misses").set(admin)).body.some(a => a.id === id));
+
+    // Twice, unknown, or not a logged near miss.
+    assert.equal((await request(app).post(`/admin/near-misses/${id}/void`).set(admin).send({ reason: "again" })).status, 409);
+    assert.equal((await request(app).post("/admin/near-misses/999999/void").set(admin).send({ reason: "x" })).status, 404);
+
+    const q = (await raise("QUALITY")).body.alert;
+
+    assert.equal((await request(app).post(`/admin/near-misses/${q.id}/void`).set(admin).send({ reason: "x" })).status, 409);
+    assert.equal(statements.getAlert.get(q.id).status, "ACTIVE");
+
+});

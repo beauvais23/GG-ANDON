@@ -2559,6 +2559,63 @@ app.post("/response-team/:id/restore", authenticateToken, requireAdmin, (req, re
 // a browser, so a copy can be kept off Railway.
 //------------------------------------------------------
 
+//------------------------------------------------------
+// Admin → Near misses: void a near miss logged by mistake
+// after the tablet's 10-minute Undo (Director, Nov 2 2026).
+// Same result as Undo: CANCELLED, out of the counts, kept in
+// history with who voided it and why.
+//------------------------------------------------------
+
+app.get("/admin/near-misses", authenticateToken, requireAdmin, (req, res) => {
+
+    res.json(statements.getLoggedNearMisses.all(NEAR_MISS_LOGGED_NOTE, 200));
+
+});
+
+app.post("/admin/near-misses/:id/void", authenticateToken, requireAdmin, (req, res) => {
+
+    const alert = statements.getAlert.get(req.params.id);
+
+    if (!alert) {
+
+        return res.status(404).json({ success: false, message: "Alert not found." });
+
+    }
+
+    if (!isLoggedNearMiss(alert)) {
+
+        return res.status(409).json({ success: false, message: `Alert #${alert.id} is not a logged near miss.` });
+
+    }
+
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+
+    if (!reason || reason.length > 500) {
+
+        return res.status(400).json({ success: false, message: "A reason of 1 to 500 characters is required." });
+
+    }
+
+    const now = Date.now();
+
+    statements.cancelLoggedNearMiss.run(
+        now,
+        now,
+        `Voided by Admin: ${reason}`,
+        alert.id,
+        NEAR_MISS_LOGGED_NOTE
+    );
+
+    const voided = statements.getAlert.get(alert.id);
+
+    console.log(`✓ Near miss #${alert.id} voided by Admin [${alert.production_line} / ${alert.work_center}]`);
+
+    queueNotification(alert.id, "cancelled", () => notifyCancelled(voided));
+
+    res.json({ success: true, alert: voided });
+
+});
+
 app.get("/admin/backups", authenticateToken, requireAdmin, (req, res) => {
 
     const dir = backupDirFor(dbPath);
