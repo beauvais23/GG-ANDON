@@ -34,7 +34,14 @@ const { updateTelegram } = require("./services/telegramUpdate");
 
 const { telegramWebhookUrl } = require("./config");
 const { notificationsEnabled } = require("./services/appEnv");
-const { ALERT_TYPES, isAlertType } = require("./services/alertTypes");
+const {
+    ALERT_TYPES,
+    isAlertType,
+    NEAR_MISS_LOGGED_BY,
+    NEAR_MISS_LOGGED_NOTE,
+    NEAR_MISS_UNDO_MS,
+    isLoggedNearMiss
+} = require("./services/alertTypes");
 const { startOfDayNY } = require("./services/nyTime");
 const { workingMs, overtimeDatesFrom, responseStats } = require("./services/workingTime");
 const { startDailyBackups } = require("./services/dailyBackup");
@@ -391,6 +398,18 @@ app.post("/alerts", authenticateToken, async (req, res) => {
                 now
 
             );
+
+        // A near miss is a report: logged closed right away.
+        if (type === "NEAR_MISS") {
+
+            statements.logNearMiss.run(
+                NEAR_MISS_LOGGED_BY,
+                NEAR_MISS_LOGGED_NOTE,
+                now,
+                result.lastInsertRowid
+            );
+
+        }
 
         //--------------------------------------------------
         // Get Created Alert
@@ -1903,6 +1922,40 @@ app.patch(
             //--------------------------------------------------
             // Validate Status
             //--------------------------------------------------
+
+            // "Pressed by mistake" on a near miss the tablet just logged.
+            if (isLoggedNearMiss(alert)) {
+
+                if (Date.now() - Number(alert.requested) > NEAR_MISS_UNDO_MS) {
+
+                    return res.status(400).json({
+                        success: false,
+                        message: "This near miss was logged more than 10 minutes ago and can no longer be undone."
+                    });
+
+                }
+
+                const now = Date.now();
+                const by = typeof req.body?.cancelledBy === "string" ? req.body.cancelledBy.trim().slice(0, 100) : "";
+                const why = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 500) : "Pressed by mistake";
+
+                statements.cancelLoggedNearMiss.run(
+                    now,
+                    now,
+                    `Cancelled${by ? ` by ${by}` : ""}: ${why}`,
+                    alert.id,
+                    NEAR_MISS_LOGGED_NOTE
+                );
+
+                const undone = statements.getAlert.get(alert.id);
+
+                console.log(`✓ Near miss #${alert.id} undone [${alert.production_line} / ${alert.work_center}]`);
+
+                queueNotification(alert.id, "cancelled", () => notifyCancelled(undone));
+
+                return res.json({ success: true, alert: undone });
+
+            }
 
             if (
                 alert.status !== "ACTIVE" &&

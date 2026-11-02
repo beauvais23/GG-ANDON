@@ -55,7 +55,8 @@ const status = {
     CREATED: "ACTIVE",
     ACKNOWLEDGED: "ACKNOWLEDGED",
     RESOLVED: "RESOLVED",
-    CANCELLED: "CANCELLED"
+    CANCELLED: "CANCELLED",
+    REPORTED: "REPORTED"
 
 };
 
@@ -73,7 +74,7 @@ const responder =
 // Payload
 //------------------------------------------------------
 
-const payload = {
+const payload = event === "REPORTED" ? reportedCard(alert) : {
 
     cardsV2: [
 
@@ -389,6 +390,52 @@ const payload = {
         }
 
     }
+
+}
+
+//------------------------------------------------------
+// Near miss logged from a tablet (Oct 30 2026): a report,
+// not a call for help, so no responder, timers or buttons
+// to acknowledge. Details come from the Near Miss form.
+//------------------------------------------------------
+
+function reportedCard(alert) {
+
+    const when = new Date(Number(alert.requested)).toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        weekday: "short",
+        hour: "numeric",
+        minute: "2-digit"
+    });
+
+    return {
+
+        cardsV2: [{
+
+            cardId: `alert-${alert.id}`,
+
+            card: {
+
+                header: {
+                    title: `⚠️ ${label(alert.type)} REPORTED`,
+                    subtitle: `${alert.production_line} / ${alert.work_center}`
+                },
+
+                sections: [{
+
+                    widgets: [
+                        { decoratedText: { topLabel: "LOCATION", text: `<b>${alert.production_line} / ${alert.work_center}</b>` } },
+                        { decoratedText: { topLabel: "REPORTED", text: `${when} · ANDON alert #${alert.id}` } },
+                        { textParagraph: { text: "Logged from the tablet. Details to follow in the Near Miss &amp; Safety Incident Form." } }
+                    ]
+
+                }]
+
+            }
+
+        }]
+
+    };
 
 }
 

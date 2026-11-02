@@ -9,7 +9,7 @@ const { updateTelegram } = require("./telegramUpdate");
 // NEAR_MISS alerts go only to the "Near Miss & Safety
 // Incident Alert" Google Chat space: no Telegram, no ANDON
 // Chat space. If GOOGLE_CHAT_NEAR_MISS_WEBHOOK is not set
-// they fall back to the usual channels, so none are lost.
+// they fall back to the ANDON Chat space, so none are lost.
 //------------------------------------------------------
 
 function nearMissWebhook(alert) {
@@ -20,7 +20,7 @@ function nearMissWebhook(alert) {
     const webhook = process.env.GOOGLE_CHAT_NEAR_MISS_WEBHOOK;
 
     if (!webhook)
-        console.warn("GOOGLE_CHAT_NEAR_MISS_WEBHOOK not set: NEAR MISS alert sent to the usual channels.");
+        console.warn("GOOGLE_CHAT_NEAR_MISS_WEBHOOK not set: NEAR MISS sent to the ANDON Chat space.");
 
     return webhook || null;
 
@@ -57,12 +57,16 @@ async function notifyCreated(alert) {
     // Log locally
     await sendNotification("CREATED", alert);
 
-    // Near Miss: its own Chat space only
-    const nearMiss = nearMissWebhook(alert);
+    // Near Miss: logged closed, one "REPORTED" card, never Telegram
+    // (there is nothing to acknowledge). Its own Chat space when set.
+    if (alert.type === "NEAR_MISS") {
 
-    if (nearMiss) {
+        const nearMiss = nearMissWebhook(alert);
 
-        await sendGoogleChatCard(alert, "CREATED", nearMiss);
+        await (nearMiss
+            ? sendGoogleChatCard(alert, "REPORTED", nearMiss)
+            : sendGoogleChatCard(alert, "REPORTED"));
+
         return;
 
     }
