@@ -257,6 +257,7 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
     migrateDown(db, dbPath); // 0004
     migrateDown(db, dbPath); // 0003 (no-op)
@@ -317,6 +318,7 @@ test("0004: cancelled alerts lose the copied resolved time; resolved alerts unto
         { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
     migrateDown(db, dbPath); // 0004
 
@@ -345,10 +347,48 @@ test("0005: archived_at added to production_lines and response_team, empty; down
     assert.equal(db.prepare("SELECT archived_at FROM production_lines").get().archived_at, null);
     assert.equal(db.prepare("SELECT archived_at FROM response_team").get().archived_at, null);
 
+    migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
 
     assert.ok(!cols("production_lines").includes("archived_at"));
     assert.ok(!cols("response_team").includes("archived_at"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM production_lines").get().n, 1);
+
+});
+
+test("0006: line groups set by name, role/line_group columns, default escalation rules; down drops it all", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    const line = db.prepare("INSERT INTO production_lines (name, facility, display_order) VALUES (?, 'Malta', ?)");
+
+    ["Team A", "Team B", "Gigabay", "Gigabay - Vertical", "Terabay", "Deca", "Test Line"].forEach((n, i) => line.run(n, i + 1));
+
+    migrateUp(db, dbPath);
+
+    const groups = db.prepare("SELECT name, line_group FROM production_lines ORDER BY display_order").all();
+
+    assert.deepEqual(groups.map(g => g.line_group), ["Team A", "Team B", "SpaceX", "SpaceX", "SpaceX", "SpaceX", null]);
+
+    const cols = table => db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+
+    assert.ok(cols("response_team").includes("role") && cols("response_team").includes("line_group"));
+
+    const rules = db.prepare("SELECT alert_type, step, minutes, role FROM escalation_rules ORDER BY id").all();
+
+    assert.equal(rules.length, 13);
+    assert.deepEqual(rules[0], { alert_type: "*", step: "START", minutes: 0, role: "Production Lead" });
+    assert.ok(rules.some(r => r.alert_type === "QUALITY" && r.role === "Manufacturing Engineer"));
+    assert.ok(rules.some(r => r.step === "OPEN_ACK" && r.minutes === 30));
+    assert.ok(!rules.some(r => r.alert_type === "NEAR_MISS"));
+
+    migrateDown(db, dbPath); // 0006
+
+    assert.ok(!cols("response_team").includes("role"));
+    assert.ok(!cols("production_lines").includes("line_group"));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name LIKE 'escalation_%'").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM production_lines").get().n, 7);
 
 });

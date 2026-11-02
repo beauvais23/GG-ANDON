@@ -45,6 +45,7 @@ const {
 const { startOfDayNY } = require("./services/nyTime");
 const { workingMs, overtimeDatesFrom, responseStats } = require("./services/workingTime");
 const { startDailyBackups } = require("./services/dailyBackup");
+const { ROLES, STEPS, lineGroupOf, startEscalationShadow } = require("./services/escalation");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
     notifyTimeoutMs,
@@ -2616,6 +2617,132 @@ app.post("/admin/near-misses/:id/void", authenticateToken, requireAdmin, (req, r
 
 });
 
+//------------------------------------------------------
+// Admin → Escalation (shadow mode, migration 0006)
+//
+// Roles on people, the rules, and the shadow log of who
+// WOULD have been notified. Nothing here sends anything.
+//------------------------------------------------------
+
+const ESCALATION_TYPES = ALERT_TYPES.filter(t => t !== "NEAR_MISS");
+const MAX_RULE_MINUTES = 480;
+
+app.get("/admin/escalation", authenticateToken, requireAdmin, (req, res) => {
+
+    const lines = statements.getLineGroups.all();
+
+    res.json({
+        shadow: true,
+        roles: ROLES,
+        steps: STEPS,
+        alertTypes: ["*", ...ESCALATION_TYPES],
+        lineGroups: [...new Set(lines.map(l => lineGroupOf(l.name, l.line_group)))],
+        rules: statements.getEscalationRules.all(),
+        team: statements.getRoutingTeam.all()
+    });
+
+});
+
+app.post("/admin/escalation/rules", authenticateToken, requireAdmin, (req, res) => {
+
+    const { alertType, step, role } = req.body || {};
+    const minutes = step === "START" ? 0 : Number(req.body?.minutes);
+
+    if (!["*", ...ESCALATION_TYPES].includes(alertType) || !STEPS.includes(step) || !ROLES.includes(role) ||
+        !Number.isInteger(minutes) || minutes < 0 || minutes > MAX_RULE_MINUTES) {
+
+        return res.status(400).json({
+            success: false,
+            message: `Need alertType (* or ${ESCALATION_TYPES.join(", ")}), step (${STEPS.join(", ")}), role, and whole minutes 0-${MAX_RULE_MINUTES}.`
+        });
+
+    }
+
+    const now = Date.now();
+    const result = statements.insertEscalationRule.run(alertType, step, minutes, role, now, now);
+
+    res.status(201).json({ success: true, rule: statements.getEscalationRule.get(result.lastInsertRowid) });
+
+});
+
+app.put("/admin/escalation/rules/:id", authenticateToken, requireAdmin, (req, res) => {
+
+    const rule = statements.getEscalationRule.get(req.params.id);
+
+    if (!rule)
+        return res.status(404).json({ success: false, message: "Rule not found." });
+
+    const minutes = rule.step === "START" ? 0 : (req.body?.minutes === undefined ? rule.minutes : Number(req.body.minutes));
+    const active = req.body?.active === undefined ? rule.active : (req.body.active ? 1 : 0);
+
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_RULE_MINUTES)
+        return res.status(400).json({ success: false, message: `Minutes must be a whole number 0-${MAX_RULE_MINUTES}.` });
+
+    statements.updateEscalationRule.run(minutes, active, Date.now(), rule.id);
+
+    res.json({ success: true, rule: statements.getEscalationRule.get(rule.id) });
+
+});
+
+app.delete("/admin/escalation/rules/:id", authenticateToken, requireAdmin, (req, res) => {
+
+    const removed = statements.deleteEscalationRule.run(req.params.id).changes;
+
+    if (!removed)
+        return res.status(404).json({ success: false, message: "Rule not found." });
+
+    res.json({ success: true });
+
+});
+
+app.put("/admin/escalation/people/:id", authenticateToken, requireAdmin, (req, res) => {
+
+    const role = req.body?.role || null;
+    const lineGroup = role === "Production Lead" && req.body?.lineGroup ? String(req.body.lineGroup).slice(0, 100) : null;
+
+    if (role !== null && !ROLES.includes(role))
+        return res.status(400).json({ success: false, message: `Role must be one of: ${ROLES.join(", ")}.` });
+
+    const saved = statements.setResponderRole.run(role, lineGroup, Date.now(), req.params.id).changes;
+
+    if (!saved)
+        return res.status(404).json({ success: false, message: "Responder not found." });
+
+    res.json({ success: true });
+
+});
+
+app.get("/admin/escalation/log", authenticateToken, requireAdmin, (req, res) => {
+
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+
+    const events = statements.getEscalationLog
+        .all(Date.now() - days * 24 * 60 * 60 * 1000, 1000)
+        .map(e => ({ ...e, recipients: JSON.parse(e.recipients || "[]") }));
+
+    // How often each rule would have fired, and how often nobody had the role.
+    const byRule = {};
+
+    for (const e of events) {
+
+        const r = byRule[e.rule_id] || (byRule[e.rule_id] = { rule_id: e.rule_id, step: e.step, minutes: e.minutes, role: e.role, fired: 0, nobody: 0, alerts: new Set() });
+
+        r.fired += 1;
+        r.alerts.add(e.alert_id);
+
+        if (!e.recipients.length)
+            r.nobody += 1;
+
+    }
+
+    res.json({
+        days,
+        events: events.slice(0, 200),
+        summary: Object.values(byRule).map(({ alerts, ...r }) => ({ ...r, alerts: alerts.size }))
+    });
+
+});
+
 app.get("/admin/backups", authenticateToken, requireAdmin, (req, res) => {
 
     const dir = backupDirFor(dbPath);
@@ -3001,6 +3128,8 @@ if (require.main === module) {
         console.log("========================================");
 
         startDailyBackups(db, dbPath);
+
+        startEscalationShadow(statements);
 
         await configureTelegramWebhook();
 
