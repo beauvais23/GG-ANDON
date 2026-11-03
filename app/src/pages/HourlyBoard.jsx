@@ -17,6 +17,7 @@ import useClock from "../hooks/useClock";
 import { getBoards, getPlan, getProducts, savePlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
 import { RAG_COLORS } from "../config/ragColors";
+import { fpyColor } from "../config/fpyColors";
 
 //------------------------------------------------------
 // Hour-by-hour board (H1): plan per hour for one board and
@@ -306,7 +307,7 @@ export default function HourlyBoard() {
                                     <Box sx={{ fontFamily: tokens.mono, fontSize: 22, color: plan.rag ? RAG_COLORS[plan.rag] : "#E6EDF3" }}>{plan.actualTotal}</Box>
                                     <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>/ {plan.planToNow} planned so far</Box>
                                     <Box sx={{ ...labelSx, fontSize: 12, ml: 1.5 }}>FPY</Box>
-                                    <Box sx={{ fontFamily: tokens.mono, fontSize: 18 }}>{plan.quality?.fpy === null || plan.quality?.fpy === undefined ? "—" : `${plan.quality.fpy}%`}</Box>
+                                    <Box sx={{ fontFamily: tokens.mono, fontSize: 18, color: fpyColor(plan.quality?.fpy, plan.settings) }}>{plan.quality?.fpy === null || plan.quality?.fpy === undefined ? "—" : `${plan.quality.fpy}%`}</Box>
                                     <Box sx={{ fontFamily: tokens.mono, fontSize: 13, color: tokens.muted }}>
                                         {plan.quality?.fails || 0} fail · {plan.quality?.rework || 0} rework · {plan.quality?.scrap || 0} scrap{plan.quality?.open ? ` · ${plan.quality.open} open` : ""}
                                     </Box>
@@ -371,7 +372,7 @@ export default function HourlyBoard() {
                                                 <Box sx={{ fontFamily: tokens.mono, color: p.fails ? "#F85149" : tokens.muted }}>{p.fails || (p.status === "later" ? "" : 0)}</Box>
                                                 {(p.rework > 0 || p.scrap > 0) && <Box sx={{ fontSize: 11, color: tokens.muted }}>{p.rework ? `${p.rework} rework` : ""}{p.rework && p.scrap ? " · " : ""}{p.scrap ? `${p.scrap} scrap` : ""}</Box>}
                                             </Box>
-                                            <Box sx={{ fontFamily: tokens.mono, color: p.fpy === null ? tokens.muted : "#E6EDF3" }}>{p.fpy === null ? "" : `${p.fpy}%`}</Box>
+                                            <Box sx={{ fontFamily: tokens.mono, color: fpyColor(p.fpy, plan.settings) }}>{p.fpy === null ? "" : `${p.fpy}%`}</Box>
 
                                         </Box>
 
