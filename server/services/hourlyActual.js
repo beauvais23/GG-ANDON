@@ -29,6 +29,9 @@ const COUNT_STATIONS = { "PCB Coating": "Production" };
 
 const countStationFor = board => COUNT_STATIONS[board] || DEFAULT_COUNT_STATION;
 
+// PCB Test work center (0012): PASS / FAIL per PCB for PCB FPY.
+const PCB_STATION = "PCB Test";
+
 function periodAt(ms) {
 
     const m = minuteOfDayNY(ms);
@@ -164,4 +167,4 @@ function withActuals(plan, rows, settings, now = Date.now(), quality = { fails: 
 
 }
 
-module.exports = { countStationFor, fpyOf, periodAt, ragFor, withActuals, workMinutesBetween };
+module.exports = { countStationFor, fpyOf, periodAt, ragFor, withActuals, workMinutesBetween, PCB_STATION };

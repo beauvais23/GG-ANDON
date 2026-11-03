@@ -13,6 +13,7 @@ import useTapQueue, { UNDO_SECONDS } from "../hooks/useTapQueue";
 import { getFailureCodes, getOpenFailures, getPlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
 import { RAG_COLORS } from "../config/ragColors";
+import { fpyColor } from "../config/fpyColors";
 
 //------------------------------------------------------
 // H2 count strip (Option 1A, Nov 3 2026): above the alert
@@ -23,15 +24,17 @@ import { RAG_COLORS } from "../config/ragColors";
 // offline queue when there is no connection.
 // H3: FAIL → failure code (same queue and 30 s undo); open
 // failures → REWORK PASSED or SCRAP (then the NCM form).
+// PCB Test (pcb, 0012): the same strip with PASS / FAIL per
+// board for PCB FPY; passes never count toward Actual.
 //------------------------------------------------------
 
 const todayNY = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
-const skuKey = board => `countSku:${board}`;
+const skuKey = (board, pcb) => `countSku:${board}${pcb ? ":pcb" : ""}`;
 
-function readSku(board) {
+function readSku(board, pcb) {
 
-    try { return localStorage.getItem(skuKey(board)) || ""; } catch { return ""; }
+    try { return localStorage.getItem(skuKey(board, pcb)) || ""; } catch { return ""; }
 
 }
 
@@ -78,11 +81,12 @@ function Stat({ label, value, of, rag }) {
 
 }
 
-export default function CountStrip({ board, productionLine, workCenter }) {
+export default function CountStrip({ board, productionLine, workCenter, pcb = false }) {
 
     const [day, setDay] = useState(null);
     const [error, setError] = useState("");
-    const [sku, setSku] = useState(() => readSku(board));
+    const [sku, setSku] = useState(() => readSku(board, pcb));
+    const station = pcb ? "PCB" : undefined;
     const [now, setNow] = useState(Date.now());
 
     const [codes, setCodes] = useState([]);
@@ -97,7 +101,7 @@ export default function CountStrip({ board, productionLine, workCenter }) {
         try {
 
             setDay(await getPlan(board, todayNY()));
-            setOpen((await getOpenFailures(board)).failures);
+            setOpen((await getOpenFailures(board, station)).failures);
             setError("");
 
         } catch (err) {
@@ -106,7 +110,7 @@ export default function CountStrip({ board, productionLine, workCenter }) {
 
         }
 
-    }, [board]);
+    }, [board, station]);
 
     const { queue, last, tap, fail, undo, message } = useTapQueue({ onSent: load });
 
@@ -124,14 +128,15 @@ export default function CountStrip({ board, productionLine, workCenter }) {
     const choose = s => {
 
         setSku(s);
-        try { localStorage.setItem(skuKey(board), s); } catch { /* per-tablet convenience */ }
+        try { localStorage.setItem(skuKey(board, pcb), s); } catch { /* per-tablet convenience */ }
 
     };
 
     // Taps not sent yet count on screen straight away.
-    const waiting = queue.filter(t => t.board === board && t.kind !== "fail").length;
-    const stuck = queue.filter(t => t.board === board && now - t.tappedAt > 5000).length;
-    const waitingFails = queue.filter(t => t.board === board && t.kind === "fail").length;
+    const mine = queue.filter(t => t.board === board && t.station === station);
+    const waiting = mine.filter(t => t.kind !== "fail").length;
+    const stuck = mine.filter(t => now - t.tappedAt > 5000).length;
+    const waitingFails = mine.filter(t => t.kind === "fail").length;
     const hourActual = (current?.actualTotal || 0) + waiting;
     const shiftActual = (day?.actualTotal || 0) + waiting;
     const undoLeft = last ? Math.max(0, UNDO_SECONDS - Math.floor((now - last.at) / 1000)) : 0;
@@ -152,11 +157,11 @@ export default function CountStrip({ board, productionLine, workCenter }) {
 
     return (
 
-        <Box component="section" aria-label="Count good units" sx={{ mx: 3, mt: 1.5, display: "flex", alignItems: "stretch", gap: 2, flexWrap: { xs: "wrap", lg: "nowrap" }, px: 2, py: 1.25, bgcolor: tokens.panel, border: `1px solid ${tokens.line}` }}>
+        <Box component="section" aria-label={pcb ? "PCB test pass and fail" : "Count good units"} sx={{ mx: 3, mt: 1.5, display: "flex", alignItems: "stretch", gap: 2, flexWrap: { xs: "wrap", lg: "nowrap" }, px: 2, py: 1.25, bgcolor: tokens.panel, border: `1px solid ${tokens.line}` }}>
 
             <Box sx={{ flex: 1, minWidth: 0 }}>
 
-                <Box sx={{ ...labelSx, mb: 0.75 }}>Count · {workCenter} · SKU</Box>
+                <Box sx={{ ...labelSx, mb: 0.75 }}>{pcb ? "PCB test · pass / fail" : `Count · ${workCenter}`} · SKU</Box>
 
                 <Box sx={{ display: "flex", gap: 1, overflowX: "auto", pb: 0.5 }}>
                     {skus.map(s => <SkuChip key={s} selected={s === chosen} onClick={() => choose(s)}>{s}</SkuChip>)}
@@ -171,8 +176,8 @@ export default function CountStrip({ board, productionLine, workCenter }) {
                         OPEN FAILURES · {open.length + waitingFails}
                     </ButtonBase>
 
-                    {day.quality?.fpy !== null && day.quality?.fpy !== undefined && (
-                        <Box sx={{ fontSize: 13, color: tokens.muted }}>FPY today <Box component="span" sx={{ fontFamily: tokens.mono, color: "#E6EDF3" }}>{day.quality.fpy}%</Box></Box>
+                    {!pcb && day.quality?.fpy !== null && day.quality?.fpy !== undefined && (
+                        <Box sx={{ fontSize: 13, color: tokens.muted }}>FPY today <Box component="span" sx={{ fontFamily: tokens.mono, color: fpyColor(day.quality.fpy, day.settings) }}>{day.quality.fpy}%</Box></Box>
                     )}
 
                 </Box>
@@ -183,19 +188,31 @@ export default function CountStrip({ board, productionLine, workCenter }) {
 
             </Box>
 
-            <Stat label={current ? `This hour · ${current.label}` : "This hour"} value={hourActual} of={current ? current.total : 0} rag={current?.rag} />
-            <Stat label="Shift · so far" value={shiftActual} of={day.planToNow} rag={day.rag} />
+            {pcb ? (
+                <>
+                    <Stat label="PCBs passed today" value={(day.pcb?.pass || 0) + waiting} of={(day.pcb?.pass || 0) + (day.pcb?.fail || 0) + waiting + waitingFails} />
+                    <Box sx={{ minWidth: 120 }}>
+                        <Box sx={{ ...labelSx, fontSize: 11 }}>PCB FPY today</Box>
+                        <Box sx={{ fontFamily: tokens.mono, fontSize: 34, fontWeight: 600, lineHeight: 1.1, color: fpyColor(day.pcb?.fpy, day.settings) }}>{day.pcb?.fpy === null || day.pcb?.fpy === undefined ? "—" : `${day.pcb.fpy}%`}</Box>
+                    </Box>
+                </>
+            ) : (
+                <>
+                    <Stat label={current ? `This hour · ${current.label}` : "This hour"} value={hourActual} of={current ? current.total : 0} rag={current?.rag} />
+                    <Stat label="Shift · so far" value={shiftActual} of={day.planToNow} rag={day.rag} />
+                </>
+            )}
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, width: 250 }}>
 
                 <ButtonBase
-                    onClick={() => tap({ board, sku: chosen, productionLine, workCenter })}
+                    onClick={() => tap({ board, sku: chosen, productionLine, workCenter, station })}
                     disabled={!chosen}
                     focusRipple
-                    aria-label={`Count one good ${chosen}`}
+                    aria-label={pcb ? `PCB passed ${chosen}` : `Count one good ${chosen}`}
                     sx={{ flex: 1, minHeight: 64, borderRadius: "2px", bgcolor: "#1F7A3A", color: "#FFFFFF", border: "1px solid #2EA352", fontFamily: tokens.display, fontWeight: 700, fontSize: 30, letterSpacing: "2px", "&:active": { bgcolor: "#2EA352" } }}
                 >
-                    <AddIcon sx={{ fontSize: 32, mr: 0.5 }} /> 1 GOOD
+                    {pcb ? "PASS" : <><AddIcon sx={{ fontSize: 32, mr: 0.5 }} /> 1 GOOD</>}
                 </ButtonBase>
 
                 <Box sx={{ display: "flex", gap: 0.75 }}>
@@ -227,7 +244,7 @@ export default function CountStrip({ board, productionLine, workCenter }) {
                     sku={chosen}
                     codes={codes}
                     onClose={() => setFailing(false)}
-                    onPick={c => { setFailing(false); fail({ board, sku: chosen, code: c.code, productionLine, workCenter }); }}
+                    onPick={c => { setFailing(false); fail({ board, sku: chosen, code: c.code, productionLine, workCenter, station }); }}
                 />
             )}
 

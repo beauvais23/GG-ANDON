@@ -68,7 +68,7 @@ async function tapCall(path, body) {
 
 export const sendTap = tap => tapCall("/hourly/taps", tap);
 export const undoTapRequest = tapId => tapCall(`/hourly/taps/${enc(tapId)}/undo`);
-export const saveHourlySettings = (greenPct, amberPct) => call("/admin/hourly/settings", { method: "PUT", body: { greenPct, amberPct } });
+export const saveHourlySettings = (greenPct, amberPct, fpyGreenPct, fpyAmberPct) => call("/admin/hourly/settings", { method: "PUT", body: { greenPct, amberPct, fpyGreenPct, fpyAmberPct } });
 export const getPlanSettings = () => call("/hourly/settings");
 export const correctCount = body => call("/admin/hourly/corrections", { method: "POST", body });
 
@@ -77,7 +77,8 @@ export const sendFail = f => tapCall("/hourly/failures", f);
 export const undoFailRequest = failId => tapCall(`/hourly/failures/${enc(failId)}/undo`);
 export const disposeFailure = (failId, disposition) => tapCall(`/hourly/failures/${enc(failId)}/disposition`, { disposition });
 export const getFailureCodes = () => call("/hourly/failure-codes");
-export const getOpenFailures = board => call(`/hourly/failures/open/${enc(board)}`);
+export const getOpenFailures = (board, station) => call(`/hourly/failures/open/${enc(board)}${station ? `?station=${station}` : ""}`);
+export const getReport = (from, to) => call(`/reports/hourly?from=${from}&to=${to}`);
 export const getAllFailureCodes = () => call("/admin/failure-codes");
 export const addFailureCode = label => call("/admin/failure-codes", { method: "POST", body: { label } });
 export const setFailureCodeActive = (id, active) => call(`/admin/failure-codes/${id}`, { method: "PUT", body: { active } });

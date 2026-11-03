@@ -70,11 +70,20 @@ function RagSettings() {
 
     const [green, setGreen] = useState("");
     const [amber, setAmber] = useState("");
+    const [fpyGreen, setFpyGreen] = useState("");
+    const [fpyAmber, setFpyAmber] = useState("");
     const [note, setNote] = useState("");
 
     useEffect(() => {
 
-        getPlanSettings().then(s => { setGreen(String(s.green_pct)); setAmber(String(s.amber_pct)); }).catch(() => {});
+        getPlanSettings().then(s => {
+
+            setGreen(String(s.green_pct));
+            setAmber(String(s.amber_pct));
+            setFpyGreen(String(s.fpy_green_pct ?? 99));
+            setFpyAmber(String(s.fpy_amber_pct ?? 97));
+
+        }).catch(() => {});
 
     }, []);
 
@@ -82,9 +91,9 @@ function RagSettings() {
 
         try {
 
-            const s = await saveHourlySettings(Number(green), Number(amber));
+            const s = await saveHourlySettings(Number(green), Number(amber), Number(fpyGreen), Number(fpyAmber));
 
-            setNote(`Saved: green ≥ ${s.green_pct}%, amber ≥ ${s.amber_pct}%, red below.`);
+            setNote(`Saved. Plan: green ≥ ${s.green_pct}%, amber ≥ ${s.amber_pct}%. FPY: green ≥ ${s.fpy_green_pct}%, amber ≥ ${s.fpy_amber_pct}%. Red below.`);
 
         } catch (err) {
 
@@ -100,8 +109,10 @@ function RagSettings() {
             <Box sx={{ ...labelSx, minWidth: 160 }}>Board colours</Box>
             <TextField size="small" type="number" label="Green at or above %" value={green} onChange={e => setGreen(e.target.value)} sx={{ width: 170 }} slotProps={{ inputLabel: { shrink: true } }} />
             <TextField size="small" type="number" label="Amber at or above %" value={amber} onChange={e => setAmber(e.target.value)} sx={{ width: 170 }} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField size="small" type="number" label="FPY green at or above %" value={fpyGreen} onChange={e => setFpyGreen(e.target.value)} sx={{ width: 190 }} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField size="small" type="number" label="FPY amber at or above %" value={fpyAmber} onChange={e => setFpyAmber(e.target.value)} sx={{ width: 190 }} slotProps={{ inputLabel: { shrink: true } }} />
             <Button size="small" variant="outlined" onClick={save}>Save</Button>
-            <Box sx={{ fontSize: 13, color: tokens.muted }}>{note || "Below amber is red. The current hour is compared with the plan so far."}</Box>
+            <Box sx={{ fontSize: 13, color: tokens.muted }}>{note || "Below amber is red. FPY target 99% (company)."}</Box>
         </AdminRow>
 
     );

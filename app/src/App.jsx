@@ -13,6 +13,7 @@ import HourlyBoard from "./pages/HourlyBoard";
 import Login from "./pages/Login";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import Reports from "./pages/Reports";
 import StagingBanner from "./components/StagingBanner";
 import { useAlert } from "./context/AlertContext";
 import useAutoReload from "./hooks/useAutoReload";
@@ -82,6 +83,15 @@ function App() {
                 element={
                     <ProtectedRoute>
                         <ExecutiveDashboard />
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/reports"
+                element={
+                    <ProtectedRoute>
+                        <Reports />
                     </ProtectedRoute>
                 }
             />

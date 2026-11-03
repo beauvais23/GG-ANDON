@@ -3,6 +3,7 @@ export const PAGES = [
     { path: "/", name: "Operator (tablet)", title: "Production Response" },
     { path: "/supervisor", name: "Response Center", title: "Response Center" },
     { path: "/board", name: "Hour-by-hour board", title: "Hour-by-hour" },
+    { path: "/reports", name: "Reports", title: "Reports" },
     { path: "/wallboard", name: "TV Wallboard", title: "Wallboard" },
     { path: "/executive", name: "Executive Dashboard", title: "Executive" },
     { path: "/admin", name: "Admin", title: "Administration" }
