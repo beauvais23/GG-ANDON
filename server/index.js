@@ -46,6 +46,8 @@ const { startOfDayNY } = require("./services/nyTime");
 const { workingMs, overtimeDatesFrom, responseStats } = require("./services/workingTime");
 const { startDailyBackups } = require("./services/dailyBackup");
 const { ROLES, STEPS, lineGroupOf, startEscalationShadow } = require("./services/escalation");
+const { BOARDS, familyFor, rateFor, priceRuns, planFor } = require("./services/hourlyBoard");
+const { PERIODS } = require("./services/hourlyPlan");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
     notifyTimeoutMs,
@@ -2740,6 +2742,161 @@ app.get("/admin/escalation/log", authenticateToken, requireAdmin, (req, res) => 
         events: events.slice(0, 200),
         summary: Object.values(byRule).map(({ alerts, ...r }) => ({ ...r, alerts: alerts.size }))
     });
+
+});
+
+//------------------------------------------------------
+// Hour-by-hour board, H1 (migration 0007)
+//
+// Boards, families (Ship Report prefixes) and rates; a
+// board's plan per day (runs → hour-by-hour plan). Plans
+// and rates are admin only; everyone can view a board.
+//------------------------------------------------------
+
+const isDate = d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T12:00:00Z`));
+
+const todayNY = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+app.get("/hourly/boards", authenticateToken, (req, res) => {
+
+    const families = statements.getProductFamilies.all().filter(f => f.active);
+    const names = [...new Set(families.map(f => f.board))];
+
+    names.sort((a, b) => (BOARDS.indexOf(a) + 1 || 99) - (BOARDS.indexOf(b) + 1 || 99));
+
+    res.json({ boards: names, periods: PERIODS, today: todayNY() });
+
+});
+
+app.get("/hourly/products", authenticateToken, (req, res) => {
+
+    const date = isDate(req.query.date) ? req.query.date : todayNY();
+
+    const families = statements.getProductFamilies.all()
+        .filter(f => !req.query.board || f.board === req.query.board)
+        .map(f => {
+
+            const current = statements.getFamilyRateOn.get(f.id, date);
+
+            return { ...f, rate: current ? current.units_per_hour : null, rateEffective: current?.effective_date || null, history: statements.getRatesForFamily.all(f.id) };
+
+        });
+
+    const all = statements.getProductFamilies.all();
+
+    const skuRates = statements.getSkuRates.all()
+        .map(r => ({ ...r, family: familyFor(r.sku, all) }))
+        .filter(r => !req.query.board || r.family?.board === req.query.board);
+
+    res.json({ date, families, skuRates });
+
+});
+
+app.get("/hourly/resolve", authenticateToken, (req, res) => {
+
+    const sku = String(req.query.sku || "").trim().toUpperCase();
+    const date = isDate(req.query.date) ? req.query.date : todayNY();
+    const family = familyFor(sku, statements.getProductFamilies.all());
+    const rate = family ? rateFor(statements, sku, family, date) : null;
+
+    res.json({ sku, family: family ? { id: family.id, prefix: family.prefix, board: family.board } : null, rate });
+
+});
+
+app.post("/admin/hourly/rates", authenticateToken, requireAdmin, (req, res) => {
+
+    const { familyId, sku, unitsPerHour, effectiveDate } = req.body || {};
+    const rate = Number(unitsPerHour);
+    const date = effectiveDate || todayNY();
+
+    if (!(rate > 0) || rate > 10000 || !isDate(date))
+        return res.status(400).json({ success: false, message: "Need units per hour (more than 0) and an effective date YYYY-MM-DD." });
+
+    if ((familyId ? 1 : 0) + (sku ? 1 : 0) !== 1)
+        return res.status(400).json({ success: false, message: "Give either a family or a SKU." });
+
+    let cleanSku = null;
+
+    if (familyId) {
+
+        if (!statements.getProductFamily.get(familyId))
+            return res.status(404).json({ success: false, message: "Family not found." });
+
+    } else {
+
+        cleanSku = String(sku).trim().toUpperCase();
+
+        if (!familyFor(cleanSku, statements.getProductFamilies.all()))
+            return res.status(400).json({ success: false, message: `${cleanSku} doesn't match any product family.` });
+
+    }
+
+    const result = statements.insertRate.run(familyId || null, cleanSku, rate, date, Date.now());
+
+    res.status(201).json({ success: true, id: result.lastInsertRowid });
+
+});
+
+app.delete("/admin/hourly/rates/:id", authenticateToken, requireAdmin, (req, res) => {
+
+    if (!statements.deleteRate.run(req.params.id).changes)
+        return res.status(404).json({ success: false, message: "Rate not found." });
+
+    res.json({ success: true });
+
+});
+
+app.get("/hourly/plan/:board/:date", authenticateToken, (req, res) => {
+
+    if (!isDate(req.params.date))
+        return res.status(400).json({ success: false, message: "Date must be YYYY-MM-DD." });
+
+    res.json(planFor(statements, req.params.board, req.params.date));
+
+});
+
+app.put("/admin/hourly/plan/:board/:date", authenticateToken, requireAdmin, (req, res) => {
+
+    const { board, date } = req.params;
+    const runs = req.body?.runs;
+
+    if (!isDate(date))
+        return res.status(400).json({ success: false, message: "Date must be YYYY-MM-DD." });
+
+    if (!Array.isArray(runs) || runs.length > 50)
+        return res.status(400).json({ success: false, message: "runs must be a list (up to 50)." });
+
+    const priced = priceRuns(statements, board, date, runs);
+
+    if (priced.error)
+        return res.status(400).json({ success: false, message: priced.error });
+
+    const now = Date.now();
+
+    db.transaction(() => {
+
+        let plan = statements.getPlan.get(board, date);
+
+        if (!plan) {
+
+            statements.insertPlan.run(board, date, now, now);
+            plan = statements.getPlan.get(board, date);
+
+        } else {
+
+            statements.touchPlan.run(now, plan.id);
+
+        }
+
+        statements.deletePlanRuns.run(plan.id);
+
+        priced.runs.forEach((r, i) => statements.insertPlanRun.run(plan.id, i + 1, r.sku, r.family.id, r.qty, r.rate));
+
+    })();
+
+    console.log(`✓ Plan saved: ${board} ${date} (${priced.runs.length} runs)`);
+
+    res.json({ success: true, ...planFor(statements, board, date) });
 
 });
 
