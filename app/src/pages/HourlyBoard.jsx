@@ -1,0 +1,325 @@
+import { useCallback, useEffect, useState } from "react";
+
+import { Alert, Box, Button, IconButton, TextField } from "@mui/material";
+
+import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
+
+import Header from "../components/Header";
+import Footer from "../components/Footer";
+
+import useClock from "../hooks/useClock";
+
+import { getBoards, getPlan, savePlan } from "../api/hourly";
+import { labelSx, tokens } from "../theme/theme";
+
+//------------------------------------------------------
+// Hour-by-hour board (H1): plan per hour for one board and
+// day, from the day's runs (SKU + qty, single piece flow).
+// Plan per hour = ROUNDDOWN(rate × work minutes / 60), with
+// the run's last hour trued up to its qty (server side,
+// services/hourlyPlan.js). Actuals and failures come in H2/H3.
+// Admins edit the plan; everyone can view.
+//------------------------------------------------------
+
+const BOARD_KEY = "hourlyBoard";
+
+function readBoard() {
+
+    try { return localStorage.getItem(BOARD_KEY) || ""; } catch { return ""; }
+
+}
+
+function rememberBoard(board) {
+
+    try { localStorage.setItem(BOARD_KEY, board); } catch { /* per-browser convenience only */ }
+
+}
+
+function Chip({ active, children, onClick }) {
+
+    return (
+
+        <Button
+            size="small"
+            variant={active ? "contained" : "outlined"}
+            color={active ? "primary" : "inherit"}
+            onClick={onClick}
+            sx={{ borderColor: tokens.lineStrong, color: active ? undefined : tokens.text, letterSpacing: "1.5px" }}
+        >
+            {children}
+        </Button>
+
+    );
+
+}
+
+function PlanEditor({ board, date, plan, onSaved, onClose }) {
+
+    const [rows, setRows] = useState(() => (plan.runs.length ? plan.runs : [{ sku: "", qty: null }]).map(r => ({ sku: r.sku, qty: r.qty ?? "" })));
+    const [error, setError] = useState("");
+    const [saving, setSaving] = useState(false);
+
+    const set = (i, field, value) => setRows(rows.map((r, j) => (j === i ? { ...r, [field]: value } : r)));
+
+    const move = (i, d) => {
+
+        const next = [...rows];
+        [next[i], next[i + d]] = [next[i + d], next[i]];
+        setRows(next);
+
+    };
+
+    async function save() {
+
+        setSaving(true);
+        setError("");
+
+        try {
+
+            const runs = rows.filter(r => r.sku.trim()).map(r => ({ sku: r.sku.trim(), qty: r.qty === "" ? null : Number(r.qty) }));
+
+            onSaved(await savePlan(board, date, runs));
+
+        } catch (err) {
+
+            setError(err.message);
+
+        } finally {
+
+            setSaving(false);
+
+        }
+
+    }
+
+    return (
+
+        <Box component="section" aria-label="Edit plan" sx={{ bgcolor: tokens.panel, border: `1px solid ${tokens.blue}`, mb: 2.5 }}>
+
+            <Box sx={{ ...labelSx, px: 2.25, py: 1.25, borderBottom: `1px solid ${tokens.line}` }}>
+                Edit plan · {board} · {date} · runs in order (single piece flow)
+            </Box>
+
+            {rows.map((r, i) => (
+
+                <Box key={i} sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+
+                    <Box sx={{ fontFamily: tokens.mono, color: tokens.muted, width: 24 }}>{i + 1}</Box>
+
+                    <TextField size="small" label="SKU" value={r.sku} onChange={e => set(i, "sku", e.target.value.toUpperCase())} sx={{ minWidth: 300 }} slotProps={{ inputLabel: { shrink: true } }} />
+
+                    <TextField
+                        size="small"
+                        label="Qty"
+                        type="number"
+                        value={r.qty}
+                        placeholder={i === rows.length - 1 ? "rest of shift" : ""}
+                        onChange={e => set(i, "qty", e.target.value)}
+                        sx={{ width: 140 }}
+                        slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: 1 } }}
+                    />
+
+                    <IconButton size="small" aria-label={`Move run ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)}><KeyboardArrowUpIcon fontSize="small" /></IconButton>
+                    <IconButton size="small" aria-label={`Move run ${i + 1} down`} disabled={i === rows.length - 1} onClick={() => move(i, 1)}><KeyboardArrowDownIcon fontSize="small" /></IconButton>
+                    <IconButton size="small" aria-label={`Delete run ${i + 1}`} onClick={() => setRows(rows.filter((_, j) => j !== i))} sx={{ color: tokens.muted }}><DeleteOutlineIcon fontSize="small" /></IconButton>
+
+                </Box>
+
+            ))}
+
+            <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, px: 2.25, py: 1.5 }}>
+
+                <Button startIcon={<AddIcon />} onClick={() => setRows([...rows, { sku: "", qty: "" }])}>Add run</Button>
+
+                <Box sx={{ fontSize: 13, color: tokens.muted, flex: 1 }}>
+                    Leave the last run's qty empty to run it to the end of the shift. Rates come from Admin → Products &amp; rates and are saved with the plan.
+                </Box>
+
+                <Button color="inherit" onClick={onClose} disabled={saving}>Cancel</Button>
+                <Button variant="contained" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save plan"}</Button>
+
+            </Box>
+
+            {error && <Box sx={{ px: 2.25, pb: 1.5 }}><Alert severity="error">{error}</Alert></Box>}
+
+        </Box>
+
+    );
+
+}
+
+export default function HourlyBoard() {
+
+    const clock = useClock();
+    const isAdmin = (() => { try { return localStorage.getItem("userRole") === "admin"; } catch { return false; } })();
+
+    const [boards, setBoards] = useState([]);
+    const [board, setBoard] = useState(readBoard);
+    const [date, setDate] = useState("");
+    const [plan, setPlan] = useState(null);
+    const [editing, setEditing] = useState(false);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+
+        getBoards().then(b => {
+
+            setBoards(b.boards);
+            setDate(d => d || b.today);
+            setBoard(cur => (b.boards.includes(cur) ? cur : b.boards[0]));
+
+        }).catch(err => setError(err.message));
+
+    }, []);
+
+    const load = useCallback(async () => {
+
+        if (!board || !date)
+            return;
+
+        try {
+
+            setPlan(await getPlan(board, date));
+            setError("");
+
+        } catch (err) {
+
+            setError(err.message);
+
+        }
+
+    }, [board, date]);
+
+    useEffect(() => { load(); }, [load]);
+
+    let cumulative = 0;
+
+    return (
+
+        <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column", bgcolor: tokens.ground }}>
+
+            <Header time={clock.time} />
+
+            <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 3 }, py: 2.5, width: "100%", maxWidth: 1400, mx: "auto" }}>
+
+                <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, mb: 2 }}>
+
+                    {boards.map(b => <Chip key={b} active={b === board} onClick={() => { setBoard(b); rememberBoard(b); setEditing(false); }}>{b}</Chip>)}
+
+                    <Box sx={{ flex: 1 }} />
+
+                    <TextField size="small" type="date" label="Day" value={date} onChange={e => { setDate(e.target.value); setEditing(false); }} slotProps={{ inputLabel: { shrink: true } }} />
+
+                    {isAdmin && !editing && plan && (
+                        <Button variant="contained" startIcon={<EditIcon />} onClick={() => setEditing(true)}>Edit plan</Button>
+                    )}
+
+                </Box>
+
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+                {editing && plan && (
+                    <PlanEditor
+                        key={`${board}-${date}`}
+                        board={board}
+                        date={date}
+                        plan={plan}
+                        onClose={() => setEditing(false)}
+                        onSaved={p => { setPlan(p); setEditing(false); }}
+                    />
+                )}
+
+                {plan && (
+
+                    <Box component="section" aria-label={`${board} plan`} sx={{ bgcolor: tokens.panel, border: `1px solid ${tokens.line}` }}>
+
+                        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 2, px: 2.25, py: 1.75, borderBottom: `1px solid ${tokens.line}` }}>
+
+                            <Box component="h2" sx={{ m: 0, fontFamily: tokens.display, fontWeight: 700, fontSize: 26, letterSpacing: "2px", textTransform: "uppercase" }}>{board}</Box>
+
+                            <Box sx={{ ...labelSx }}>Plan {plan.total} · {plan.runs.length} run{plan.runs.length === 1 ? "" : "s"}</Box>
+
+                            <Box sx={{ flex: 1 }} />
+
+                            <Box sx={{ ...labelSx, fontSize: 12 }}>Actual, failures and FPY arrive in the next phases</Box>
+
+                        </Box>
+
+                        {!plan.saved && (
+                            <Box sx={{ px: 2.25, py: 3, color: tokens.muted, textAlign: "center" }}>
+                                No plan for this day yet.{isAdmin ? " Press Edit plan to add runs." : ""}
+                            </Box>
+                        )}
+
+                        {plan.saved && (
+
+                            <>
+
+                                <Box sx={{ display: "grid", gridTemplateColumns: "150px 90px minmax(200px, 1fr) 100px 120px 110px", ...labelSx, fontSize: 12, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+                                    <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cumulative</span><span>Actual</span>
+                                </Box>
+
+                                {plan.periods.map(p => {
+
+                                    cumulative += p.total;
+
+                                    return (
+
+                                        <Box key={p.label} sx={{ display: "grid", gridTemplateColumns: "150px 90px minmax(200px, 1fr) 100px 120px 110px", alignItems: "center", px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+
+                                            <Box sx={{ fontFamily: tokens.mono }}>{p.label}</Box>
+                                            <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{p.workMinutes}</Box>
+                                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                                                {Object.entries(p.plan).filter(([, n]) => n > 0).map(([sku, n]) => (
+                                                    <Box key={sku} component="span" sx={{ fontFamily: tokens.mono, fontSize: 13, px: 0.75, py: 0.25, border: `1px solid ${tokens.lineStrong}` }}>{sku} · {n}</Box>
+                                                ))}
+                                            </Box>
+                                            <Box sx={{ fontFamily: tokens.mono, fontSize: 22 }}>{p.total}</Box>
+                                            <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{cumulative}</Box>
+                                            <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>—</Box>
+
+                                        </Box>
+
+                                    );
+
+                                })}
+
+                                <Box sx={{ px: 2.25, py: 1.5 }}>
+
+                                    <Box sx={{ ...labelSx, mb: 1 }}>Runs</Box>
+
+                                    {plan.runs.map((r, i) => (
+
+                                        <Box key={i} sx={{ display: "flex", flexWrap: "wrap", gap: 2, py: 0.5, fontSize: 14 }}>
+                                            <Box sx={{ fontFamily: tokens.mono, width: 24, color: tokens.muted }}>{i + 1}</Box>
+                                            <Box sx={{ fontFamily: tokens.mono, minWidth: 260 }}>{r.sku}</Box>
+                                            <Box sx={{ color: tokens.muted }}>{r.qty === null ? "rest of shift" : `qty ${r.qty}`} · {r.rate}/hr</Box>
+                                            <Box>planned {r.planned}</Box>
+                                            {r.carryOver > 0 && <Box sx={{ color: "#FFA040" }}>{r.carryOver} don't fit today</Box>}
+                                        </Box>
+
+                                    ))}
+
+                                </Box>
+
+                            </>
+
+                        )}
+
+                    </Box>
+
+                )}
+
+            </Box>
+
+            <Footer />
+
+        </Box>
+
+    );
+
+}
