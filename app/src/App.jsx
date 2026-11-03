@@ -9,6 +9,7 @@ import ProductionResponseCenter from "./pages/ProductionResponseCenter";
 import Wallboard from "./pages/Wallboard";
 import AdminPage from "./pages/AdminPage";
 import ExecutiveDashboard from "./pages/ExecutiveDashboard";
+import HourlyBoard from "./pages/HourlyBoard";
 import Login from "./pages/Login";
 
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -81,6 +82,15 @@ function App() {
                 element={
                     <ProtectedRoute>
                         <ExecutiveDashboard />
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/board"
+                element={
+                    <ProtectedRoute>
+                        <HourlyBoard />
                     </ProtectedRoute>
                 }
             />

@@ -442,6 +442,69 @@ getEscalationLog: db.prepare(`
     SELECT * FROM escalation_log WHERE fired_at >= ? ORDER BY fired_at DESC LIMIT ?
 `),
 
+//--------------------------------------------------
+// Hour-by-hour board, H1 (0007)
+//--------------------------------------------------
+
+getProductFamilies: db.prepare(`
+    SELECT * FROM product_families ORDER BY board, prefix
+`),
+
+getProductFamily: db.prepare(`
+    SELECT * FROM product_families WHERE id = ?
+`),
+
+getFamilyRateOn: db.prepare(`
+    SELECT * FROM rates WHERE family_id = ? AND effective_date <= ?
+    ORDER BY effective_date DESC, id DESC LIMIT 1
+`),
+
+getSkuRateOn: db.prepare(`
+    SELECT * FROM rates WHERE sku = ? AND effective_date <= ?
+    ORDER BY effective_date DESC, id DESC LIMIT 1
+`),
+
+getRatesForFamily: db.prepare(`
+    SELECT * FROM rates WHERE family_id = ? ORDER BY effective_date DESC, id DESC
+`),
+
+getSkuRates: db.prepare(`
+    SELECT * FROM rates WHERE sku IS NOT NULL ORDER BY sku, effective_date DESC, id DESC
+`),
+
+insertRate: db.prepare(`
+    INSERT INTO rates (family_id, sku, units_per_hour, effective_date, created_at)
+    VALUES (?, ?, ?, ?, ?)
+`),
+
+deleteRate: db.prepare(`
+    DELETE FROM rates WHERE id = ?
+`),
+
+getPlan: db.prepare(`
+    SELECT * FROM plans WHERE board = ? AND plan_date = ?
+`),
+
+getPlanRuns: db.prepare(`
+    SELECT * FROM plan_runs WHERE plan_id = ? ORDER BY seq
+`),
+
+insertPlan: db.prepare(`
+    INSERT INTO plans (board, plan_date, created_at, updated_at) VALUES (?, ?, ?, ?)
+`),
+
+touchPlan: db.prepare(`
+    UPDATE plans SET updated_at = ? WHERE id = ?
+`),
+
+deletePlanRuns: db.prepare(`
+    DELETE FROM plan_runs WHERE plan_id = ?
+`),
+
+insertPlanRun: db.prepare(`
+    INSERT INTO plan_runs (plan_id, seq, sku, family_id, qty, rate) VALUES (?, ?, ?, ?, ?, ?)
+`),
+
 saveTelegramMessageId: db.prepare(`
     UPDATE alerts
     SET
