@@ -525,10 +525,27 @@ undoTap: db.prepare(`
     UPDATE board_taps SET undone_at = ? WHERE tap_id = ? AND undone_at IS NULL
 `),
 
+// Actual per hour and SKU = taps (not undone) + corrections (0010).
 getActuals: db.prepare(`
-    SELECT period, sku, COUNT(*) AS n FROM board_taps
-    WHERE board = ? AND plan_date = ? AND undone_at IS NULL
+    SELECT period, sku, SUM(n) AS n, SUM(adj) AS adjusted FROM (
+        SELECT period, sku, COUNT(*) AS n, 0 AS adj FROM board_taps
+        WHERE board = @board AND plan_date = @date AND undone_at IS NULL
+        GROUP BY period, sku
+        UNION ALL
+        SELECT period, sku, SUM(delta) AS n, SUM(delta) AS adj FROM board_adjustments
+        WHERE board = @board AND plan_date = @date
+        GROUP BY period, sku
+    )
     GROUP BY period, sku
+`),
+
+insertAdjustment: db.prepare(`
+    INSERT INTO board_adjustments (board, plan_date, period, sku, delta, reason, adjusted_by, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`),
+
+getAdjustments: db.prepare(`
+    SELECT * FROM board_adjustments WHERE board = ? AND plan_date = ? ORDER BY created_at DESC, id DESC
 `),
 
 getHourlySettings: db.prepare(`

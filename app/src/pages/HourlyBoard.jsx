@@ -9,6 +9,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 
 import Header from "../components/Header";
+import CorrectionDialog from "../components/CorrectionDialog";
 import Footer from "../components/Footer";
 
 import useClock from "../hooks/useClock";
@@ -189,6 +190,7 @@ export default function HourlyBoard() {
     const [plan, setPlan] = useState(null);
     const [editing, setEditing] = useState(false);
     const [error, setError] = useState("");
+    const [correcting, setCorrecting] = useState(null);   // period index
 
     useEffect(() => {
 
@@ -241,6 +243,7 @@ export default function HourlyBoard() {
 
         if (!board || !date || !isAdmin)
             return;
+
 
         getProducts(board, date).then(p => setSkuOptions(p.skus.map(s => ({ sku: s.sku, prefix: s.prefix })))).catch(() => setSkuOptions([]));
 
@@ -322,7 +325,7 @@ export default function HourlyBoard() {
                                     <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cum. plan</span><span>Actual</span><span>Cum. actual</span>
                                 </Box>
 
-                                {plan.periods.map(p => {
+                                {plan.periods.map((p, i) => {
 
                                     cumulative += p.total;
                                     cumulativeActual += p.actualTotal;
@@ -350,8 +353,10 @@ export default function HourlyBoard() {
                                                             <Box component="span" aria-label={p.rag || "no colour"} sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: p.rag ? RAG_COLORS[p.rag] : tokens.lineStrong }} />
                                                             <Box sx={{ fontFamily: tokens.mono, fontSize: 22, color: p.rag ? RAG_COLORS[p.rag] : "#E6EDF3" }}>{p.actualTotal}</Box>
                                                             {p.status === "now" && <Box sx={{ fontSize: 12, color: tokens.muted }}>now · {p.due} due so far</Box>}
+                                                            {isAdmin && <IconButton size="small" aria-label={`Correct the count for ${p.label}`} onClick={() => setCorrecting(i)} sx={{ color: tokens.muted }}><EditIcon sx={{ fontSize: 16 }} /></IconButton>}
                                                         </Box>
                                                     )}
+                                                {p.corrected !== 0 && <Box sx={{ fontSize: 11, color: "#F2A33A" }}>incl. {p.corrected > 0 ? "+" : ""}{p.corrected} corrected</Box>}
                                                 {skuActuals.length > 1 && skuActuals.map(([k, v]) => (
                                                     <Box key={k} sx={{ fontFamily: tokens.mono, fontSize: 11, color: tokens.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k} · {v}</Box>
                                                 ))}
@@ -363,6 +368,27 @@ export default function HourlyBoard() {
                                     );
 
                                 })}
+
+                                {plan.corrections?.length > 0 && (
+
+                                    <Box sx={{ px: 2.25, py: 1.5, borderBottom: `1px solid ${tokens.line}` }}>
+
+                                        <Box sx={{ ...labelSx, mb: 1 }}>Count corrections</Box>
+
+                                        {plan.corrections.map(c => (
+                                            <Box key={c.id} sx={{ display: "flex", flexWrap: "wrap", gap: 2, py: 0.25, fontSize: 13 }}>
+                                                <Box sx={{ fontFamily: tokens.mono, color: tokens.muted, width: 80 }}>{new Date(c.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}</Box>
+                                                <Box sx={{ fontFamily: tokens.mono, width: 110 }}>{plan.periods[c.period]?.label}</Box>
+                                                <Box sx={{ fontFamily: tokens.mono, minWidth: 260 }}>{c.sku}</Box>
+                                                <Box sx={{ fontFamily: tokens.mono, width: 50, color: c.delta > 0 ? "#3FB950" : "#F85149" }}>{c.delta > 0 ? `+${c.delta}` : c.delta}</Box>
+                                                <Box>{c.reason}</Box>
+                                                <Box sx={{ color: tokens.muted }}>by {c.adjusted_by}</Box>
+                                            </Box>
+                                        ))}
+
+                                    </Box>
+
+                                )}
 
                                 <Box sx={{ px: 2.25, py: 1.5 }}>
 
@@ -391,6 +417,18 @@ export default function HourlyBoard() {
                 )}
 
             </Box>
+
+            {correcting !== null && plan && (
+                <CorrectionDialog
+                    board={board}
+                    date={date}
+                    index={correcting}
+                    period={plan.periods[correcting]}
+                    skuOptions={plan.runs.map(r => r.sku)}
+                    onClose={() => setCorrecting(null)}
+                    onSaved={p => { setPlan(p); setCorrecting(null); }}
+                />
+            )}
 
             <Footer />
 
