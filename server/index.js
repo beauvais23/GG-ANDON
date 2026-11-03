@@ -2788,7 +2788,12 @@ app.get("/hourly/products", authenticateToken, (req, res) => {
         .map(r => ({ ...r, family: familyFor(r.sku, all) }))
         .filter(r => !req.query.board || r.family?.board === req.query.board);
 
-    res.json({ date, families, skuRates });
+    // SKUs listed under each family (0008), with the rate in effect.
+    const skus = req.query.board
+        ? statements.getBoardSkus.all(req.query.board).map(s => ({ ...s, rate: rateFor(statements, s.sku, { id: s.family_id }, date) }))
+        : [];
+
+    res.json({ date, families, skus, skuRates });
 
 });
 
@@ -2841,6 +2846,46 @@ app.delete("/admin/hourly/rates/:id", authenticateToken, requireAdmin, (req, res
 
     if (!statements.deleteRate.run(req.params.id).changes)
         return res.status(404).json({ success: false, message: "Rate not found." });
+
+    res.json({ success: true });
+
+});
+
+// SKU list per board (0008): add (or re-list) a SKU under its
+// family, or take it off the list. Rates are untouched.
+app.post("/admin/hourly/skus", authenticateToken, requireAdmin, (req, res) => {
+
+    const sku = String(req.body?.sku || "").trim().toUpperCase();
+
+    if (!sku || sku.length > 80)
+        return res.status(400).json({ success: false, message: "SKU is required (up to 80 characters)." });
+
+    const family = familyFor(sku, statements.getProductFamilies.all());
+
+    if (!family)
+        return res.status(400).json({ success: false, message: `${sku} doesn't match any product family, so it isn't on a board.` });
+
+    const existing = statements.getSku.get(sku);
+    const now = Date.now();
+
+    if (existing?.active)
+        return res.status(409).json({ success: false, message: `${sku} is already listed.` });
+
+    if (existing)
+        statements.relistSku.run(family.id, now, existing.id);
+    else
+        statements.insertSku.run(family.id, sku, now, now);
+
+    console.log(`✓ SKU listed: ${sku} (${family.prefix}, ${family.board})`);
+
+    res.status(201).json({ success: true, sku, family: { id: family.id, prefix: family.prefix, board: family.board } });
+
+});
+
+app.delete("/admin/hourly/skus/:id", authenticateToken, requireAdmin, (req, res) => {
+
+    if (!statements.unlistSku.run(Date.now(), req.params.id).changes)
+        return res.status(404).json({ success: false, message: "SKU not found." });
 
     res.json({ success: true });
 
