@@ -420,8 +420,8 @@ test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 
     assert.equal(on("Team B").length, 25);
     assert.ok(on("Team A").includes("Z-DMX") && on("Team B").includes("WPXP2"));
     assert.deepEqual(on("Gigabay - Vertical"), ["GIGA8-VERT"]);
-    assert.equal(on("Coating").length, 30);
-    assert.ok(on("Coating").includes("30-72027-000-C") && !on("Coating").includes("30-"));
+    assert.equal(on("PCB Coating").length, 30);
+    assert.ok(on("PCB Coating").includes("30-72027-000-C") && !on("PCB Coating").includes("30-"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates").get().n, 0);
 
     migrateDown(db, dbPath); // 0008
@@ -432,7 +432,7 @@ test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 
 
 });
 
-test("0008: the 19 SpaceX SKUs are listed under GIGA / GIGA8-VERT / TERA / DECA; down drops the list", () => {
+test("0008: SKU list seeded per family (QuickBooks Nov 3 2026 + 30 coating PCBs), Coating board renamed PCB Coating; down reverses both", () => {
 
     const { db, dbPath } = open();
 
@@ -440,13 +440,18 @@ test("0008: the 19 SpaceX SKUs are listed under GIGA / GIGA8-VERT / TERA / DECA;
 
     migrateUp(db, dbPath);
 
-    const rows = db.prepare("SELECT f.prefix, COUNT(*) AS n FROM product_skus s JOIN product_families f ON f.id = s.family_id GROUP BY f.prefix ORDER BY f.prefix").all();
+    const count = board => db.prepare("SELECT COUNT(*) AS n FROM product_skus s JOIN product_families f ON f.id = s.family_id WHERE f.board = ?").get(board).n;
 
-    assert.deepEqual(rows, [{ prefix: "DECA", n: 1 }, { prefix: "GIGA", n: 12 }, { prefix: "GIGA8-VERT", n: 1 }, { prefix: "TERA", n: 5 }]);
+    assert.deepEqual(
+        ["Team A", "Team B", "Gigabay", "Gigabay - Vertical", "Terabay", "Deca", "PCB Coating"].map(count),
+        [190, 647, 12, 1, 5, 1, 30]
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_skus WHERE sku LIKE '%CNTL%' OR sku LIKE '%-JMP-%' OR sku LIKE '%-LDR-%'").get().n, 0);
 
     migrateDown(db, dbPath); // 0008
 
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'product_skus'").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_families WHERE board = 'Coating'").get().n, 30);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_families").get().n, 74);
 
 });

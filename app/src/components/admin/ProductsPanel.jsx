@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, IconButton, TextField, Tooltip } from "@mui/material";
 
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 import { AdminPanel, AdminRow, EmptyRow, Tag } from "./adminUi";
 
@@ -72,6 +74,7 @@ export default function ProductsPanel() {
     const [error, setError] = useState("");
     const [sku, setSku] = useState("");
     const [skuInfo, setSkuInfo] = useState(null);
+    const [open, setOpen] = useState({});
 
     useEffect(() => {
 
@@ -123,6 +126,11 @@ export default function ProductsPanel() {
 
     const withRate = data?.families.filter(f => f.rate).length || 0;
 
+    // Long lists (Team B has 600+ SKUs) start folded; short ones open.
+    const listed = data ? data.skus.filter(s => s.sku !== s.prefix) : [];
+    const isOpen = id => open[`${board}:${id}`] ?? listed.length <= 25;
+    const toggle = id => setOpen({ ...open, [`${board}:${id}`]: !isOpen(id) });
+
     return (
 
         <AdminPanel title="Products & rates" meta="Units per hour for the hour-by-hour boards. Families come from the Ship Report prefixes.">
@@ -149,7 +157,7 @@ export default function ProductsPanel() {
 
                     {data.families.map(f => {
 
-                        const skus = data.skus.filter(s => s.family_id === f.id);
+                        const skus = listed.filter(s => s.family_id === f.id);
 
                         return (
 
@@ -159,7 +167,11 @@ export default function ProductsPanel() {
 
                                     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                                         <Tag>{f.prefix}</Tag>
-                                        {skus.length > 0 && <Box sx={{ fontSize: 13, color: tokens.muted }}>{skus.length} SKU{skus.length === 1 ? "" : "s"}</Box>}
+                                        {skus.length > 0 && (
+                                            <Button size="small" color="inherit" onClick={() => toggle(f.id)} startIcon={isOpen(f.id) ? <ExpandMoreIcon /> : <ChevronRightIcon />} sx={{ color: tokens.muted, letterSpacing: "1px" }}>
+                                                {skus.length} SKU{skus.length === 1 ? "" : "s"}
+                                            </Button>
+                                        )}
                                     </Box>
 
                                     <Box sx={{ fontFamily: tokens.mono, fontSize: 14 }}>
@@ -174,7 +186,7 @@ export default function ProductsPanel() {
 
                                 </AdminRow>
 
-                                {skus.map(s => (
+                                {isOpen(f.id) && skus.map(s => (
 
                                     <AdminRow key={s.id} sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "minmax(300px, 1fr) 260px 380px 40px" }, py: 0.75 }}>
 
@@ -234,7 +246,7 @@ export default function ProductsPanel() {
                         <Button
                             size="small"
                             variant="outlined"
-                            disabled={!skuInfo?.family || data.skus.some(s => s.sku === sku.trim())}
+                            disabled={!skuInfo?.family || data.skus.some(s => s.sku === sku.trim()) || skuInfo.family.board !== board}
                             onClick={() => act(async () => { await addSku(sku.trim()); setSku(""); setSkuInfo(null); })}
                         >
                             Add to SKU list

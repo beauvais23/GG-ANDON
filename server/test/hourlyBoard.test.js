@@ -48,10 +48,10 @@ test("SKU → family by Ship Report prefix: hyphens ignored, longest prefix wins
     assert.equal(board("GIGA8-VERT-48K-480V"), "Gigabay - Vertical");
     assert.equal(board("TERA2-1D1U-48K-480V"), "Terabay");
     assert.equal(board("DECA8-SO-48K-480V"), "Deca");
-    assert.equal(board("30-72027-000-C"), "Coating");
-    assert.equal(board("30-62072-41S-A"), "Coating");
+    assert.equal(board("30-72027-000-C"), "PCB Coating");
+    assert.equal(board("30-62072-41S-A"), "PCB Coating");
 
-    for (const none of ["WPX-JMP-4", "MNT-G1-NM-2015", "DMX-LDR-100-6P", "CDC-NM-503", "Z-DMX-CNTL-CW-1-16-MUSIC", "CNTL-GIGA-DIM", "20-51917-B", "30-72027-SHO-C", "30-52089-000-D"])
+    for (const none of ["WPX-JMP-4", "MNT-G1-NM-2015", "DMX-LDR-100-6P", "CDC-NM-503", "Z-DMX-CNTL-CW-1-16-MUSIC", "CNTL-GIGA-DIM", "20-51917-B", "30-72027-SHO-C", "30-52089-000-D", "Z-DMX-JMP-1", "Z-DMX-TERM", "GIGA-CBL-10"])
         assert.equal(board(none), null, none);
 
 });
@@ -133,7 +133,7 @@ test("boards list (Ship Report order) and an unsaved day shows an empty plan", a
 
     const b = await request(app).get("/hourly/boards").set(floor);
 
-    assert.deepEqual(b.body.boards, ["Team A", "Team B", "Gigabay", "Gigabay - Vertical", "Terabay", "Deca", "Coating"]);
+    assert.deepEqual(b.body.boards, ["Team A", "Team B", "Gigabay", "Gigabay - Vertical", "Terabay", "Deca", "PCB Coating"]);
     assert.equal(b.body.periods.length, 11);
 
     const empty = await request(app).get("/hourly/plan/Deca/2026-11-09").set(floor);
@@ -143,7 +143,7 @@ test("boards list (Ship Report order) and an unsaved day shows an empty plan", a
 
 });
 
-test("SKU list (0008): 19 SpaceX SKUs under their families, family rate unless the SKU has its own; add, re-add, remove; floor can't edit", async () => {
+test("SKU list (0008): SpaceX SKUs under their families, Team A / Team B / PCB Coating listed too, family rate unless the SKU has its own; add, re-add, remove; floor can't edit", async () => {
 
     const list = async board => (await request(app).get(`/hourly/products?board=${encodeURIComponent(board)}&date=2026-11-10`).set(floor)).body.skus;
 
@@ -154,7 +154,9 @@ test("SKU list (0008): 19 SpaceX SKUs under their families, family rate unless t
     assert.deepEqual((await list("Gigabay - Vertical")).map(s => s.sku), ["GIGA8-VERT-48K-480V"]);
     assert.equal((await list("Terabay")).length, 5);
     assert.deepEqual((await list("Deca")).map(s => s.sku), ["DECA8-SO-48K-480V"]);
-    assert.deepEqual(await list("Team A"), []);
+    assert.equal((await list("Team A")).length, 190);
+    assert.equal((await list("Team B")).length, 647);
+    assert.ok((await list("PCB Coating")).some(s => s.sku === "30-72027-000-C"));
 
     await setRate({ familyId: fam("TERA").id, unitsPerHour: 6, effectiveDate: "2026-11-01" });
     await setRate({ sku: "TERA4-2D2U-48K-480V", unitsPerHour: 3, effectiveDate: "2026-11-01" });
