@@ -257,6 +257,7 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
     migrateDown(db, dbPath); // 0004
@@ -318,6 +319,7 @@ test("0004: cancelled alerts lose the copied resolved time; resolved alerts unto
         { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
     migrateDown(db, dbPath); // 0004
@@ -347,6 +349,7 @@ test("0005: archived_at added to production_lines and response_team, empty; down
     assert.equal(db.prepare("SELECT archived_at FROM production_lines").get().archived_at, null);
     assert.equal(db.prepare("SELECT archived_at FROM response_team").get().archived_at, null);
 
+    migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
 
@@ -384,11 +387,37 @@ test("0006: line groups set by name, role/line_group columns, default escalation
     assert.ok(rules.some(r => r.step === "OPEN_ACK" && r.minutes === 30));
     assert.ok(!rules.some(r => r.alert_type === "NEAR_MISS"));
 
+    migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
 
     assert.ok(!cols("response_team").includes("role"));
     assert.ok(!cols("production_lines").includes("line_group"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name LIKE 'escalation_%'").get().n, 0);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM production_lines").get().n, 7);
+
+});
+
+test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 coatable PCBs), empty rates and plans; down drops them", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    migrateUp(db, dbPath);
+
+    const fams = db.prepare("SELECT board, prefix FROM product_families").all();
+    const on = board => fams.filter(f => f.board === board).map(f => f.prefix);
+
+    assert.equal(on("Team A").length, 15);
+    assert.equal(on("Team B").length, 25);
+    assert.ok(on("Team A").includes("Z-DMX") && on("Team B").includes("WPXP2"));
+    assert.deepEqual(on("Gigabay - Vertical"), ["GIGA8-VERT"]);
+    assert.equal(on("Coating").length, 30);
+    assert.ok(on("Coating").includes("30-72027-000-C") && !on("Coating").includes("30-"));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates").get().n, 0);
+
+    migrateDown(db, dbPath); // 0007
+
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('product_families', 'rates', 'plans', 'plan_runs')").get().n, 0);
 
 });

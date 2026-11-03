@@ -29,7 +29,7 @@ Read this file fully before changing anything.
 |---|---|---|
 | Backend | `server/index.js` (~2,470 lines, all routes inline) | Express 5, JWT auth, better-sqlite3. Exports `app`; listens only when run directly |
 | DB layer | `server/database.js` | Opens the DB, runs `restoreIfRequested` then `migrateUp`, seeds empty tables, prepares statements. Registers SQL function `ny_month()` |
-| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved`, `0005_archive_lines_responders`, `0006_escalation_shadow` |
+| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved`, `0005_archive_lines_responders`, `0006_escalation_shadow`, `0007_hourly_board` |
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js`, `telegramUpdate.js`, `googleChat.js`; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit), `network.js` (outbound connect settings, loaded first in `index.js`) |
@@ -160,6 +160,8 @@ Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET wit
 7. Failures: FAIL → code. A failure stays open until it is dispositioned as Rework passed (adds 1 to that hour's Actual) or Scrap (offers a pre-filled NCM Google Form link).
 8. FPY = first-pass good ÷ (first-pass good + first-pass fails). Reworked passes are excluded from the numerator.
 9. RAG per hour: green ≥100% of plan, amber 90–99%, red <90% (admin-editable).
+
+**H1 built Nov 3 2026** (plan only; actuals H2, failures/FPY H3). Boards: Team A, Team B, Gigabay, Gigabay - Vertical, Terabay, Deca, **Coating** (PCB conformal coating station). Product families = the SKU prefixes on the **G&G SHIP REPORT** Team A / Team B tabs (Director: that logic already exists there), plus GIGA, GIGA8-VERT, TERA, DECA and, for Coating, the **30 coatable PCB item numbers** listed by the Director (Nov 3 2026; `COATING` in migration `0007`). A SKU's family is the longest prefix it starts with, hyphens ignored (`FBL-4-HL-CW` → FBL4); SKUs matching no prefix (accessories, numbered parts) and anything with CNTL are on no board. The ANDON server can't reach QuickBooks, so SKUs are recognized by prefix, not loaded. Rates are entered by hand (Admin → **Products & rates**, family rate + SKU overrides, each with an effective date); a saved plan keeps each run's rate. Plan math in `services/hourlyPlan.js` (`planDay`), board/rates in `services/hourlyBoard.js`; page `/board` (`HourlyBoard.jsx`, everyone views, admins edit the plan).
 
 ## Known defects
 
