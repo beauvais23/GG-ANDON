@@ -5,7 +5,7 @@
 // - product_families: one row per SKU prefix, copied from
 //   the G&G SHIP REPORT's Team A / Team B tabs (the same
 //   prefix → team logic), plus the SpaceX families and the
-//   Coating station. A SKU belongs to the family whose
+//   Coating station (the 30 coatable PCB item numbers). A SKU belongs to the family whose
 //   prefix it starts with (hyphens ignored, longest prefix
 //   wins); SKUs that match no prefix (accessories,
 //   numbered parts, CNTL) are on no board.
@@ -22,6 +22,41 @@
 const TEAM_A = ["DMXP4", "DMXP8", "FBL2", "FBL4", "FBL8", "FPX2", "FPX4", "FPX8", "MAX6", "MAXPT6", "TRX2", "TRX4", "TRX8", "VVLBFP", "Z-DMX"];
 const TEAM_B = ["EDGE6", "EDGE8", "GPX2", "GPX4", "GPX6", "GPX8", "HLX2", "HLX4", "HLX8", "NANO4", "NANO6", "RTX4", "VAC4", "VAC6", "VAC8", "VLS6", "VLS8", "VPX2", "VPX4", "VPX8", "WPX2", "WPX4", "WPX6", "WPX8", "WPXP2"];
 
+// PCBs that can be conformal coated (Director, Nov 3 2026): each
+// item number is its own family on the Coating board.
+const COATING = [
+    "30-27267-41H-B",
+    "30-27267-41S-B",
+    "30-27267-41V-B",
+    "30-27267-42H-B",
+    "30-27267-42S-B",
+    "30-27267-42V-B",
+    "30-27267-51H-B",
+    "30-27267-51S-B",
+    "30-27267-51V-B",
+    "30-27267-52H-B",
+    "30-27267-52S-B",
+    "30-27267-52V-B",
+    "30-35936-48K-B",
+    "30-42068-A",
+    "30-62072-41H-A",
+    "30-62072-41S-A",
+    "30-62072-42H-A",
+    "30-62072-42S-A",
+    "30-62072-51H-A",
+    "30-62072-51S-A",
+    "30-62072-52H-A",
+    "30-62072-52S-A",
+    "30-67338-000-C",
+    "30-72027-000-C",
+    "30-72027-000-REWORK",
+    "30-72027-4FT-C",
+    "30-72027-4LO-C",
+    "30-72027-4SO-C",
+    "30-72027-LO-C",
+    "30-72027-SO-C"
+];
+
 const FAMILIES = [
     ...TEAM_A.map(p => ["Team A", p]),
     ...TEAM_B.map(p => ["Team B", p]),
@@ -29,7 +64,7 @@ const FAMILIES = [
     ["Gigabay - Vertical", "GIGA8-VERT"],
     ["Terabay", "TERA"],
     ["Deca", "DECA"],
-    ["Coating", "30-"]
+    ...COATING.map(p => ["Coating", p])
 ];
 
 function up(db) {
@@ -100,4 +135,4 @@ function down(db) {
 
 }
 
-module.exports = { up, down, FAMILIES };
+module.exports = { up, down, FAMILIES, COATING };

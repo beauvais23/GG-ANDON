@@ -49,8 +49,9 @@ test("SKU → family by Ship Report prefix: hyphens ignored, longest prefix wins
     assert.equal(board("TERA2-1D1U-48K-480V"), "Terabay");
     assert.equal(board("DECA8-SO-48K-480V"), "Deca");
     assert.equal(board("30-72027-000-C"), "Coating");
+    assert.equal(board("30-62072-41S-A"), "Coating");
 
-    for (const none of ["WPX-JMP-4", "MNT-G1-NM-2015", "DMX-LDR-100-6P", "CDC-NM-503", "Z-DMX-CNTL-CW-1-16-MUSIC", "CNTL-GIGA-DIM", "20-51917-B"])
+    for (const none of ["WPX-JMP-4", "MNT-G1-NM-2015", "DMX-LDR-100-6P", "CDC-NM-503", "Z-DMX-CNTL-CW-1-16-MUSIC", "CNTL-GIGA-DIM", "20-51917-B", "30-72027-SHO-C", "30-52089-000-D"])
         assert.equal(board(none), null, none);
 
 });

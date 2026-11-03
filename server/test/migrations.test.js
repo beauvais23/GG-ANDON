@@ -397,7 +397,7 @@ test("0006: line groups set by name, role/line_group columns, default escalation
 
 });
 
-test("0007: product families from the Ship Report prefixes (+ SpaceX and Coating), empty rates and plans; down drops them", () => {
+test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 coatable PCBs), empty rates and plans; down drops them", () => {
 
     const { db, dbPath } = open();
 
@@ -412,7 +412,8 @@ test("0007: product families from the Ship Report prefixes (+ SpaceX and Coating
     assert.equal(on("Team B").length, 25);
     assert.ok(on("Team A").includes("Z-DMX") && on("Team B").includes("WPXP2"));
     assert.deepEqual(on("Gigabay - Vertical"), ["GIGA8-VERT"]);
-    assert.deepEqual(on("Coating"), ["30-"]);
+    assert.equal(on("Coating").length, 30);
+    assert.ok(on("Coating").includes("30-72027-000-C") && !on("Coating").includes("30-"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates").get().n, 0);
 
     migrateDown(db, dbPath); // 0007
