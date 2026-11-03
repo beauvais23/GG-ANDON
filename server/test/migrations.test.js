@@ -257,6 +257,8 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0008
+
     migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
@@ -319,6 +321,8 @@ test("0004: cancelled alerts lose the copied resolved time; resolved alerts unto
         { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0008
+
     migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
     migrateDown(db, dbPath); // 0005
@@ -348,6 +352,8 @@ test("0005: archived_at added to production_lines and response_team, empty; down
     // Nothing existing is archived.
     assert.equal(db.prepare("SELECT archived_at FROM production_lines").get().archived_at, null);
     assert.equal(db.prepare("SELECT archived_at FROM response_team").get().archived_at, null);
+
+    migrateDown(db, dbPath); // 0008
 
     migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
@@ -387,6 +393,8 @@ test("0006: line groups set by name, role/line_group columns, default escalation
     assert.ok(rules.some(r => r.step === "OPEN_ACK" && r.minutes === 30));
     assert.ok(!rules.some(r => r.alert_type === "NEAR_MISS"));
 
+    migrateDown(db, dbPath); // 0008
+
     migrateDown(db, dbPath); // 0007
     migrateDown(db, dbPath); // 0006
 
@@ -416,8 +424,29 @@ test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 
     assert.ok(on("Coating").includes("30-72027-000-C") && !on("Coating").includes("30-"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates").get().n, 0);
 
+    migrateDown(db, dbPath); // 0008
+
     migrateDown(db, dbPath); // 0007
 
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('product_families', 'rates', 'plans', 'plan_runs')").get().n, 0);
+
+});
+
+test("0008: the 19 SpaceX SKUs are listed under GIGA / GIGA8-VERT / TERA / DECA; down drops the list", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    migrateUp(db, dbPath);
+
+    const rows = db.prepare("SELECT f.prefix, COUNT(*) AS n FROM product_skus s JOIN product_families f ON f.id = s.family_id GROUP BY f.prefix ORDER BY f.prefix").all();
+
+    assert.deepEqual(rows, [{ prefix: "DECA", n: 1 }, { prefix: "GIGA", n: 12 }, { prefix: "GIGA8-VERT", n: 1 }, { prefix: "TERA", n: 5 }]);
+
+    migrateDown(db, dbPath); // 0008
+
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'product_skus'").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_families").get().n, 74);
 
 });

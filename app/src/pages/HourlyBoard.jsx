@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Alert, Box, Button, IconButton, TextField } from "@mui/material";
+import { Alert, Autocomplete, Box, Button, IconButton, TextField } from "@mui/material";
 
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -13,7 +13,7 @@ import Footer from "../components/Footer";
 
 import useClock from "../hooks/useClock";
 
-import { getBoards, getPlan, savePlan } from "../api/hourly";
+import { getBoards, getPlan, getProducts, savePlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
 
 //------------------------------------------------------
@@ -57,7 +57,7 @@ function Chip({ active, children, onClick }) {
 
 }
 
-function PlanEditor({ board, date, plan, onSaved, onClose }) {
+function PlanEditor({ board, date, plan, skuOptions, onSaved, onClose }) {
 
     const [rows, setRows] = useState(() => (plan.runs.length ? plan.runs : [{ sku: "", qty: null }]).map(r => ({ sku: r.sku, qty: r.qty ?? "" })));
     const [error, setError] = useState("");
@@ -110,7 +110,15 @@ function PlanEditor({ board, date, plan, onSaved, onClose }) {
 
                     <Box sx={{ fontFamily: tokens.mono, color: tokens.muted, width: 24 }}>{i + 1}</Box>
 
-                    <TextField size="small" label="SKU" value={r.sku} onChange={e => set(i, "sku", e.target.value.toUpperCase())} sx={{ minWidth: 300 }} slotProps={{ inputLabel: { shrink: true } }} />
+                    <Autocomplete
+                        freeSolo
+                        size="small"
+                        options={skuOptions}
+                        inputValue={r.sku}
+                        onInputChange={(e, value) => set(i, "sku", value.toUpperCase())}
+                        sx={{ minWidth: 340 }}
+                        renderInput={params => <TextField {...params} label="SKU" placeholder={skuOptions.length ? "Pick or type a SKU" : "Type a SKU"} slotProps={{ ...params.slotProps, inputLabel: { shrink: true } }} />}
+                    />
 
                     <TextField
                         size="small"
@@ -196,6 +204,18 @@ export default function HourlyBoard() {
 
     useEffect(() => { load(); }, [load]);
 
+    // SKUs listed for this board (Admin → Products & rates), offered in the plan editor.
+    const [skuOptions, setSkuOptions] = useState([]);
+
+    useEffect(() => {
+
+        if (!board || !date || !isAdmin)
+            return;
+
+        getProducts(board, date).then(p => setSkuOptions(p.skus.map(s => s.sku))).catch(() => setSkuOptions([]));
+
+    }, [board, date, isAdmin]);
+
     let cumulative = 0;
 
     return (
@@ -228,6 +248,7 @@ export default function HourlyBoard() {
                         board={board}
                         date={date}
                         plan={plan}
+                        skuOptions={skuOptions}
                         onClose={() => setEditing(false)}
                         onSaved={p => { setPlan(p); setEditing(false); }}
                     />

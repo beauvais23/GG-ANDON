@@ -47,12 +47,12 @@ function rateFor(statements, sku, family, date) {
     const own = statements.getSkuRateOn.get(String(sku).toUpperCase(), date);
 
     if (own)
-        return { unitsPerHour: own.units_per_hour, source: "sku", effectiveDate: own.effective_date };
+        return { id: own.id, unitsPerHour: own.units_per_hour, source: "sku", effectiveDate: own.effective_date };
 
     const fam = family ? statements.getFamilyRateOn.get(family.id, date) : null;
 
     if (fam)
-        return { unitsPerHour: fam.units_per_hour, source: "family", effectiveDate: fam.effective_date };
+        return { id: fam.id, unitsPerHour: fam.units_per_hour, source: "family", effectiveDate: fam.effective_date };
 
     return null;
 

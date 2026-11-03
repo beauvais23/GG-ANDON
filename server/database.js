@@ -481,6 +481,33 @@ deleteRate: db.prepare(`
     DELETE FROM rates WHERE id = ?
 `),
 
+getBoardSkus: db.prepare(`
+    SELECT s.id, s.sku, s.family_id, f.prefix, f.board
+    FROM product_skus s JOIN product_families f ON f.id = s.family_id
+    WHERE s.active = 1 AND f.board = ?
+    ORDER BY f.prefix, s.sku
+`),
+
+getListedSkus: db.prepare(`
+    SELECT sku FROM product_skus WHERE active = 1
+`),
+
+getSku: db.prepare(`
+    SELECT * FROM product_skus WHERE sku = ?
+`),
+
+insertSku: db.prepare(`
+    INSERT INTO product_skus (family_id, sku, active, created_at, updated_at) VALUES (?, ?, 1, ?, ?)
+`),
+
+relistSku: db.prepare(`
+    UPDATE product_skus SET family_id = ?, active = 1, updated_at = ? WHERE id = ?
+`),
+
+unlistSku: db.prepare(`
+    UPDATE product_skus SET active = 0, updated_at = ? WHERE id = ? AND active = 1
+`),
+
 getPlan: db.prepare(`
     SELECT * FROM plans WHERE board = ? AND plan_date = ?
 `),

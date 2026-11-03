@@ -6,7 +6,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 
 import { AdminPanel, AdminRow, EmptyRow, Tag } from "./adminUi";
 
-import { addRate, deleteRate, getBoards, getProducts, resolveSku } from "../../api/hourly";
+import { addRate, addSku, deleteRate, getBoards, getProducts, removeSku, resolveSku } from "../../api/hourly";
 import { labelSx, tokens } from "../../theme/theme";
 
 //------------------------------------------------------
@@ -17,7 +17,28 @@ import { labelSx, tokens } from "../../theme/theme";
 // family rate applies to all its SKUs; a SKU rate
 // overrides it. Every rate has an effective date; plans
 // keep the rate they were saved with.
+//
+// SKU list (0008): SKUs listed under their family (the
+// SpaceX boards start with the 19 active QuickBooks SKUs).
+// A listed SKU shows the rate in effect: its own, or the
+// family's. Add to list / remove here; rates are kept.
 //------------------------------------------------------
+
+function rateText(rate) {
+
+    if (!rate)
+        return <Box component="span" sx={{ color: "#FFA040" }}>No rate yet</Box>;
+
+    return (
+        <>
+            {rate.unitsPerHour}/hr{" "}
+            <Box component="span" sx={{ color: tokens.muted }}>
+                {rate.source === "sku" ? `own rate since ${rate.effectiveDate}` : "family rate"}
+            </Box>
+        </>
+    );
+
+}
 
 function RateForm({ label, onSave, today }) {
 
@@ -126,26 +147,59 @@ export default function ProductsPanel() {
 
                     {data.families.length === 0 && <EmptyRow>No families on this board.</EmptyRow>}
 
-                    {data.families.map(f => (
+                    {data.families.map(f => {
 
-                        <AdminRow key={f.id} sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "140px 240px minmax(380px, 1fr)" } }}>
+                        const skus = data.skus.filter(s => s.family_id === f.id);
 
-                            <Box><Tag>{f.prefix}</Tag></Box>
+                        return (
 
-                            <Box sx={{ fontFamily: tokens.mono, fontSize: 14 }}>
-                                {f.rate
-                                    ? <>{f.rate}/hr <Box component="span" sx={{ color: tokens.muted }}>since {f.rateEffective}</Box></>
-                                    : <Box component="span" sx={{ color: "#FFA040" }}>No rate yet</Box>}
+                            <Box key={f.id}>
+
+                                <AdminRow sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "minmax(300px, 1fr) 260px 380px 40px" } }}>
+
+                                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                                        <Tag>{f.prefix}</Tag>
+                                        {skus.length > 0 && <Box sx={{ fontSize: 13, color: tokens.muted }}>{skus.length} SKU{skus.length === 1 ? "" : "s"}</Box>}
+                                    </Box>
+
+                                    <Box sx={{ fontFamily: tokens.mono, fontSize: 14 }}>
+                                        {f.rate
+                                            ? <>{f.rate}/hr <Box component="span" sx={{ color: tokens.muted }}>since {f.rateEffective}</Box></>
+                                            : <Box component="span" sx={{ color: "#FFA040" }}>No rate yet</Box>}
+                                    </Box>
+
+                                    <RateForm label="Family units/hr" today={today} onSave={(rate, date) => act(() => addRate({ familyId: f.id, unitsPerHour: rate, effectiveDate: date }))} />
+
+                                    <Box />
+
+                                </AdminRow>
+
+                                {skus.map(s => (
+
+                                    <AdminRow key={s.id} sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "minmax(300px, 1fr) 260px 380px 40px" }, py: 0.75 }}>
+
+                                        <Box sx={{ fontFamily: tokens.mono, fontSize: 14, pl: { md: 3 }, borderLeft: { md: `2px solid ${tokens.lineStrong}` } }}>{s.sku}</Box>
+
+                                        <Box sx={{ fontFamily: tokens.mono, fontSize: 14 }}>{rateText(s.rate)}</Box>
+
+                                        <RateForm label="SKU units/hr" today={today} onSave={(rate, date) => act(() => addRate({ sku: s.sku, unitsPerHour: rate, effectiveDate: date }))} />
+
+                                        <Tooltip title="Remove from the list (rates are kept)">
+                                            <IconButton size="small" aria-label={`Remove ${s.sku} from the list`} onClick={() => act(() => removeSku(s.id))} sx={{ color: tokens.muted }}><DeleteOutlineIcon fontSize="small" /></IconButton>
+                                        </Tooltip>
+
+                                    </AdminRow>
+
+                                ))}
+
                             </Box>
 
-                            <RateForm label="Units/hr" today={today} onSave={(rate, date) => act(() => addRate({ familyId: f.id, unitsPerHour: rate, effectiveDate: date }))} />
+                        );
 
-                        </AdminRow>
-
-                    ))}
+                    })}
 
                     <Box sx={{ ...labelSx, px: 2.25, py: 1.25, bgcolor: tokens.ground }}>
-                        SKU rates · override the family rate for one SKU
+                        SKU rates · every SKU override, newest first · add a SKU to the list or give it its own rate
                     </Box>
 
                     {data.skuRates.map(r => (
@@ -176,6 +230,15 @@ export default function ProductsPanel() {
                             today={today}
                             onSave={(rate, date) => act(async () => { await addRate({ sku: sku.trim(), unitsPerHour: rate, effectiveDate: date }); setSku(""); setSkuInfo(null); })}
                         />
+
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={!skuInfo?.family || data.skus.some(s => s.sku === sku.trim())}
+                            onClick={() => act(async () => { await addSku(sku.trim()); setSku(""); setSkuInfo(null); })}
+                        >
+                            Add to SKU list
+                        </Button>
 
                     </AdminRow>
 
