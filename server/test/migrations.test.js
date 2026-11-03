@@ -257,6 +257,8 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0011
+
     migrateDown(db, dbPath); // 0010
 
     migrateDown(db, dbPath); // 0009
@@ -325,6 +327,8 @@ test("0004: cancelled alerts lose the copied resolved time; resolved alerts unto
         { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0011
+
     migrateDown(db, dbPath); // 0010
 
     migrateDown(db, dbPath); // 0009
@@ -360,6 +364,8 @@ test("0005: archived_at added to production_lines and response_team, empty; down
     // Nothing existing is archived.
     assert.equal(db.prepare("SELECT archived_at FROM production_lines").get().archived_at, null);
     assert.equal(db.prepare("SELECT archived_at FROM response_team").get().archived_at, null);
+
+    migrateDown(db, dbPath); // 0011
 
     migrateDown(db, dbPath); // 0010
 
@@ -405,6 +411,8 @@ test("0006: line groups set by name, role/line_group columns, default escalation
     assert.ok(rules.some(r => r.step === "OPEN_ACK" && r.minutes === 30));
     assert.ok(!rules.some(r => r.alert_type === "NEAR_MISS"));
 
+    migrateDown(db, dbPath); // 0011
+
     migrateDown(db, dbPath); // 0010
 
     migrateDown(db, dbPath); // 0009
@@ -440,6 +448,8 @@ test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 
     assert.ok(on("PCB Coating").includes("30-72027-000-C") && !on("PCB Coating").includes("30-"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates").get().n, 0);
 
+    migrateDown(db, dbPath); // 0011
+
     migrateDown(db, dbPath); // 0010
 
     migrateDown(db, dbPath); // 0009
@@ -468,6 +478,8 @@ test("0008: SKU list seeded per family (QuickBooks Nov 3 2026 + 30 coating PCBs)
     );
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_skus WHERE sku LIKE '%CNTL%' OR sku LIKE '%-JMP-%' OR sku LIKE '%-LDR-%'").get().n, 0);
 
+    migrateDown(db, dbPath); // 0011
+
     migrateDown(db, dbPath); // 0010
 
     migrateDown(db, dbPath); // 0009
@@ -495,6 +507,8 @@ test("0009: board_taps (tap_id unique) and RAG settings 100 / 90; down drops the
     add.run();
     assert.throws(() => add.run(), /UNIQUE/);
 
+    migrateDown(db, dbPath); // 0011
+
     migrateDown(db, dbPath); // 0010
 
     migrateDown(db, dbPath); // 0009
@@ -516,8 +530,36 @@ test("0010: board_adjustments refuses a zero correction; down drops it", () => {
     add.run(2);
     assert.throws(() => add.run(0), /CHECK/);
 
+    migrateDown(db, dbPath); // 0011
+
     migrateDown(db, dbPath); // 0010
 
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'board_adjustments'").get().n, 0);
+
+});
+
+test("0011: 57 failure codes from the NCM form, failures table with fail_id unique; down drops both", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    migrateUp(db, dbPath);
+
+    const codes = db.prepare("SELECT code, label, grp FROM failure_codes ORDER BY sort").all();
+
+    assert.equal(codes.length, 57);
+    assert.deepEqual(codes[0], { code: "FA 010", label: "FA 010 - APPEARANCE / AESTHETIC ISSUE", grp: "FA" });
+    assert.ok(codes.some(c => c.label === "HA 060 - FUNCTIONAL ISSE"));
+    assert.ok(codes.some(c => c.label === "EC 060 - MISSING COMPONENT"));
+
+    const add = db.prepare("INSERT INTO board_failures (fail_id, board, plan_date, period, sku, code, failed_at, created_at) VALUES ('f1', 'Team B', '2026-11-05', 0, 'WPX4-RED', 'FA 060', 1, 1)");
+
+    add.run();
+    assert.throws(() => add.run(), /UNIQUE/);
+
+    migrateDown(db, dbPath); // 0011
+
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('failure_codes', 'board_failures')").get().n, 0);
 
 });

@@ -11,6 +11,7 @@ import BackupsPanel from "../components/admin/BackupsPanel";
 import NearMissesPanel from "../components/admin/NearMissesPanel";
 import EscalationPanel from "../components/admin/EscalationPanel";
 import ProductsPanel from "../components/admin/ProductsPanel";
+import FailureCodesPanel from "../components/admin/FailureCodesPanel";
 
 import useClock from "../hooks/useClock";
 
@@ -28,6 +29,7 @@ const SECTIONS = [
     { value: "responders", label: "Responders", Panel: RespondersPanel },
     { value: "productionLines", label: "Production lines", Panel: ProductionLinesPanel },
     { value: "products", label: "Products & rates", Panel: ProductsPanel },
+    { value: "failureCodes", label: "Failure codes", Panel: FailureCodesPanel },
     { value: "nearMisses", label: "Near misses", Panel: NearMissesPanel },
     { value: "escalation", label: "Escalation", Panel: EscalationPanel },
     { value: "backups", label: "Backups", Panel: BackupsPanel }

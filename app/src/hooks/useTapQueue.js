@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { sendTap, undoTapRequest } from "../api/hourly";
+import { sendFail, sendTap, undoFailRequest, undoTapRequest } from "../api/hourly";
 
 //------------------------------------------------------
 // H2 offline tap queue (one tap per good unit).
@@ -12,7 +12,12 @@ import { sendTap, undoTapRequest } from "../api/hourly";
 // connection comes back. The server stores a tap id once, so
 // a re-send can't double count. Undo (30 s) takes a tap out of
 // the queue if it hasn't gone yet, else asks the server.
+// H3: FAIL entries (kind "fail", with a failure code) go
+// through the same queue, in order with the taps.
 //------------------------------------------------------
+
+const send = t => (t.kind === "fail" ? sendFail({ ...t, failId: t.tapId, failedAt: t.tappedAt }) : sendTap(t));
+const takeBack = t => (t.kind === "fail" ? undoFailRequest(t.tapId) : undoTapRequest(t.tapId));
 
 const KEY = "countQueue";
 export const UNDO_SECONDS = 30;
@@ -70,16 +75,16 @@ export default function useTapQueue({ onSent } = {}) {
                 const tap = queueRef.current[0];
                 let result;
 
-                try { result = await sendTap(tap); } catch { break; }   // no connection: keep it
+                try { result = await send(tap); } catch { break; }   // no connection: keep it
 
                 if (result.ok || (result.status >= 400 && result.status < 500 && result.status !== 401 && result.status !== 403 && result.status !== 429)) {
 
                     if (!result.ok)
-                        setMessage(`A tap was refused: ${result.data.message || result.status}`);
+                        setMessage(`${tap.kind === "fail" ? "A FAIL" : "A tap"} was refused: ${result.data.message || result.status}`);
 
                     // Undo pressed while this tap was on its way: take it back on the server too.
                     if (result.ok && !queueRef.current.some(t => t.tapId === tap.tapId))
-                        await undoTapRequest(tap.tapId).catch(() => setMessage("Undo failed: no connection. Ask your lead to correct the count."));
+                        await takeBack(tap).catch(() => setMessage("Undo failed: no connection. Ask your lead to correct the count."));
 
                     update(queueRef.current.filter(t => t.tapId !== tap.tapId));
                     sent += 1;
@@ -114,23 +119,26 @@ export default function useTapQueue({ onSent } = {}) {
 
     }, [flush]);
 
-    const tap = useCallback((details) => {
+    const add = useCallback((details) => {
 
         const t = { tapId: newId(), tappedAt: Date.now(), ...details };
 
         update([...queueRef.current, t]);
-        setLast({ tapId: t.tapId, at: t.tappedAt, sku: t.sku });
+        setLast({ tapId: t.tapId, at: t.tappedAt, sku: t.sku, kind: t.kind || "tap" });
         setMessage("");
         flush();
 
     }, [flush, update]);
+
+    const tap = useCallback(details => add({ ...details, kind: "tap" }), [add]);
+    const fail = useCallback(details => add({ ...details, kind: "fail" }), [add]);
 
     const undo = useCallback(async () => {
 
         if (!last)
             return;
 
-        const { tapId } = last;
+        const { tapId, kind } = last;
 
         setLast(null);
 
@@ -143,7 +151,7 @@ export default function useTapQueue({ onSent } = {}) {
 
         try {
 
-            const result = await undoTapRequest(tapId);
+            const result = await takeBack({ tapId, kind });
 
             if (!result.ok)
                 setMessage(result.data.message || "Undo failed.");
@@ -158,6 +166,6 @@ export default function useTapQueue({ onSent } = {}) {
 
     }, [last, onSent, update]);
 
-    return { queue, last, tap, undo, message };
+    return { queue, last, tap, fail, undo, message };
 
 }
