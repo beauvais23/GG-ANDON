@@ -11,6 +11,12 @@
 //   the current hour: actual vs the plan pro-rated by the
 //     work minutes gone so far (so 5 min into an hour isn't red)
 //   later hours and hours with no plan: no colour.
+//
+// H3 (0011): a reworked unit that passes adds 1 to Actual in
+// the hour it passed (Director, option A). FPY per hour and
+// for the day = first-pass good / (first-pass good + first-
+// pass fails); first-pass good = taps + corrections, so
+// reworked passes are not in it.
 //------------------------------------------------------
 
 const { PERIODS } = require("./hourlyPlan");
@@ -61,13 +67,20 @@ function ragFor(actual, plan, settings) {
 
 // Adds actual, status ("done" | "now" | "later"), planToNow and
 // rag to each period of a plan (from planFor).
-function withActuals(plan, rows, settings, now = Date.now()) {
+const fpyOf = (good, fails) => (good + fails > 0 ? Math.round((good / (good + fails)) * 1000) / 10 : null);
+
+// quality: { fails: [{ period, code, n }], dispositions: [{ period, disposition, sku, n }], open: n }
+function withActuals(plan, rows, settings, now = Date.now(), quality = { fails: [], dispositions: [], open: 0 }) {
 
     const today = dateNY(now);
     const minute = minuteOfDayNY(now);
 
     let actualTotal = 0;
     let planToNow = 0;
+    let goodTotal = 0;
+    let failTotal = 0;
+    let reworkTotal = 0;
+    let scrapTotal = 0;
 
     const periods = plan.periods.map((p, i) => {
 
@@ -85,6 +98,30 @@ function withActuals(plan, rows, settings, now = Date.now()) {
                 corrected += r.adjusted || 0;
 
             }
+
+        const firstPassGood = total;
+        const fails = quality.fails.filter(f => f.period === i).reduce((a, f) => a + f.n, 0);
+        const failCodes = Object.fromEntries(quality.fails.filter(f => f.period === i).map(f => [f.code, f.n]));
+        let rework = 0;
+        let scrap = 0;
+
+        for (const d of quality.dispositions)
+            if (d.period === i) {
+
+                if (d.disposition === "REWORK_PASS") {
+
+                    actual[d.sku] = (actual[d.sku] || 0) + d.n;
+                    rework += d.n;
+
+                } else {
+
+                    scrap += d.n;
+
+                }
+
+            }
+
+        total += rework;
 
         let status = "later";
 
@@ -105,12 +142,26 @@ function withActuals(plan, rows, settings, now = Date.now()) {
 
         const rag = status === "later" ? null : ragFor(total, due, settings);
 
-        return { ...p, actual, actualTotal: total, corrected, status, due: Math.round(due * 10) / 10, rag };
+        goodTotal += firstPassGood;
+        failTotal += fails;
+        reworkTotal += rework;
+        scrapTotal += scrap;
+
+        return { ...p, actual, actualTotal: total, corrected, firstPassGood, fails, failCodes, rework, scrap, fpy: fpyOf(firstPassGood, fails), status, due: Math.round(due * 10) / 10, rag };
 
     });
 
-    return { ...plan, periods, actualTotal, planToNow: Math.floor(planToNow + 1e-9), rag: ragFor(actualTotal, planToNow, settings), settings, countStation: countStationFor(plan.board) };
+    return {
+        ...plan,
+        periods,
+        actualTotal,
+        planToNow: Math.floor(planToNow + 1e-9),
+        rag: ragFor(actualTotal, planToNow, settings),
+        quality: { firstPassGood: goodTotal, fails: failTotal, rework: reworkTotal, scrap: scrapTotal, open: quality.open, fpy: fpyOf(goodTotal, failTotal) },
+        settings,
+        countStation: countStationFor(plan.board)
+    };
 
 }
 
-module.exports = { countStationFor, periodAt, ragFor, withActuals, workMinutesBetween };
+module.exports = { countStationFor, fpyOf, periodAt, ragFor, withActuals, workMinutesBetween };

@@ -228,3 +228,98 @@ test("corrections (0010): set an hour right with a reason and a name; adds to ta
     assert.ok(trail.every(c => c.adjusted_by === "Lead One" && c.reason));
 
 });
+
+test("H3: FAIL with a code, stored once; undo in 30 s; rework pass adds 1 to Actual in the hour it passed; scrap doesn't; FPY excludes reworked passes", async () => {
+
+    // Fresh day: Team B, Thu Nov 12 (EST).
+    const d12 = (h, m) => Date.parse(`2026-11-12T${String(h + 5).padStart(2, "0")}:${String(m).padStart(2, "0")}:00Z`);
+
+    await at(d12(7, 0));
+    await request(app).put("/admin/hourly/plan/Team%20B/2026-11-12").set(admin).send({ runs: [{ sku: "WPX4-RED", qty: null }] });
+
+    let k = 0;
+    const fail = (body, when) => request(app).post("/hourly/failures").set(floor).send({ failId: `fail-${String(++k).padStart(6, "0")}`, board: "Team B", sku: "WPX4-RED", code: "FA 060", failedAt: when, ...body });
+    const dispose = (id, disposition) => request(app).post(`/hourly/failures/${id}/disposition`).set(floor).send({ disposition });
+    const board = async () => (await day("Team B", "2026-11-12")).body;
+
+    // 6:00-7:00: 9 good, 1 fail.
+    for (let i = 0; i < 9; i++) await tap({}, d12(6, 10));
+
+    const f1 = await fail({ failId: "fail-once-0001" }, d12(6, 30));
+
+    assert.equal(f1.status, 201);
+    assert.equal(f1.body.failure.period, 0);
+    assert.equal((await fail({ failId: "fail-once-0001" }, d12(6, 31))).body.duplicate, true);
+
+    // Bad code, SKU on another board.
+    assert.equal((await fail({ code: "ZZ 999" }, d12(6, 40))).status, 400);
+    assert.equal((await fail({ sku: "TRX4-50K-120V" }, d12(6, 40))).status, 400);
+
+    // A second fail, undone at once.
+    const f2 = (await fail({ code: "BA 100" }, d12(6, 59))).body.failure;
+
+    assert.equal((await request(app).post(`/hourly/failures/${f2.fail_id}/undo`).set(floor)).status, 200);
+
+    let b = await board();
+
+    assert.equal(b.periods[0].firstPassGood, 9);
+    assert.equal(b.periods[0].fails, 1);
+    assert.equal(b.periods[0].fpy, 90);
+    assert.deepEqual(b.periods[0].failCodes, { "FA 060": 1 });
+    assert.equal(b.quality.open, 1);
+
+    // Reworked and passed at 7:20: +1 Actual in 7:00-8:00, FPY of 6:00-7:00 unchanged.
+    await at(d12(7, 20));
+
+    assert.equal((await dispose("fail-once-0001", "REWORK_PASS")).status, 200);
+    assert.equal((await dispose("fail-once-0001", "SCRAP")).status, 409);
+
+    b = await board();
+
+    assert.equal(b.periods[1].actualTotal, 1);
+    assert.equal(b.periods[1].rework, 1);
+    assert.equal(b.periods[1].firstPassGood, 0);
+    assert.equal(b.periods[0].fpy, 90);
+    assert.equal(b.quality.open, 0);
+
+    // Scrap: counted as scrap, no Actual.
+    const f3 = (await fail({ code: "FA 040" }, d12(7, 25))).body.failure;
+
+    await dispose(f3.fail_id, "SCRAP");
+
+    b = await board();
+
+    assert.equal(b.periods[1].actualTotal, 1);
+    assert.equal(b.periods[1].scrap, 1);
+    assert.equal(b.periods[1].fails, 1);
+    assert.deepEqual(b.quality, { firstPassGood: 9, fails: 2, rework: 1, scrap: 1, open: 0, fpy: 81.8 });
+
+    // A dispositioned fail can't be undone; codes list hides inactive codes.
+    assert.equal((await request(app).post(`/hourly/failures/${f3.fail_id}/undo`).set(floor)).status, 409);
+
+    const codes = (await request(app).get("/hourly/failure-codes").set(floor)).body.codes;
+
+    assert.equal(codes.length, 57);
+    assert.equal(codes[0].code, "FA 010");
+
+});
+
+test("H3 admin: add a failure code the form's way, turn one off; floor refused", async () => {
+
+    await at(thu(15, 0));
+
+    const add = label => request(app).post("/admin/failure-codes").set(admin).send({ label });
+
+    assert.equal((await add("EC 990 - Test code")).status, 201);
+    assert.equal((await add("EC 990 - Again")).status, 409);
+    assert.equal((await add("no code here")).status, 400);
+
+    const all = (await request(app).get("/admin/failure-codes").set(admin)).body.codes;
+    const ec = all.find(c => c.code === "EC 990");
+
+    assert.equal(ec.label, "EC 990 - TEST CODE");
+    assert.equal((await request(app).put(`/admin/failure-codes/${ec.id}`).set(admin).send({ active: false })).status, 200);
+    assert.ok(!(await request(app).get("/hourly/failure-codes").set(floor)).body.codes.some(c => c.code === "EC 990"));
+    assert.equal((await request(app).post("/admin/failure-codes").set(floor).send({ label: "EC 061 - X X X" })).status, 403);
+
+});

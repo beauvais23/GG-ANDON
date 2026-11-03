@@ -4,9 +4,13 @@ import { Box, ButtonBase } from "@mui/material";
 
 import AddIcon from "@mui/icons-material/Add";
 import UndoIcon from "@mui/icons-material/Undo";
+import CloseIcon from "@mui/icons-material/Close";
+
+import FailDialog from "./FailDialog";
+import OpenFailures from "./OpenFailures";
 
 import useTapQueue, { UNDO_SECONDS } from "../hooks/useTapQueue";
-import { getPlan } from "../api/hourly";
+import { getFailureCodes, getOpenFailures, getPlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
 import { RAG_COLORS } from "../config/ragColors";
 
@@ -17,6 +21,8 @@ import { RAG_COLORS } from "../config/ragColors";
 // choice stays until changed (remembered per board); the SKU
 // chips are today's plan runs. Undo for 30 s. Taps wait in an
 // offline queue when there is no connection.
+// H3: FAIL → failure code (same queue and 30 s undo); open
+// failures → REWORK PASSED or SCRAP (then the NCM form).
 //------------------------------------------------------
 
 const todayNY = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -79,11 +85,19 @@ export default function CountStrip({ board, productionLine, workCenter }) {
     const [sku, setSku] = useState(() => readSku(board));
     const [now, setNow] = useState(Date.now());
 
+    const [codes, setCodes] = useState([]);
+    const [open, setOpen] = useState([]);
+    const [failing, setFailing] = useState(false);
+    const [showOpen, setShowOpen] = useState(false);
+
+    useEffect(() => { getFailureCodes().then(r => setCodes(r.codes)).catch(() => setCodes([])); }, []);
+
     const load = useCallback(async () => {
 
         try {
 
             setDay(await getPlan(board, todayNY()));
+            setOpen((await getOpenFailures(board)).failures);
             setError("");
 
         } catch (err) {
@@ -94,7 +108,7 @@ export default function CountStrip({ board, productionLine, workCenter }) {
 
     }, [board]);
 
-    const { queue, last, tap, undo, message } = useTapQueue({ onSent: load });
+    const { queue, last, tap, fail, undo, message } = useTapQueue({ onSent: load });
 
     useEffect(() => { load(); const id = setInterval(load, 60 * 1000); return () => clearInterval(id); }, [load]);
     useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
@@ -115,8 +129,9 @@ export default function CountStrip({ board, productionLine, workCenter }) {
     };
 
     // Taps not sent yet count on screen straight away.
-    const waiting = queue.filter(t => t.board === board).length;
+    const waiting = queue.filter(t => t.board === board && t.kind !== "fail").length;
     const stuck = queue.filter(t => t.board === board && now - t.tappedAt > 5000).length;
+    const waitingFails = queue.filter(t => t.board === board && t.kind === "fail").length;
     const hourActual = (current?.actualTotal || 0) + waiting;
     const shiftActual = (day?.actualTotal || 0) + waiting;
     const undoLeft = last ? Math.max(0, UNDO_SECONDS - Math.floor((now - last.at) / 1000)) : 0;
@@ -147,6 +162,21 @@ export default function CountStrip({ board, productionLine, workCenter }) {
                     {skus.map(s => <SkuChip key={s} selected={s === chosen} onClick={() => choose(s)}>{s}</SkuChip>)}
                 </Box>
 
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.75 }}>
+
+                    <ButtonBase
+                        onClick={() => setShowOpen(true)}
+                        sx={{ height: 34, px: 1.5, borderRadius: "2px", border: `1px solid ${open.length ? "#F85149" : tokens.lineStrong}`, color: open.length ? "#F85149" : tokens.muted, fontSize: 13, letterSpacing: "1px" }}
+                    >
+                        OPEN FAILURES · {open.length + waitingFails}
+                    </ButtonBase>
+
+                    {day.quality?.fpy !== null && day.quality?.fpy !== undefined && (
+                        <Box sx={{ fontSize: 13, color: tokens.muted }}>FPY today <Box component="span" sx={{ fontFamily: tokens.mono, color: "#E6EDF3" }}>{day.quality.fpy}%</Box></Box>
+                    )}
+
+                </Box>
+
                 <Box sx={{ mt: 0.5, fontSize: 13, minHeight: 18, color: message ? "#FF6B6B" : "#FFA040" }}>
                     {message || (stuck ? `${stuck} tap${stuck === 1 ? "" : "s"} waiting to send (no connection). They will send by themselves.` : "")}
                 </Box>
@@ -168,15 +198,40 @@ export default function CountStrip({ board, productionLine, workCenter }) {
                     <AddIcon sx={{ fontSize: 32, mr: 0.5 }} /> 1 GOOD
                 </ButtonBase>
 
-                <ButtonBase
-                    onClick={undo}
-                    disabled={!undoLeft}
-                    sx={{ height: 34, borderRadius: "2px", border: `1px solid ${tokens.lineStrong}`, color: undoLeft ? "#E6EDF3" : tokens.muted, fontSize: 13, letterSpacing: "1px", opacity: undoLeft ? 1 : 0.5 }}
-                >
-                    <UndoIcon sx={{ fontSize: 18, mr: 0.75 }} /> {undoLeft ? `UNDO LAST (${undoLeft}s)` : "UNDO"}
-                </ButtonBase>
+                <Box sx={{ display: "flex", gap: 0.75 }}>
+
+                    <ButtonBase
+                        onClick={() => setFailing(true)}
+                        disabled={!chosen || !codes.length}
+                        focusRipple
+                        aria-label={`Fail one ${chosen}`}
+                        sx={{ flex: 1, height: 40, borderRadius: "2px", bgcolor: "#5C1A1A", border: "1px solid #F85149", color: "#FFFFFF", fontFamily: tokens.display, fontWeight: 700, fontSize: 18, letterSpacing: "2px" }}
+                    >
+                        <CloseIcon sx={{ fontSize: 20, mr: 0.5 }} /> FAIL
+                    </ButtonBase>
+
+                    <ButtonBase
+                        onClick={undo}
+                        disabled={!undoLeft}
+                        sx={{ flex: 1, height: 40, borderRadius: "2px", border: `1px solid ${tokens.lineStrong}`, color: undoLeft ? "#E6EDF3" : tokens.muted, fontSize: 12, letterSpacing: "1px", opacity: undoLeft ? 1 : 0.5 }}
+                    >
+                        <UndoIcon sx={{ fontSize: 16, mr: 0.5 }} /> {undoLeft ? `UNDO ${last.kind === "fail" ? "FAIL" : "LAST"} (${undoLeft}s)` : "UNDO"}
+                    </ButtonBase>
+
+                </Box>
 
             </Box>
+
+            {failing && (
+                <FailDialog
+                    sku={chosen}
+                    codes={codes}
+                    onClose={() => setFailing(false)}
+                    onPick={c => { setFailing(false); fail({ board, sku: chosen, code: c.code, productionLine, workCenter }); }}
+                />
+            )}
+
+            {showOpen && <OpenFailures failures={open} codes={codes} onClose={() => setShowOpen(false)} onChanged={load} />}
 
         </Box>
 
