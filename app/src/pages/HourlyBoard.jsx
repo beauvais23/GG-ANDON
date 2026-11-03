@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Alert, Box, Button, IconButton, TextField } from "@mui/material";
+import { Alert, Autocomplete, Box, Button, IconButton, TextField } from "@mui/material";
 
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -13,7 +13,7 @@ import Footer from "../components/Footer";
 
 import useClock from "../hooks/useClock";
 
-import { getBoards, getPlan, savePlan } from "../api/hourly";
+import { getBoards, getPlan, getProducts, savePlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
 
 //------------------------------------------------------
@@ -57,7 +57,7 @@ function Chip({ active, children, onClick }) {
 
 }
 
-function PlanEditor({ board, date, plan, onSaved, onClose }) {
+function PlanEditor({ board, date, plan, skuOptions, onSaved, onClose }) {
 
     const [rows, setRows] = useState(() => (plan.runs.length ? plan.runs : [{ sku: "", qty: null }]).map(r => ({ sku: r.sku, qty: r.qty ?? "" })));
     const [error, setError] = useState("");
@@ -110,7 +110,30 @@ function PlanEditor({ board, date, plan, onSaved, onClose }) {
 
                     <Box sx={{ fontFamily: tokens.mono, color: tokens.muted, width: 24 }}>{i + 1}</Box>
 
-                    <TextField size="small" label="SKU" value={r.sku} onChange={e => set(i, "sku", e.target.value.toUpperCase())} sx={{ minWidth: 300 }} slotProps={{ inputLabel: { shrink: true } }} />
+                    {skuOptions.length ? (
+
+                        // Dropdown of this board's SKUs (Admin → Products & rates), grouped by family;
+                        // typing filters it.
+                        <Autocomplete
+                            size="small"
+                            openOnFocus
+                            autoHighlight
+                            options={skuOptions.some(o => o.sku === r.sku) || !r.sku ? skuOptions : [{ sku: r.sku, prefix: "Not on the SKU list" }, ...skuOptions]}
+                            groupBy={skuOptions.some(o => o.sku !== o.prefix) ? o => o.prefix : undefined}
+                            getOptionLabel={o => o.sku}
+                            isOptionEqualToValue={(o, v) => o.sku === v.sku}
+                            value={r.sku ? { sku: r.sku, prefix: "" } : null}
+                            onChange={(e, o) => set(i, "sku", o?.sku || "")}
+                            sx={{ minWidth: 380 }}
+                            slotProps={{ listbox: { sx: { maxHeight: 420 } } }}
+                            renderInput={params => <TextField {...params} label="SKU" placeholder="Pick a SKU (type to filter)" slotProps={{ ...params.slotProps, inputLabel: { shrink: true } }} />}
+                        />
+
+                    ) : (
+
+                        <TextField size="small" label="SKU" value={r.sku} onChange={e => set(i, "sku", e.target.value.toUpperCase())} sx={{ minWidth: 380 }} slotProps={{ inputLabel: { shrink: true } }} />
+
+                    )}
 
                     <TextField
                         size="small"
@@ -136,7 +159,7 @@ function PlanEditor({ board, date, plan, onSaved, onClose }) {
                 <Button startIcon={<AddIcon />} onClick={() => setRows([...rows, { sku: "", qty: "" }])}>Add run</Button>
 
                 <Box sx={{ fontSize: 13, color: tokens.muted, flex: 1 }}>
-                    Leave the last run's qty empty to run it to the end of the shift. Rates come from Admin → Products &amp; rates and are saved with the plan.
+                    Changing SKUs mid-shift: set the current run's qty to its cumulative plan at the hour you switch (so earlier hours don't change), then add the new run after it. Leave the last run's qty empty to run it to the end of the shift. The SKU list and rates come from Admin → Products &amp; rates.
                 </Box>
 
                 <Button color="inherit" onClick={onClose} disabled={saving}>Cancel</Button>
@@ -196,6 +219,18 @@ export default function HourlyBoard() {
 
     useEffect(() => { load(); }, [load]);
 
+    // SKUs listed for this board (Admin → Products & rates), offered in the plan editor.
+    const [skuOptions, setSkuOptions] = useState([]);
+
+    useEffect(() => {
+
+        if (!board || !date || !isAdmin)
+            return;
+
+        getProducts(board, date).then(p => setSkuOptions(p.skus.map(s => ({ sku: s.sku, prefix: s.prefix })))).catch(() => setSkuOptions([]));
+
+    }, [board, date, isAdmin]);
+
     let cumulative = 0;
 
     return (
@@ -228,6 +263,7 @@ export default function HourlyBoard() {
                         board={board}
                         date={date}
                         plan={plan}
+                        skuOptions={skuOptions}
                         onClose={() => setEditing(false)}
                         onSaved={p => { setPlan(p); setEditing(false); }}
                     />

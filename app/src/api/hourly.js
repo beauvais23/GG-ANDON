@@ -52,3 +52,5 @@ export const getPlan = (board, date) => call(`/hourly/plan/${enc(board)}/${date}
 export const savePlan = (board, date, runs) => call(`/admin/hourly/plan/${enc(board)}/${date}`, { method: "PUT", body: { runs } });
 export const addRate = rate => call("/admin/hourly/rates", { method: "POST", body: rate });
 export const deleteRate = id => call(`/admin/hourly/rates/${id}`, { method: "DELETE" });
+export const addSku = sku => call("/admin/hourly/skus", { method: "POST", body: { sku } });
+export const removeSku = id => call(`/admin/hourly/skus/${id}`, { method: "DELETE" });

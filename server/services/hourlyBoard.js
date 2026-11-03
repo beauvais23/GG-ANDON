@@ -7,7 +7,7 @@
 const { planDay } = require("./hourlyPlan");
 
 // Board order on screen.
-const BOARDS = ["Team A", "Team B", "Gigabay", "Gigabay - Vertical", "Terabay", "Deca", "Coating"];
+const BOARDS = ["Team A", "Team B", "Gigabay", "Gigabay - Vertical", "Terabay", "Deca", "PCB Coating"];
 
 const squash = s => String(s || "").toUpperCase().replace(/-/g, "");
 
@@ -31,7 +31,18 @@ function familyFor(sku, families) {
 
         const p = squash(f.prefix);
 
-        if (s.startsWith(p) && (!best || p.length > squash(best.prefix).length))
+        if (!s.startsWith(p))
+            continue;
+
+        // A prefix that ends in a letter must be followed by a size
+        // digit (or nothing): Z-DMX8-RGBW is Team A, but the
+        // Z-DMX-JMP-1 jumper is an accessory (no board).
+        const rest = s.slice(p.length);
+
+        if (/[A-Z]$/.test(p) && rest && !/^\d/.test(rest))
+            continue;
+
+        if (!best || p.length > squash(best.prefix).length)
             best = f;
 
     }
@@ -47,12 +58,12 @@ function rateFor(statements, sku, family, date) {
     const own = statements.getSkuRateOn.get(String(sku).toUpperCase(), date);
 
     if (own)
-        return { unitsPerHour: own.units_per_hour, source: "sku", effectiveDate: own.effective_date };
+        return { id: own.id, unitsPerHour: own.units_per_hour, source: "sku", effectiveDate: own.effective_date };
 
     const fam = family ? statements.getFamilyRateOn.get(family.id, date) : null;
 
     if (fam)
-        return { unitsPerHour: fam.units_per_hour, source: "family", effectiveDate: fam.effective_date };
+        return { id: fam.id, unitsPerHour: fam.units_per_hour, source: "family", effectiveDate: fam.effective_date };
 
     return null;
 
