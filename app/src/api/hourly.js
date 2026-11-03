@@ -54,3 +54,20 @@ export const addRate = rate => call("/admin/hourly/rates", { method: "POST", bod
 export const deleteRate = id => call(`/admin/hourly/rates/${id}`, { method: "DELETE" });
 export const addSku = sku => call("/admin/hourly/skus", { method: "POST", body: { sku } });
 export const removeSku = id => call(`/admin/hourly/skus/${id}`, { method: "DELETE" });
+
+// H2 taps: no login redirect on failure (the tablet keeps the tap
+// queued and retries; a 401 shows as "waiting to send").
+async function tapCall(path, body) {
+
+    const response = await fetch(`${API}${path}`, { method: "POST", headers: headers(true), body: JSON.stringify(body || {}) });
+    const data = await response.json().catch(() => ({}));
+
+    return { status: response.status, ok: response.ok, data };
+
+}
+
+export const sendTap = tap => tapCall("/hourly/taps", tap);
+export const undoTapRequest = tapId => tapCall(`/hourly/taps/${enc(tapId)}/undo`);
+export const saveHourlySettings = (greenPct, amberPct) => call("/admin/hourly/settings", { method: "PUT", body: { greenPct, amberPct } });
+export const getPlanSettings = () => call("/hourly/settings");
+export const correctCount = body => call("/admin/hourly/corrections", { method: "POST", body });

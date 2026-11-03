@@ -48,6 +48,8 @@ const { startDailyBackups } = require("./services/dailyBackup");
 const { ROLES, STEPS, lineGroupOf, startEscalationShadow } = require("./services/escalation");
 const { BOARDS, familyFor, rateFor, priceRuns, planFor } = require("./services/hourlyBoard");
 const { PERIODS } = require("./services/hourlyPlan");
+const { countStationFor, periodAt, withActuals } = require("./services/hourlyActual");
+const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
     notifyTimeoutMs,
@@ -2764,7 +2766,7 @@ app.get("/hourly/boards", authenticateToken, (req, res) => {
 
     names.sort((a, b) => (BOARDS.indexOf(a) + 1 || 99) - (BOARDS.indexOf(b) + 1 || 99));
 
-    res.json({ boards: names, periods: PERIODS, today: todayNY() });
+    res.json({ boards: names, periods: PERIODS, today: todayNY(), countStations: Object.fromEntries(names.map(n => [n, countStationFor(n)])) });
 
 });
 
@@ -2891,12 +2893,146 @@ app.delete("/admin/hourly/skus/:id", authenticateToken, requireAdmin, (req, res)
 
 });
 
+const hourlySettings = () => Object.fromEntries(statements.getHourlySettings.all().map(r => [r.key, r.value]));
+
+// Plan + actuals + RAG for one board and day.
+const boardDay = (board, date) => ({
+    ...withActuals(planFor(statements, board, date), statements.getActuals.all({ board, date }), hourlySettings()),
+    corrections: statements.getAdjustments.all(board, date)
+});
+
 app.get("/hourly/plan/:board/:date", authenticateToken, (req, res) => {
 
     if (!isDate(req.params.date))
         return res.status(400).json({ success: false, message: "Date must be YYYY-MM-DD." });
 
-    res.json(planFor(statements, req.params.board, req.params.date));
+    res.json(boardDay(req.params.board, req.params.date));
+
+});
+
+//------------------------------------------------------
+// H2: one tap per good unit (tablet at the count station).
+// tapId comes from the tablet, so a re-sent tap (offline
+// queue) is stored once. tappedAt is the tablet's time of the
+// tap (offline taps count in the hour they were made); one
+// more than 24 h old or in the future uses the server time.
+//------------------------------------------------------
+
+const TAP_ID = /^[A-Za-z0-9_-]{8,64}$/;
+const UNDO_MS = 45 * 1000;   // 30 s on the tablet + delivery grace
+
+app.post("/hourly/taps", authenticateToken, (req, res) => {
+
+    const { tapId, board, sku, tappedAt, productionLine, workCenter } = req.body || {};
+    const now = Date.now();
+
+    if (!TAP_ID.test(String(tapId || "")))
+        return res.status(400).json({ success: false, message: "tapId is required (8-64 letters, digits, - or _)." });
+
+    const existing = statements.getTap.get(tapId);
+
+    if (existing)
+        return res.json({ success: true, duplicate: true, tap: existing });
+
+    if (!BOARDS.includes(board))
+        return res.status(400).json({ success: false, message: "Unknown board." });
+
+    const cleanSku = String(sku || "").trim().toUpperCase();
+    const family = familyFor(cleanSku, statements.getProductFamilies.all());
+
+    if (!family || family.board !== board)
+        return res.status(400).json({ success: false, message: `${cleanSku || "SKU"} is not on the ${board} board.` });
+
+    const t = Number(tappedAt);
+    const at = Number.isFinite(t) && t <= now + 2 * 60 * 1000 && t >= now - 24 * 60 * 60 * 1000 ? Math.min(t, now) : now;
+
+    statements.insertTap.run(tapId, board, dateNY(at), periodAt(at), cleanSku, String(productionLine || "").slice(0, 100) || null, String(workCenter || "").slice(0, 100) || null, at, now);
+
+    res.status(201).json({ success: true, tap: statements.getTap.get(tapId) });
+
+});
+
+app.post("/hourly/taps/:tapId/undo", authenticateToken, (req, res) => {
+
+    const tap = statements.getTap.get(req.params.tapId);
+
+    if (!tap)
+        return res.status(404).json({ success: false, message: "Tap not found." });
+
+    if (tap.undone_at)
+        return res.json({ success: true, alreadyUndone: true });
+
+    if (Date.now() - tap.created_at > UNDO_MS)
+        return res.status(409).json({ success: false, message: "Too late to undo (30 seconds). Ask your lead to correct the count." });
+
+    statements.undoTap.run(Date.now(), tap.tap_id);
+
+    res.json({ success: true });
+
+});
+
+//------------------------------------------------------
+// Count corrections (0010, admin): set an hour's Actual for
+// one SKU to the right number. Stored as a signed delta with
+// a reason and a name; never edited or deleted (audit).
+//------------------------------------------------------
+
+app.post("/admin/hourly/corrections", authenticateToken, requireAdmin, (req, res) => {
+
+    const { board, date, period, sku, delta, reason, by } = req.body || {};
+    const d = Number(delta);
+    const p = Number(period);
+    const cleanSku = String(sku || "").trim().toUpperCase();
+    const cleanReason = String(reason || "").trim();
+    const cleanBy = String(by || "").trim();
+
+    if (!BOARDS.includes(board) || !isDate(date))
+        return res.status(400).json({ success: false, message: "Need a board and a date YYYY-MM-DD." });
+
+    if (!Number.isInteger(p) || p < 0 || p >= PERIODS.length)
+        return res.status(400).json({ success: false, message: "Unknown hour." });
+
+    if (!Number.isInteger(d) || d === 0 || Math.abs(d) > 500)
+        return res.status(400).json({ success: false, message: "The correction must change the count by a whole number (1-500 up or down)." });
+
+    if (cleanReason.length < 3 || cleanReason.length > 200)
+        return res.status(400).json({ success: false, message: "A reason is required (3-200 characters)." });
+
+    if (cleanBy.length < 2 || cleanBy.length > 80)
+        return res.status(400).json({ success: false, message: "Your name is required." });
+
+    const family = familyFor(cleanSku, statements.getProductFamilies.all());
+
+    if (!family || family.board !== board)
+        return res.status(400).json({ success: false, message: `${cleanSku || "SKU"} is not on the ${board} board.` });
+
+    const current = statements.getActuals.all({ board, date }).find(r => r.period === p && r.sku === cleanSku)?.n || 0;
+
+    if (current + d < 0)
+        return res.status(400).json({ success: false, message: `That would make ${cleanSku} ${current + d} in that hour. The count can't go below 0.` });
+
+    statements.insertAdjustment.run(board, date, p, cleanSku, d, cleanReason, cleanBy, Date.now());
+
+    console.log(`✓ Count corrected: ${board} ${date} ${PERIODS[p].label} ${cleanSku} ${d > 0 ? "+" : ""}${d} by ${cleanBy}`);
+
+    res.status(201).json({ success: true, ...boardDay(board, date) });
+
+});
+
+app.get("/hourly/settings", authenticateToken, (req, res) => res.json(hourlySettings()));
+
+app.put("/admin/hourly/settings", authenticateToken, requireAdmin, (req, res) => {
+
+    const green = Number(req.body?.greenPct);
+    const amber = Number(req.body?.amberPct);
+
+    if (!(green > 0 && green <= 200 && amber > 0 && amber < green))
+        return res.status(400).json({ success: false, message: "Need green % (1-200) and amber % below it." });
+
+    statements.setHourlySetting.run(green, Date.now(), "green_pct");
+    statements.setHourlySetting.run(amber, Date.now(), "amber_pct");
+
+    res.json(hourlySettings());
 
 });
 
@@ -2941,7 +3077,7 @@ app.put("/admin/hourly/plan/:board/:date", authenticateToken, requireAdmin, (req
 
     console.log(`✓ Plan saved: ${board} ${date} (${priced.runs.length} runs)`);
 
-    res.json({ success: true, ...planFor(statements, board, date) });
+    res.json({ success: true, ...boardDay(board, date) });
 
 });
 

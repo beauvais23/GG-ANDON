@@ -78,7 +78,17 @@ function hourNY(ms) {
 
 }
 
+// Minutes after midnight on the New York wall clock (0-1439).
+function minuteOfDayNY(ms) {
+
+    const p = partsOf(ms);
+
+    return Number(p.hour) * 60 + Number(p.minute) + Number(p.second) / 60;
+
+}
+
 module.exports = {
+    minuteOfDayNY,
     offsetAt,
     startOfDayNY,
     monthNY,

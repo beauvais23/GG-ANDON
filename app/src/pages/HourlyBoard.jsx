@@ -9,20 +9,24 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 
 import Header from "../components/Header";
+import CorrectionDialog from "../components/CorrectionDialog";
 import Footer from "../components/Footer";
 
 import useClock from "../hooks/useClock";
 
 import { getBoards, getPlan, getProducts, savePlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
+import { RAG_COLORS } from "../config/ragColors";
 
 //------------------------------------------------------
 // Hour-by-hour board (H1): plan per hour for one board and
 // day, from the day's runs (SKU + qty, single piece flow).
 // Plan per hour = ROUNDDOWN(rate × work minutes / 60), with
 // the run's last hour trued up to its qty (server side,
-// services/hourlyPlan.js). Actuals and failures come in H2/H3.
-// Admins edit the plan; everyone can view.
+// services/hourlyPlan.js). Admins edit the plan; everyone can view.
+// H2: Actual per hour from the count station taps, with RAG
+// (finished hours vs plan, the current hour vs the plan so far);
+// refreshed every 30 s.
 //------------------------------------------------------
 
 const BOARD_KEY = "hourlyBoard";
@@ -186,6 +190,7 @@ export default function HourlyBoard() {
     const [plan, setPlan] = useState(null);
     const [editing, setEditing] = useState(false);
     const [error, setError] = useState("");
+    const [correcting, setCorrecting] = useState(null);   // period index
 
     useEffect(() => {
 
@@ -219,6 +224,18 @@ export default function HourlyBoard() {
 
     useEffect(() => { load(); }, [load]);
 
+    // Live actuals: refresh every 30 s unless the plan is being edited.
+    useEffect(() => {
+
+        if (editing)
+            return undefined;
+
+        const id = setInterval(load, 30 * 1000);
+
+        return () => clearInterval(id);
+
+    }, [load, editing]);
+
     // SKUs listed for this board (Admin → Products & rates), offered in the plan editor.
     const [skuOptions, setSkuOptions] = useState([]);
 
@@ -227,11 +244,13 @@ export default function HourlyBoard() {
         if (!board || !date || !isAdmin)
             return;
 
+
         getProducts(board, date).then(p => setSkuOptions(p.skus.map(s => ({ sku: s.sku, prefix: s.prefix })))).catch(() => setSkuOptions([]));
 
     }, [board, date, isAdmin]);
 
     let cumulative = 0;
+    let cumulativeActual = 0;
 
     return (
 
@@ -281,7 +300,14 @@ export default function HourlyBoard() {
 
                             <Box sx={{ flex: 1 }} />
 
-                            <Box sx={{ ...labelSx, fontSize: 12 }}>Actual, failures and FPY arrive in the next phases</Box>
+                            {plan.saved && (
+                                <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+                                    <Box sx={{ ...labelSx, fontSize: 12 }}>Actual</Box>
+                                    <Box sx={{ fontFamily: tokens.mono, fontSize: 22, color: plan.rag ? RAG_COLORS[plan.rag] : "#E6EDF3" }}>{plan.actualTotal}</Box>
+                                    <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>/ {plan.planToNow} planned so far</Box>
+                                    <Box sx={{ ...labelSx, fontSize: 11, ml: 1.5 }}>Counted at {plan.countStation} · failures and FPY in H3</Box>
+                                </Box>
+                            )}
 
                         </Box>
 
@@ -295,17 +321,20 @@ export default function HourlyBoard() {
 
                             <>
 
-                                <Box sx={{ display: "grid", gridTemplateColumns: "150px 90px minmax(200px, 1fr) 100px 120px 110px", ...labelSx, fontSize: 12, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
-                                    <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cumulative</span><span>Actual</span>
+                                <Box sx={{ display: "grid", gridTemplateColumns: "130px 80px minmax(200px, 1fr) 70px 100px 250px 110px", ...labelSx, fontSize: 12, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+                                    <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cum. plan</span><span>Actual</span><span>Cum. actual</span>
                                 </Box>
 
-                                {plan.periods.map(p => {
+                                {plan.periods.map((p, i) => {
 
                                     cumulative += p.total;
+                                    cumulativeActual += p.actualTotal;
+
+                                    const skuActuals = Object.entries(p.actual).filter(([, v]) => v > 0);
 
                                     return (
 
-                                        <Box key={p.label} sx={{ display: "grid", gridTemplateColumns: "150px 90px minmax(200px, 1fr) 100px 120px 110px", alignItems: "center", px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+                                        <Box key={p.label} sx={{ display: "grid", gridTemplateColumns: "130px 80px minmax(200px, 1fr) 70px 100px 250px 110px", alignItems: "center", px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}`, bgcolor: p.status === "now" ? "rgba(35,126,181,0.10)" : undefined, boxShadow: p.status === "now" ? `inset 3px 0 0 ${tokens.blue}` : undefined }}>
 
                                             <Box sx={{ fontFamily: tokens.mono }}>{p.label}</Box>
                                             <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{p.workMinutes}</Box>
@@ -316,13 +345,50 @@ export default function HourlyBoard() {
                                             </Box>
                                             <Box sx={{ fontFamily: tokens.mono, fontSize: 22 }}>{p.total}</Box>
                                             <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{cumulative}</Box>
-                                            <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>—</Box>
+                                            <Box>
+                                                {p.status === "later" && p.actualTotal === 0
+                                                    ? <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>—</Box>
+                                                    : (
+                                                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                                            <Box component="span" aria-label={p.rag || "no colour"} sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: p.rag ? RAG_COLORS[p.rag] : tokens.lineStrong }} />
+                                                            <Box sx={{ fontFamily: tokens.mono, fontSize: 22, color: p.rag ? RAG_COLORS[p.rag] : "#E6EDF3" }}>{p.actualTotal}</Box>
+                                                            {p.status === "now" && <Box sx={{ fontSize: 12, color: tokens.muted }}>now · {p.due} due so far</Box>}
+                                                            {isAdmin && <IconButton size="small" aria-label={`Correct the count for ${p.label}`} onClick={() => setCorrecting(i)} sx={{ color: tokens.muted }}><EditIcon sx={{ fontSize: 16 }} /></IconButton>}
+                                                        </Box>
+                                                    )}
+                                                {p.corrected !== 0 && <Box sx={{ fontSize: 11, color: "#F2A33A" }}>incl. {p.corrected > 0 ? "+" : ""}{p.corrected} corrected</Box>}
+                                                {skuActuals.length > 1 && skuActuals.map(([k, v]) => (
+                                                    <Box key={k} sx={{ fontFamily: tokens.mono, fontSize: 11, color: tokens.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k} · {v}</Box>
+                                                ))}
+                                            </Box>
+                                            <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{p.status === "later" ? "" : cumulativeActual}</Box>
 
                                         </Box>
 
                                     );
 
                                 })}
+
+                                {plan.corrections?.length > 0 && (
+
+                                    <Box sx={{ px: 2.25, py: 1.5, borderBottom: `1px solid ${tokens.line}` }}>
+
+                                        <Box sx={{ ...labelSx, mb: 1 }}>Count corrections</Box>
+
+                                        {plan.corrections.map(c => (
+                                            <Box key={c.id} sx={{ display: "flex", flexWrap: "wrap", gap: 2, py: 0.25, fontSize: 13 }}>
+                                                <Box sx={{ fontFamily: tokens.mono, color: tokens.muted, width: 80 }}>{new Date(c.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}</Box>
+                                                <Box sx={{ fontFamily: tokens.mono, width: 110 }}>{plan.periods[c.period]?.label}</Box>
+                                                <Box sx={{ fontFamily: tokens.mono, minWidth: 260 }}>{c.sku}</Box>
+                                                <Box sx={{ fontFamily: tokens.mono, width: 50, color: c.delta > 0 ? "#3FB950" : "#F85149" }}>{c.delta > 0 ? `+${c.delta}` : c.delta}</Box>
+                                                <Box>{c.reason}</Box>
+                                                <Box sx={{ color: tokens.muted }}>by {c.adjusted_by}</Box>
+                                            </Box>
+                                        ))}
+
+                                    </Box>
+
+                                )}
 
                                 <Box sx={{ px: 2.25, py: 1.5 }}>
 
@@ -351,6 +417,18 @@ export default function HourlyBoard() {
                 )}
 
             </Box>
+
+            {correcting !== null && plan && (
+                <CorrectionDialog
+                    board={board}
+                    date={date}
+                    index={correcting}
+                    period={plan.periods[correcting]}
+                    skuOptions={plan.runs.map(r => r.sku)}
+                    onClose={() => setCorrecting(null)}
+                    onSaved={p => { setPlan(p); setCorrecting(null); }}
+                />
+            )}
 
             <Footer />
 
