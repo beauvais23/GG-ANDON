@@ -186,3 +186,45 @@ test("PCB Coating counts at Production; boards list carries each board's count s
     assert.equal(b.countStations["Team A"], "Final Test");
 
 });
+
+test("corrections (0010): set an hour right with a reason and a name; adds to taps; never below 0; admin only; kept as a trail", async () => {
+
+    await at(thu(15, 0));
+
+    const fix = body => request(app).post("/admin/hourly/corrections").set(admin)
+        .send({ board: "Team B", date: "2026-11-05", period: 1, sku: "WPX4-RED", reason: "Missed taps", by: "Lead One", ...body });
+
+    const hour = async () => (await day("Team B", "2026-11-05")).body.periods[1];
+    const start = (await hour()).actualTotal;
+
+    const up = await fix({ delta: 3 });
+
+    assert.equal(up.status, 201, up.text);
+    assert.equal(up.body.periods[1].actualTotal, start + 3);
+    assert.equal(up.body.periods[1].corrected, 3);
+
+    // Wrong SKU: one down, another up (a WPX4 SKU not tapped before).
+    await fix({ delta: -1, reason: "Wrong SKU" });
+    await fix({ delta: 1, sku: "WPX4-BLU", reason: "Wrong SKU" });
+
+    const h = await hour();
+
+    assert.equal(h.actualTotal, start + 3);
+    assert.equal(h.actual["WPX4-BLU"], 1);
+    assert.equal(h.corrected, 3);
+
+    // Can't go below 0; bad input refused; floor login refused.
+    assert.match((await fix({ delta: -2, sku: "WPX4-BLU" })).body.message, /below 0/);
+
+    for (const bad of [{ delta: 0 }, { delta: 1.5 }, { delta: 1, reason: "" }, { delta: 1, by: "" }, { delta: 1, period: 11 }, { delta: 1, sku: "TRX4-50K-120V" }, { delta: 1, date: "11/5/26" }])
+        assert.equal((await fix(bad)).status, 400, JSON.stringify(bad));
+
+    assert.equal((await request(app).post("/admin/hourly/corrections").set(floor).send({ board: "Team B", date: "2026-11-05", period: 1, sku: "WPX4-RED", delta: 1, reason: "x x x", by: "Someone" })).status, 403);
+
+    const trail = (await day("Team B", "2026-11-05")).body.corrections;
+
+    assert.equal(trail.length, 3);
+    assert.deepEqual(trail.map(c => c.delta).sort(), [-1, 1, 3]);
+    assert.ok(trail.every(c => c.adjusted_by === "Lead One" && c.reason));
+
+});

@@ -2896,7 +2896,10 @@ app.delete("/admin/hourly/skus/:id", authenticateToken, requireAdmin, (req, res)
 const hourlySettings = () => Object.fromEntries(statements.getHourlySettings.all().map(r => [r.key, r.value]));
 
 // Plan + actuals + RAG for one board and day.
-const boardDay = (board, date) => withActuals(planFor(statements, board, date), statements.getActuals.all(board, date), hourlySettings());
+const boardDay = (board, date) => ({
+    ...withActuals(planFor(statements, board, date), statements.getActuals.all({ board, date }), hourlySettings()),
+    corrections: statements.getAdjustments.all(board, date)
+});
 
 app.get("/hourly/plan/:board/:date", authenticateToken, (req, res) => {
 
@@ -2965,6 +2968,54 @@ app.post("/hourly/taps/:tapId/undo", authenticateToken, (req, res) => {
     statements.undoTap.run(Date.now(), tap.tap_id);
 
     res.json({ success: true });
+
+});
+
+//------------------------------------------------------
+// Count corrections (0010, admin): set an hour's Actual for
+// one SKU to the right number. Stored as a signed delta with
+// a reason and a name; never edited or deleted (audit).
+//------------------------------------------------------
+
+app.post("/admin/hourly/corrections", authenticateToken, requireAdmin, (req, res) => {
+
+    const { board, date, period, sku, delta, reason, by } = req.body || {};
+    const d = Number(delta);
+    const p = Number(period);
+    const cleanSku = String(sku || "").trim().toUpperCase();
+    const cleanReason = String(reason || "").trim();
+    const cleanBy = String(by || "").trim();
+
+    if (!BOARDS.includes(board) || !isDate(date))
+        return res.status(400).json({ success: false, message: "Need a board and a date YYYY-MM-DD." });
+
+    if (!Number.isInteger(p) || p < 0 || p >= PERIODS.length)
+        return res.status(400).json({ success: false, message: "Unknown hour." });
+
+    if (!Number.isInteger(d) || d === 0 || Math.abs(d) > 500)
+        return res.status(400).json({ success: false, message: "The correction must change the count by a whole number (1-500 up or down)." });
+
+    if (cleanReason.length < 3 || cleanReason.length > 200)
+        return res.status(400).json({ success: false, message: "A reason is required (3-200 characters)." });
+
+    if (cleanBy.length < 2 || cleanBy.length > 80)
+        return res.status(400).json({ success: false, message: "Your name is required." });
+
+    const family = familyFor(cleanSku, statements.getProductFamilies.all());
+
+    if (!family || family.board !== board)
+        return res.status(400).json({ success: false, message: `${cleanSku || "SKU"} is not on the ${board} board.` });
+
+    const current = statements.getActuals.all({ board, date }).find(r => r.period === p && r.sku === cleanSku)?.n || 0;
+
+    if (current + d < 0)
+        return res.status(400).json({ success: false, message: `That would make ${cleanSku} ${current + d} in that hour. The count can't go below 0.` });
+
+    statements.insertAdjustment.run(board, date, p, cleanSku, d, cleanReason, cleanBy, Date.now());
+
+    console.log(`✓ Count corrected: ${board} ${date} ${PERIODS[p].label} ${cleanSku} ${d > 0 ? "+" : ""}${d} by ${cleanBy}`);
+
+    res.status(201).json({ success: true, ...boardDay(board, date) });
 
 });
 

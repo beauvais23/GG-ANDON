@@ -70,3 +70,4 @@ export const sendTap = tap => tapCall("/hourly/taps", tap);
 export const undoTapRequest = tapId => tapCall(`/hourly/taps/${enc(tapId)}/undo`);
 export const saveHourlySettings = (greenPct, amberPct) => call("/admin/hourly/settings", { method: "PUT", body: { greenPct, amberPct } });
 export const getPlanSettings = () => call("/hourly/settings");
+export const correctCount = body => call("/admin/hourly/corrections", { method: "POST", body });

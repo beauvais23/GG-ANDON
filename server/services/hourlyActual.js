@@ -73,12 +73,16 @@ function withActuals(plan, rows, settings, now = Date.now()) {
 
         const actual = {};
         let total = 0;
+        let corrected = 0;
 
         for (const r of rows)
             if (r.period === i) {
 
-                actual[r.sku] = r.n;
+                if (r.n)
+                    actual[r.sku] = r.n;
+
                 total += r.n;
+                corrected += r.adjusted || 0;
 
             }
 
@@ -101,7 +105,7 @@ function withActuals(plan, rows, settings, now = Date.now()) {
 
         const rag = status === "later" ? null : ragFor(total, due, settings);
 
-        return { ...p, actual, actualTotal: total, status, due: Math.round(due * 10) / 10, rag };
+        return { ...p, actual, actualTotal: total, corrected, status, due: Math.round(due * 10) / 10, rag };
 
     });
 
