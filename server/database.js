@@ -508,6 +508,37 @@ unlistSku: db.prepare(`
     UPDATE product_skus SET active = 0, updated_at = ? WHERE id = ? AND active = 1
 `),
 
+//--------------------------------------------------
+// Hour-by-hour board, H2 (0009)
+//--------------------------------------------------
+
+getTap: db.prepare(`
+    SELECT * FROM board_taps WHERE tap_id = ?
+`),
+
+insertTap: db.prepare(`
+    INSERT OR IGNORE INTO board_taps (tap_id, board, plan_date, period, sku, production_line, work_center, tapped_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`),
+
+undoTap: db.prepare(`
+    UPDATE board_taps SET undone_at = ? WHERE tap_id = ? AND undone_at IS NULL
+`),
+
+getActuals: db.prepare(`
+    SELECT period, sku, COUNT(*) AS n FROM board_taps
+    WHERE board = ? AND plan_date = ? AND undone_at IS NULL
+    GROUP BY period, sku
+`),
+
+getHourlySettings: db.prepare(`
+    SELECT key, value FROM hourly_settings
+`),
+
+setHourlySetting: db.prepare(`
+    UPDATE hourly_settings SET value = ?, updated_at = ? WHERE key = ?
+`),
+
 getPlan: db.prepare(`
     SELECT * FROM plans WHERE board = ? AND plan_date = ?
 `),

@@ -15,14 +15,17 @@ import useClock from "../hooks/useClock";
 
 import { getBoards, getPlan, getProducts, savePlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
+import { RAG_COLORS } from "../config/ragColors";
 
 //------------------------------------------------------
 // Hour-by-hour board (H1): plan per hour for one board and
 // day, from the day's runs (SKU + qty, single piece flow).
 // Plan per hour = ROUNDDOWN(rate × work minutes / 60), with
 // the run's last hour trued up to its qty (server side,
-// services/hourlyPlan.js). Actuals and failures come in H2/H3.
-// Admins edit the plan; everyone can view.
+// services/hourlyPlan.js). Admins edit the plan; everyone can view.
+// H2: Actual per hour from the count station taps, with RAG
+// (finished hours vs plan, the current hour vs the plan so far);
+// refreshed every 30 s.
 //------------------------------------------------------
 
 const BOARD_KEY = "hourlyBoard";
@@ -219,6 +222,18 @@ export default function HourlyBoard() {
 
     useEffect(() => { load(); }, [load]);
 
+    // Live actuals: refresh every 30 s unless the plan is being edited.
+    useEffect(() => {
+
+        if (editing)
+            return undefined;
+
+        const id = setInterval(load, 30 * 1000);
+
+        return () => clearInterval(id);
+
+    }, [load, editing]);
+
     // SKUs listed for this board (Admin → Products & rates), offered in the plan editor.
     const [skuOptions, setSkuOptions] = useState([]);
 
@@ -232,6 +247,7 @@ export default function HourlyBoard() {
     }, [board, date, isAdmin]);
 
     let cumulative = 0;
+    let cumulativeActual = 0;
 
     return (
 
@@ -281,7 +297,14 @@ export default function HourlyBoard() {
 
                             <Box sx={{ flex: 1 }} />
 
-                            <Box sx={{ ...labelSx, fontSize: 12 }}>Actual, failures and FPY arrive in the next phases</Box>
+                            {plan.saved && (
+                                <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+                                    <Box sx={{ ...labelSx, fontSize: 12 }}>Actual</Box>
+                                    <Box sx={{ fontFamily: tokens.mono, fontSize: 22, color: plan.rag ? RAG_COLORS[plan.rag] : "#E6EDF3" }}>{plan.actualTotal}</Box>
+                                    <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>/ {plan.planToNow} planned so far</Box>
+                                    <Box sx={{ ...labelSx, fontSize: 11, ml: 1.5 }}>Counted at {plan.countStation} · failures and FPY in H3</Box>
+                                </Box>
+                            )}
 
                         </Box>
 
@@ -295,17 +318,20 @@ export default function HourlyBoard() {
 
                             <>
 
-                                <Box sx={{ display: "grid", gridTemplateColumns: "150px 90px minmax(200px, 1fr) 100px 120px 110px", ...labelSx, fontSize: 12, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
-                                    <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cumulative</span><span>Actual</span>
+                                <Box sx={{ display: "grid", gridTemplateColumns: "130px 80px minmax(200px, 1fr) 70px 100px 250px 110px", ...labelSx, fontSize: 12, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+                                    <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cum. plan</span><span>Actual</span><span>Cum. actual</span>
                                 </Box>
 
                                 {plan.periods.map(p => {
 
                                     cumulative += p.total;
+                                    cumulativeActual += p.actualTotal;
+
+                                    const skuActuals = Object.entries(p.actual).filter(([, v]) => v > 0);
 
                                     return (
 
-                                        <Box key={p.label} sx={{ display: "grid", gridTemplateColumns: "150px 90px minmax(200px, 1fr) 100px 120px 110px", alignItems: "center", px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+                                        <Box key={p.label} sx={{ display: "grid", gridTemplateColumns: "130px 80px minmax(200px, 1fr) 70px 100px 250px 110px", alignItems: "center", px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}`, bgcolor: p.status === "now" ? "rgba(35,126,181,0.10)" : undefined, boxShadow: p.status === "now" ? `inset 3px 0 0 ${tokens.blue}` : undefined }}>
 
                                             <Box sx={{ fontFamily: tokens.mono }}>{p.label}</Box>
                                             <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{p.workMinutes}</Box>
@@ -316,7 +342,21 @@ export default function HourlyBoard() {
                                             </Box>
                                             <Box sx={{ fontFamily: tokens.mono, fontSize: 22 }}>{p.total}</Box>
                                             <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{cumulative}</Box>
-                                            <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>—</Box>
+                                            <Box>
+                                                {p.status === "later" && p.actualTotal === 0
+                                                    ? <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>—</Box>
+                                                    : (
+                                                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                                            <Box component="span" aria-label={p.rag || "no colour"} sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: p.rag ? RAG_COLORS[p.rag] : tokens.lineStrong }} />
+                                                            <Box sx={{ fontFamily: tokens.mono, fontSize: 22, color: p.rag ? RAG_COLORS[p.rag] : "#E6EDF3" }}>{p.actualTotal}</Box>
+                                                            {p.status === "now" && <Box sx={{ fontSize: 12, color: tokens.muted }}>now · {p.due} due so far</Box>}
+                                                        </Box>
+                                                    )}
+                                                {skuActuals.length > 1 && skuActuals.map(([k, v]) => (
+                                                    <Box key={k} sx={{ fontFamily: tokens.mono, fontSize: 11, color: tokens.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k} · {v}</Box>
+                                                ))}
+                                            </Box>
+                                            <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{p.status === "later" ? "" : cumulativeActual}</Box>
 
                                         </Box>
 

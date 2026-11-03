@@ -1,0 +1,185 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { Box, ButtonBase } from "@mui/material";
+
+import AddIcon from "@mui/icons-material/Add";
+import UndoIcon from "@mui/icons-material/Undo";
+
+import useTapQueue, { UNDO_SECONDS } from "../hooks/useTapQueue";
+import { getPlan } from "../api/hourly";
+import { labelSx, tokens } from "../theme/theme";
+import { RAG_COLORS } from "../config/ragColors";
+
+//------------------------------------------------------
+// H2 count strip (Option 1A, Nov 3 2026): above the alert
+// buttons on the count station (Final Test; PCB Coating:
+// Production). One tap on +1 GOOD per good unit. The SKU
+// choice stays until changed (remembered per board); the SKU
+// chips are today's plan runs. Undo for 30 s. Taps wait in an
+// offline queue when there is no connection.
+//------------------------------------------------------
+
+const todayNY = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+const skuKey = board => `countSku:${board}`;
+
+function readSku(board) {
+
+    try { return localStorage.getItem(skuKey(board)) || ""; } catch { return ""; }
+
+}
+
+function SkuChip({ selected, onClick, children }) {
+
+    return (
+
+        <ButtonBase
+            onClick={onClick}
+            aria-pressed={selected}
+            focusRipple
+            sx={{
+                height: 40,
+                px: 1.5,
+                borderRadius: "2px",
+                fontFamily: tokens.mono,
+                fontSize: 14,
+                whiteSpace: "nowrap",
+                bgcolor: selected ? tokens.blue : tokens.panel,
+                color: selected ? "#FFFFFF" : "#C9D1D9",
+                border: `1px solid ${selected ? tokens.blueText : tokens.lineStrong}`
+            }}
+        >
+            {children}
+        </ButtonBase>
+
+    );
+
+}
+
+function Stat({ label, value, of, rag }) {
+
+    return (
+
+        <Box sx={{ minWidth: 120 }}>
+            <Box sx={{ ...labelSx, fontSize: 11 }}>{label}</Box>
+            <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75 }}>
+                <Box sx={{ fontFamily: tokens.mono, fontSize: 34, fontWeight: 600, color: rag ? RAG_COLORS[rag] : "#E6EDF3", lineHeight: 1.1 }}>{value}</Box>
+                <Box sx={{ fontFamily: tokens.mono, fontSize: 16, color: tokens.muted }}>/ {of}</Box>
+            </Box>
+        </Box>
+
+    );
+
+}
+
+export default function CountStrip({ board, productionLine, workCenter }) {
+
+    const [day, setDay] = useState(null);
+    const [error, setError] = useState("");
+    const [sku, setSku] = useState(() => readSku(board));
+    const [now, setNow] = useState(Date.now());
+
+    const load = useCallback(async () => {
+
+        try {
+
+            setDay(await getPlan(board, todayNY()));
+            setError("");
+
+        } catch (err) {
+
+            setError(err.message);
+
+        }
+
+    }, [board]);
+
+    const { queue, last, tap, undo, message } = useTapQueue({ onSent: load });
+
+    useEffect(() => { load(); const id = setInterval(load, 60 * 1000); return () => clearInterval(id); }, [load]);
+    useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+
+    const skus = useMemo(() => [...new Set((day?.runs || []).map(r => r.sku))], [day]);
+    const current = day?.periods.find(p => p.status === "now") || null;
+
+    // Default SKU: the remembered one if it is on today's plan, else the
+    // run planned for this hour, else the first run.
+    const planNow = current ? Object.entries(current.plan).sort((a, b) => b[1] - a[1])[0]?.[0] : null;
+    const chosen = skus.includes(sku) ? sku : (planNow || skus[0] || "");
+
+    const choose = s => {
+
+        setSku(s);
+        try { localStorage.setItem(skuKey(board), s); } catch { /* per-tablet convenience */ }
+
+    };
+
+    // Taps not sent yet count on screen straight away.
+    const waiting = queue.filter(t => t.board === board).length;
+    const stuck = queue.filter(t => t.board === board && now - t.tappedAt > 5000).length;
+    const hourActual = (current?.actualTotal || 0) + waiting;
+    const shiftActual = (day?.actualTotal || 0) + waiting;
+    const undoLeft = last ? Math.max(0, UNDO_SECONDS - Math.floor((now - last.at) / 1000)) : 0;
+
+    if (error && !day)
+        return <Box sx={{ mx: 3, mt: 1.5, p: 1.5, border: `1px solid ${tokens.lineStrong}`, color: "#FFA040" }}>Count strip: {error}</Box>;
+
+    if (!day)
+        return null;
+
+    if (!day.saved || skus.length === 0)
+        return (
+            <Box sx={{ mx: 3, mt: 1.5, px: 2, py: 1.5, bgcolor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.muted }}>
+                <Box component="span" sx={{ ...labelSx, mr: 1.5 }}>Count · {workCenter}</Box>
+                No plan for {board} today. Counting starts when your lead saves today's plan on the hour-by-hour board.
+            </Box>
+        );
+
+    return (
+
+        <Box component="section" aria-label="Count good units" sx={{ mx: 3, mt: 1.5, display: "flex", alignItems: "stretch", gap: 2, flexWrap: { xs: "wrap", lg: "nowrap" }, px: 2, py: 1.25, bgcolor: tokens.panel, border: `1px solid ${tokens.line}` }}>
+
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+
+                <Box sx={{ ...labelSx, mb: 0.75 }}>Count · {workCenter} · SKU</Box>
+
+                <Box sx={{ display: "flex", gap: 1, overflowX: "auto", pb: 0.5 }}>
+                    {skus.map(s => <SkuChip key={s} selected={s === chosen} onClick={() => choose(s)}>{s}</SkuChip>)}
+                </Box>
+
+                <Box sx={{ mt: 0.5, fontSize: 13, minHeight: 18, color: message ? "#FF6B6B" : "#FFA040" }}>
+                    {message || (stuck ? `${stuck} tap${stuck === 1 ? "" : "s"} waiting to send (no connection). They will send by themselves.` : "")}
+                </Box>
+
+            </Box>
+
+            <Stat label={current ? `This hour · ${current.label}` : "This hour"} value={hourActual} of={current ? current.total : 0} rag={current?.rag} />
+            <Stat label="Shift · so far" value={shiftActual} of={day.planToNow} rag={day.rag} />
+
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, width: 250 }}>
+
+                <ButtonBase
+                    onClick={() => tap({ board, sku: chosen, productionLine, workCenter })}
+                    disabled={!chosen}
+                    focusRipple
+                    aria-label={`Count one good ${chosen}`}
+                    sx={{ flex: 1, minHeight: 64, borderRadius: "2px", bgcolor: "#1F7A3A", color: "#FFFFFF", border: "1px solid #2EA352", fontFamily: tokens.display, fontWeight: 700, fontSize: 30, letterSpacing: "2px", "&:active": { bgcolor: "#2EA352" } }}
+                >
+                    <AddIcon sx={{ fontSize: 32, mr: 0.5 }} /> 1 GOOD
+                </ButtonBase>
+
+                <ButtonBase
+                    onClick={undo}
+                    disabled={!undoLeft}
+                    sx={{ height: 34, borderRadius: "2px", border: `1px solid ${tokens.lineStrong}`, color: undoLeft ? "#E6EDF3" : tokens.muted, fontSize: 13, letterSpacing: "1px", opacity: undoLeft ? 1 : 0.5 }}
+                >
+                    <UndoIcon sx={{ fontSize: 18, mr: 0.75 }} /> {undoLeft ? `UNDO LAST (${undoLeft}s)` : "UNDO"}
+                </ButtonBase>
+
+            </Box>
+
+        </Box>
+
+    );
+
+}

@@ -7,9 +7,11 @@ import ButtonGrid from "../components/ButtonGrid";
 import RaiseFeedback from "../components/RaiseFeedback";
 import AlertScreen from "../components/AlertScreen";
 import NearMissLogged from "../components/NearMissLogged";
+import CountStrip from "../components/CountStrip";
 
 import useClock from "../hooks/useClock";
 import useRaiseAlert from "../hooks/useRaiseAlert";
+import useCountStation from "../hooks/useCountStation";
 import { useAlert } from "../context/AlertContext";
 import { useProductionLine } from "../context/ProductionLineContext";
 import { useWorkCenter } from "../context/WorkCenterContext";
@@ -29,6 +31,9 @@ export default function Home() {
   const { workCenter } = useWorkCenter();
 
   const raising = useRaiseAlert();
+
+  // H2: the count strip shows on the line's count station only.
+  const countBoard = useCountStation(productionLine, workCenter);
 
   return (
 
@@ -56,6 +61,8 @@ export default function Home() {
         <>
 
           <StationBar onRaise={raising.raise} />
+
+          {countBoard && <CountStrip key={countBoard} board={countBoard} productionLine={productionLine} workCenter={workCenter} />}
 
           <RaiseFeedback raising={raising} />
 
