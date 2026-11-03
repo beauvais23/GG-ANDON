@@ -8,7 +8,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 import { AdminPanel, AdminRow, EmptyRow, Tag } from "./adminUi";
 
-import { addRate, addSku, deleteRate, getBoards, getProducts, removeSku, resolveSku } from "../../api/hourly";
+import { addRate, addSku, deleteRate, getBoards, getPlanSettings, getProducts, removeSku, resolveSku, saveHourlySettings } from "../../api/hourly";
 import { labelSx, tokens } from "../../theme/theme";
 
 //------------------------------------------------------
@@ -60,6 +60,49 @@ function RateForm({ label, onSave, today }) {
             </Button>
 
         </Box>
+
+    );
+
+}
+
+// H2: RAG thresholds for the boards (percent of plan).
+function RagSettings() {
+
+    const [green, setGreen] = useState("");
+    const [amber, setAmber] = useState("");
+    const [note, setNote] = useState("");
+
+    useEffect(() => {
+
+        getPlanSettings().then(s => { setGreen(String(s.green_pct)); setAmber(String(s.amber_pct)); }).catch(() => {});
+
+    }, []);
+
+    async function save() {
+
+        try {
+
+            const s = await saveHourlySettings(Number(green), Number(amber));
+
+            setNote(`Saved: green ≥ ${s.green_pct}%, amber ≥ ${s.amber_pct}%, red below.`);
+
+        } catch (err) {
+
+            setNote(err.message);
+
+        }
+
+    }
+
+    return (
+
+        <AdminRow sx={{ bgcolor: tokens.ground }}>
+            <Box sx={{ ...labelSx, minWidth: 160 }}>Board colours</Box>
+            <TextField size="small" type="number" label="Green at or above %" value={green} onChange={e => setGreen(e.target.value)} sx={{ width: 170 }} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField size="small" type="number" label="Amber at or above %" value={amber} onChange={e => setAmber(e.target.value)} sx={{ width: 170 }} slotProps={{ inputLabel: { shrink: true } }} />
+            <Button size="small" variant="outlined" onClick={save}>Save</Button>
+            <Box sx={{ fontSize: 13, color: tokens.muted }}>{note || "Below amber is red. The current hour is compared with the plan so far."}</Box>
+        </AdminRow>
 
     );
 
@@ -142,6 +185,8 @@ export default function ProductsPanel() {
                     </Button>
                 ))}
             </Box>
+
+            <RagSettings />
 
             {error && <Box sx={{ px: 2.25, pt: 1.5 }}><Alert severity="error">{error}</Alert></Box>}
 

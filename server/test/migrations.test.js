@@ -257,6 +257,8 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0009
+
     migrateDown(db, dbPath); // 0008
 
     migrateDown(db, dbPath); // 0007
@@ -321,6 +323,8 @@ test("0004: cancelled alerts lose the copied resolved time; resolved alerts unto
         { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0009
+
     migrateDown(db, dbPath); // 0008
 
     migrateDown(db, dbPath); // 0007
@@ -352,6 +356,8 @@ test("0005: archived_at added to production_lines and response_team, empty; down
     // Nothing existing is archived.
     assert.equal(db.prepare("SELECT archived_at FROM production_lines").get().archived_at, null);
     assert.equal(db.prepare("SELECT archived_at FROM response_team").get().archived_at, null);
+
+    migrateDown(db, dbPath); // 0009
 
     migrateDown(db, dbPath); // 0008
 
@@ -393,6 +399,8 @@ test("0006: line groups set by name, role/line_group columns, default escalation
     assert.ok(rules.some(r => r.step === "OPEN_ACK" && r.minutes === 30));
     assert.ok(!rules.some(r => r.alert_type === "NEAR_MISS"));
 
+    migrateDown(db, dbPath); // 0009
+
     migrateDown(db, dbPath); // 0008
 
     migrateDown(db, dbPath); // 0007
@@ -424,6 +432,8 @@ test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 
     assert.ok(on("PCB Coating").includes("30-72027-000-C") && !on("PCB Coating").includes("30-"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates").get().n, 0);
 
+    migrateDown(db, dbPath); // 0009
+
     migrateDown(db, dbPath); // 0008
 
     migrateDown(db, dbPath); // 0007
@@ -448,10 +458,33 @@ test("0008: SKU list seeded per family (QuickBooks Nov 3 2026 + 30 coating PCBs)
     );
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_skus WHERE sku LIKE '%CNTL%' OR sku LIKE '%-JMP-%' OR sku LIKE '%-LDR-%'").get().n, 0);
 
+    migrateDown(db, dbPath); // 0009
+
     migrateDown(db, dbPath); // 0008
 
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'product_skus'").get().n, 0);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_families WHERE board = 'Coating'").get().n, 30);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_families").get().n, 74);
+
+});
+
+test("0009: board_taps (tap_id unique) and RAG settings 100 / 90; down drops them", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    migrateUp(db, dbPath);
+
+    assert.deepEqual(db.prepare("SELECT key, value FROM hourly_settings ORDER BY key").all(), [{ key: "amber_pct", value: 90 }, { key: "green_pct", value: 100 }]);
+
+    const add = db.prepare("INSERT INTO board_taps (tap_id, board, plan_date, period, sku, tapped_at, created_at) VALUES ('t1', 'Team A', '2026-11-05', 0, 'FBL-4-HL-CW', 1, 1)");
+
+    add.run();
+    assert.throws(() => add.run(), /UNIQUE/);
+
+    migrateDown(db, dbPath); // 0009
+
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('board_taps', 'hourly_settings')").get().n, 0);
 
 });
