@@ -305,7 +305,12 @@ export default function HourlyBoard() {
                                     <Box sx={{ ...labelSx, fontSize: 12 }}>Actual</Box>
                                     <Box sx={{ fontFamily: tokens.mono, fontSize: 22, color: plan.rag ? RAG_COLORS[plan.rag] : "#E6EDF3" }}>{plan.actualTotal}</Box>
                                     <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>/ {plan.planToNow} planned so far</Box>
-                                    <Box sx={{ ...labelSx, fontSize: 11, ml: 1.5 }}>Counted at {plan.countStation} · failures and FPY in H3</Box>
+                                    <Box sx={{ ...labelSx, fontSize: 12, ml: 1.5 }}>FPY</Box>
+                                    <Box sx={{ fontFamily: tokens.mono, fontSize: 18 }}>{plan.quality?.fpy === null || plan.quality?.fpy === undefined ? "—" : `${plan.quality.fpy}%`}</Box>
+                                    <Box sx={{ fontFamily: tokens.mono, fontSize: 13, color: tokens.muted }}>
+                                        {plan.quality?.fails || 0} fail · {plan.quality?.rework || 0} rework · {plan.quality?.scrap || 0} scrap{plan.quality?.open ? ` · ${plan.quality.open} open` : ""}
+                                    </Box>
+                                    <Box sx={{ ...labelSx, fontSize: 11, ml: 1.5 }}>Counted at {plan.countStation}</Box>
                                 </Box>
                             )}
 
@@ -321,8 +326,8 @@ export default function HourlyBoard() {
 
                             <>
 
-                                <Box sx={{ display: "grid", gridTemplateColumns: "130px 80px minmax(200px, 1fr) 70px 100px 250px 110px", ...labelSx, fontSize: 12, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
-                                    <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cum. plan</span><span>Actual</span><span>Cum. actual</span>
+                                <Box sx={{ display: "grid", gridTemplateColumns: "120px 70px minmax(180px, 1fr) 60px 90px 230px 90px 70px 70px", ...labelSx, fontSize: 12, px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}` }}>
+                                    <span>Hour</span><span>Work min</span><span>SKU · plan</span><span>Plan</span><span>Cum. plan</span><span>Actual</span><span>Cum. actual</span><span>Fails</span><span>FPY</span>
                                 </Box>
 
                                 {plan.periods.map((p, i) => {
@@ -334,7 +339,7 @@ export default function HourlyBoard() {
 
                                     return (
 
-                                        <Box key={p.label} sx={{ display: "grid", gridTemplateColumns: "130px 80px minmax(200px, 1fr) 70px 100px 250px 110px", alignItems: "center", px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}`, bgcolor: p.status === "now" ? "rgba(35,126,181,0.10)" : undefined, boxShadow: p.status === "now" ? `inset 3px 0 0 ${tokens.blue}` : undefined }}>
+                                        <Box key={p.label} sx={{ display: "grid", gridTemplateColumns: "120px 70px minmax(180px, 1fr) 60px 90px 230px 90px 70px 70px", alignItems: "center", px: 2.25, py: 1, borderBottom: `1px solid ${tokens.line}`, bgcolor: p.status === "now" ? "rgba(35,126,181,0.10)" : undefined, boxShadow: p.status === "now" ? `inset 3px 0 0 ${tokens.blue}` : undefined }}>
 
                                             <Box sx={{ fontFamily: tokens.mono }}>{p.label}</Box>
                                             <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{p.workMinutes}</Box>
@@ -362,6 +367,11 @@ export default function HourlyBoard() {
                                                 ))}
                                             </Box>
                                             <Box sx={{ fontFamily: tokens.mono, color: tokens.muted }}>{p.status === "later" ? "" : cumulativeActual}</Box>
+                                            <Box title={Object.entries(p.failCodes || {}).map(([c, n]) => `${c} × ${n}`).join(", ")}>
+                                                <Box sx={{ fontFamily: tokens.mono, color: p.fails ? "#F85149" : tokens.muted }}>{p.fails || (p.status === "later" ? "" : 0)}</Box>
+                                                {(p.rework > 0 || p.scrap > 0) && <Box sx={{ fontSize: 11, color: tokens.muted }}>{p.rework ? `${p.rework} rework` : ""}{p.rework && p.scrap ? " · " : ""}{p.scrap ? `${p.scrap} scrap` : ""}</Box>}
+                                            </Box>
+                                            <Box sx={{ fontFamily: tokens.mono, color: p.fpy === null ? tokens.muted : "#E6EDF3" }}>{p.fpy === null ? "" : `${p.fpy}%`}</Box>
 
                                         </Box>
 

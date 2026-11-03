@@ -2897,7 +2897,11 @@ const hourlySettings = () => Object.fromEntries(statements.getHourlySettings.all
 
 // Plan + actuals + RAG for one board and day.
 const boardDay = (board, date) => ({
-    ...withActuals(planFor(statements, board, date), statements.getActuals.all({ board, date }), hourlySettings()),
+    ...withActuals(planFor(statements, board, date), statements.getActuals.all({ board, date }), hourlySettings(), Date.now(), {
+        fails: statements.getFailsByPeriod.all(board, date),
+        dispositions: statements.getDispositionsByPeriod.all(board, date),
+        open: statements.getOpenFailures.all(board).length
+    }),
     corrections: statements.getAdjustments.all(board, date)
 });
 
@@ -3016,6 +3020,143 @@ app.post("/admin/hourly/corrections", authenticateToken, requireAdmin, (req, res
     console.log(`✓ Count corrected: ${board} ${date} ${PERIODS[p].label} ${cleanSku} ${d > 0 ? "+" : ""}${d} by ${cleanBy}`);
 
     res.status(201).json({ success: true, ...boardDay(board, date) });
+
+});
+
+//------------------------------------------------------
+// H3 (0011): FAIL → failure code; open until REWORK_PASS
+// (adds 1 to Actual in the hour it passed) or SCRAP (the
+// tablet offers the NCM form). failId from the tablet, so a
+// re-sent fail is stored once (offline queue).
+//------------------------------------------------------
+
+app.get("/hourly/failure-codes", authenticateToken, (req, res) => {
+
+    res.json({ codes: statements.getFailureCodes.all().filter(c => c.active) });
+
+});
+
+app.post("/hourly/failures", authenticateToken, (req, res) => {
+
+    const { failId, board, sku, code, failedAt, productionLine, workCenter } = req.body || {};
+    const now = Date.now();
+
+    if (!TAP_ID.test(String(failId || "")))
+        return res.status(400).json({ success: false, message: "failId is required (8-64 letters, digits, - or _)." });
+
+    const existing = statements.getFailure.get(failId);
+
+    if (existing)
+        return res.json({ success: true, duplicate: true, failure: existing });
+
+    if (!BOARDS.includes(board))
+        return res.status(400).json({ success: false, message: "Unknown board." });
+
+    const cleanSku = String(sku || "").trim().toUpperCase();
+    const family = familyFor(cleanSku, statements.getProductFamilies.all());
+
+    if (!family || family.board !== board)
+        return res.status(400).json({ success: false, message: `${cleanSku || "SKU"} is not on the ${board} board.` });
+
+    const fc = statements.getFailureCode.get(String(code || ""));
+
+    if (!fc || !fc.active)
+        return res.status(400).json({ success: false, message: "Pick a failure code from the list." });
+
+    const t = Number(failedAt);
+    const at = Number.isFinite(t) && t <= now + 2 * 60 * 1000 && t >= now - 24 * 60 * 60 * 1000 ? Math.min(t, now) : now;
+
+    statements.insertFailure.run(failId, board, dateNY(at), periodAt(at), cleanSku, fc.code, String(productionLine || "").slice(0, 100) || null, String(workCenter || "").slice(0, 100) || null, at, now);
+
+    res.status(201).json({ success: true, failure: statements.getFailure.get(failId) });
+
+});
+
+app.post("/hourly/failures/:failId/undo", authenticateToken, (req, res) => {
+
+    const f = statements.getFailure.get(req.params.failId);
+
+    if (!f)
+        return res.status(404).json({ success: false, message: "Failure not found." });
+
+    if (f.undone_at)
+        return res.json({ success: true, alreadyUndone: true });
+
+    if (f.disposition)
+        return res.status(409).json({ success: false, message: "Already dispositioned; it can't be undone." });
+
+    if (Date.now() - f.created_at > UNDO_MS)
+        return res.status(409).json({ success: false, message: "Too late to undo (30 seconds). Ask your lead to correct it." });
+
+    statements.undoFailure.run(Date.now(), f.fail_id);
+
+    res.json({ success: true });
+
+});
+
+app.post("/hourly/failures/:failId/disposition", authenticateToken, (req, res) => {
+
+    const f = statements.getFailure.get(req.params.failId);
+    const disposition = req.body?.disposition;
+
+    if (!f || f.undone_at)
+        return res.status(404).json({ success: false, message: "Failure not found." });
+
+    if (!["REWORK_PASS", "SCRAP"].includes(disposition))
+        return res.status(400).json({ success: false, message: "Disposition must be REWORK_PASS or SCRAP." });
+
+    if (f.disposition)
+        return res.status(409).json({ success: false, message: `Already ${f.disposition === "SCRAP" ? "scrapped" : "reworked and passed"}.` });
+
+    const now = Date.now();
+    const by = String(req.body?.by || "Operator (tablet)").trim().slice(0, 80) || "Operator (tablet)";
+
+    statements.disposeFailure.run(disposition, now, dateNY(now), periodAt(now), by, f.fail_id);
+
+    res.json({ success: true, failure: statements.getFailure.get(f.fail_id) });
+
+});
+
+app.get("/hourly/failures/open/:board", authenticateToken, (req, res) => {
+
+    res.json({ failures: statements.getOpenFailures.all(req.params.board) });
+
+});
+
+app.get("/admin/failure-codes", authenticateToken, requireAdmin, (req, res) => {
+
+    res.json({ codes: statements.getFailureCodes.all() });
+
+});
+
+app.post("/admin/failure-codes", authenticateToken, requireAdmin, (req, res) => {
+
+    const label = String(req.body?.label || "").trim().toUpperCase();
+    const m = label.match(/^([A-Z]{2}) (\d{3}) - .{3,100}$/);
+
+    if (!m)
+        return res.status(400).json({ success: false, message: 'Write it like the form: "EC 060 - DESCRIPTION".' });
+
+    const code = `${m[1]} ${m[2]}`;
+
+    if (statements.getFailureCode.get(code))
+        return res.status(409).json({ success: false, message: `${code} is already on the list.` });
+
+    statements.insertFailureCode.run(code, label, m[1], Date.now(), Date.now());
+
+    res.status(201).json({ success: true, code: statements.getFailureCode.get(code) });
+
+});
+
+app.put("/admin/failure-codes/:id", authenticateToken, requireAdmin, (req, res) => {
+
+    if (typeof req.body?.active !== "boolean")
+        return res.status(400).json({ success: false, message: "active must be true or false." });
+
+    if (!statements.setFailureCodeActive.run(req.body.active ? 1 : 0, Date.now(), req.params.id).changes)
+        return res.status(404).json({ success: false, message: "Code not found." });
+
+    res.json({ success: true });
 
 });
 

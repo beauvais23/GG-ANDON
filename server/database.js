@@ -556,6 +556,64 @@ setHourlySetting: db.prepare(`
     UPDATE hourly_settings SET value = ?, updated_at = ? WHERE key = ?
 `),
 
+//--------------------------------------------------
+// Hour-by-hour board, H3 (0011): failures, rework, scrap
+//--------------------------------------------------
+
+getFailureCodes: db.prepare(`
+    SELECT * FROM failure_codes ORDER BY sort, code
+`),
+
+getFailureCode: db.prepare(`
+    SELECT * FROM failure_codes WHERE code = ?
+`),
+
+insertFailureCode: db.prepare(`
+    INSERT INTO failure_codes (code, label, grp, sort, active, created_at, updated_at)
+    VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 10 FROM failure_codes), 1, ?, ?)
+`),
+
+setFailureCodeActive: db.prepare(`
+    UPDATE failure_codes SET active = ?, updated_at = ? WHERE id = ?
+`),
+
+getFailure: db.prepare(`
+    SELECT * FROM board_failures WHERE fail_id = ?
+`),
+
+insertFailure: db.prepare(`
+    INSERT OR IGNORE INTO board_failures (fail_id, board, plan_date, period, sku, code, production_line, work_center, failed_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`),
+
+undoFailure: db.prepare(`
+    UPDATE board_failures SET undone_at = ? WHERE fail_id = ? AND undone_at IS NULL AND disposition IS NULL
+`),
+
+disposeFailure: db.prepare(`
+    UPDATE board_failures
+    SET disposition = ?, disposition_at = ?, disposition_date = ?, disposition_period = ?, disposition_by = ?
+    WHERE fail_id = ? AND undone_at IS NULL AND disposition IS NULL
+`),
+
+getOpenFailures: db.prepare(`
+    SELECT * FROM board_failures
+    WHERE board = ? AND undone_at IS NULL AND disposition IS NULL
+    ORDER BY failed_at
+`),
+
+getFailsByPeriod: db.prepare(`
+    SELECT period, code, COUNT(*) AS n FROM board_failures
+    WHERE board = ? AND plan_date = ? AND undone_at IS NULL
+    GROUP BY period, code
+`),
+
+getDispositionsByPeriod: db.prepare(`
+    SELECT disposition_period AS period, disposition, sku, COUNT(*) AS n FROM board_failures
+    WHERE board = ? AND disposition_date = ? AND undone_at IS NULL AND disposition IS NOT NULL
+    GROUP BY disposition_period, disposition, sku
+`),
+
 getPlan: db.prepare(`
     SELECT * FROM plans WHERE board = ? AND plan_date = ?
 `),
