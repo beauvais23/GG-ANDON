@@ -323,3 +323,51 @@ test("H3 admin: add a failure code the form's way, turn one off; floor refused",
     assert.equal((await request(app).post("/admin/failure-codes").set(floor).send({ label: "EC 061 - X X X" })).status, 403);
 
 });
+
+test("PCB Test (0012): PASS / FAIL give PCB FPY and never touch Actual, FPY or open count-station failures", async () => {
+
+    const d13 = (h, m) => Date.parse(`2026-11-13T${String(h + 5).padStart(2, "0")}:${String(m).padStart(2, "0")}:00Z`);
+
+    await at(d13(9, 0));
+    await request(app).put("/admin/hourly/plan/Team%20B/2026-11-13").set(admin).send({ runs: [{ sku: "WPX4-RED", qty: null }] });
+
+    for (let i = 0; i < 8; i++) await tap({ station: "PCB" }, d13(8, 10));
+    await tap({}, d13(8, 20));
+
+    let k = 0;
+    const fail = body => request(app).post("/hourly/failures").set(floor).send({ failId: `pcbf-${String(++k).padStart(6, "0")}`, board: "Team B", sku: "WPX4-RED", code: "BA 100", failedAt: d13(8, 30), ...body });
+
+    assert.equal((await fail({ station: "PCB" })).status, 201);
+    assert.equal((await fail({ station: "PCB", code: "BA 050" })).status, 201);
+
+    const b = (await day("Team B", "2026-11-13")).body;
+
+    assert.equal(b.periods[2].actualTotal, 1, "PCB passes are not Actual");
+    assert.equal(b.periods[2].fails, 0, "PCB fails are not count-station fails");
+    assert.equal(b.quality.open, 0);
+    assert.equal(b.pcb.pass, 8);
+    assert.equal(b.pcb.fail, 2);
+    assert.equal(b.pcb.fpy, 80);
+    assert.equal(b.pcb.open, 2);
+
+    assert.equal((await request(app).get("/hourly/failures/open/Team%20B?station=PCB").set(floor)).body.failures.length, 2);
+    assert.equal((await request(app).get("/hourly/failures/open/Team%20B").set(floor)).body.failures.length, 0);
+
+});
+
+test("FPY colours: 99 / 97 by default, editable with the board colours; bad values refused", async () => {
+
+    await at(thu(15, 0));
+
+    const s = (await request(app).get("/hourly/settings").set(floor)).body;
+
+    assert.equal(s.fpy_green_pct, 99);
+    assert.equal(s.fpy_amber_pct, 97);
+
+    const put = body => request(app).put("/admin/hourly/settings").set(admin).send({ greenPct: 100, amberPct: 90, ...body });
+
+    assert.equal((await put({ fpyGreenPct: 98, fpyAmberPct: 95 })).body.fpy_green_pct, 98);
+    assert.equal((await put({ fpyGreenPct: 95, fpyAmberPct: 96 })).status, 400);
+    await put({ fpyGreenPct: 99, fpyAmberPct: 97 });
+
+});

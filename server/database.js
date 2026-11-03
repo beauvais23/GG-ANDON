@@ -517,8 +517,8 @@ getTap: db.prepare(`
 `),
 
 insertTap: db.prepare(`
-    INSERT OR IGNORE INTO board_taps (tap_id, board, plan_date, period, sku, production_line, work_center, tapped_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO board_taps (tap_id, board, plan_date, period, sku, production_line, work_center, tapped_at, created_at, station)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `),
 
 undoTap: db.prepare(`
@@ -529,7 +529,7 @@ undoTap: db.prepare(`
 getActuals: db.prepare(`
     SELECT period, sku, SUM(n) AS n, SUM(adj) AS adjusted FROM (
         SELECT period, sku, COUNT(*) AS n, 0 AS adj FROM board_taps
-        WHERE board = @board AND plan_date = @date AND undone_at IS NULL
+        WHERE board = @board AND plan_date = @date AND undone_at IS NULL AND station = 'FINAL'
         GROUP BY period, sku
         UNION ALL
         SELECT period, sku, SUM(delta) AS n, SUM(delta) AS adj FROM board_adjustments
@@ -582,8 +582,8 @@ getFailure: db.prepare(`
 `),
 
 insertFailure: db.prepare(`
-    INSERT OR IGNORE INTO board_failures (fail_id, board, plan_date, period, sku, code, production_line, work_center, failed_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO board_failures (fail_id, board, plan_date, period, sku, code, production_line, work_center, failed_at, created_at, station)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `),
 
 undoFailure: db.prepare(`
@@ -598,20 +598,68 @@ disposeFailure: db.prepare(`
 
 getOpenFailures: db.prepare(`
     SELECT * FROM board_failures
-    WHERE board = ? AND undone_at IS NULL AND disposition IS NULL
+    WHERE board = ? AND station = ? AND undone_at IS NULL AND disposition IS NULL
     ORDER BY failed_at
 `),
 
 getFailsByPeriod: db.prepare(`
     SELECT period, code, COUNT(*) AS n FROM board_failures
-    WHERE board = ? AND plan_date = ? AND undone_at IS NULL
+    WHERE board = ? AND plan_date = ? AND undone_at IS NULL AND station = 'FINAL'
     GROUP BY period, code
 `),
 
 getDispositionsByPeriod: db.prepare(`
     SELECT disposition_period AS period, disposition, sku, COUNT(*) AS n FROM board_failures
-    WHERE board = ? AND disposition_date = ? AND undone_at IS NULL AND disposition IS NOT NULL
+    WHERE board = ? AND disposition_date = ? AND undone_at IS NULL AND disposition IS NOT NULL AND station = 'FINAL'
     GROUP BY disposition_period, disposition, sku
+`),
+
+//--------------------------------------------------
+// PCB Test (0012) and reports (H4)
+//--------------------------------------------------
+
+getPcbDay: db.prepare(`
+    SELECT 'PASS' AS kind, period, sku, NULL AS code, COUNT(*) AS n FROM board_taps
+    WHERE board = ? AND plan_date = ? AND station = 'PCB' AND undone_at IS NULL
+    GROUP BY period, sku
+    UNION ALL
+    SELECT 'FAIL' AS kind, period, sku, code, COUNT(*) AS n FROM board_failures
+    WHERE board = ? AND plan_date = ? AND station = 'PCB' AND undone_at IS NULL
+    GROUP BY period, sku, code
+`),
+
+reportTaps: db.prepare(`
+    SELECT board, plan_date, period, sku, station, COUNT(*) AS n FROM board_taps
+    WHERE plan_date BETWEEN ? AND ? AND undone_at IS NULL
+    GROUP BY board, plan_date, period, sku, station
+`),
+
+reportAdjustments: db.prepare(`
+    SELECT board, plan_date, period, sku, SUM(delta) AS n FROM board_adjustments
+    WHERE plan_date BETWEEN ? AND ?
+    GROUP BY board, plan_date, period, sku
+`),
+
+reportFailures: db.prepare(`
+    SELECT board, plan_date, period, sku, code, station, COUNT(*) AS n FROM board_failures
+    WHERE plan_date BETWEEN ? AND ? AND undone_at IS NULL
+    GROUP BY board, plan_date, period, sku, code, station
+`),
+
+reportDispositions: db.prepare(`
+    SELECT board, disposition_date AS plan_date, disposition_period AS period, sku, station, disposition, COUNT(*) AS n FROM board_failures
+    WHERE disposition_date BETWEEN ? AND ? AND undone_at IS NULL AND disposition IS NOT NULL
+    GROUP BY board, disposition_date, disposition_period, sku, station, disposition
+`),
+
+reportPlans: db.prepare(`
+    SELECT * FROM plans WHERE plan_date BETWEEN ? AND ? ORDER BY plan_date, board
+`),
+
+openFailureCounts: db.prepare(`
+    SELECT board, station, COUNT(*) AS n FROM board_failures
+    WHERE undone_at IS NULL AND disposition IS NULL
+    GROUP BY board, station
 `),
 
 getPlan: db.prepare(`

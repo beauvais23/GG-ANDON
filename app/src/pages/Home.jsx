@@ -33,7 +33,7 @@ export default function Home() {
   const raising = useRaiseAlert();
 
   // H2: the count strip shows on the line's count station only.
-  const countBoard = useCountStation(productionLine, workCenter);
+  const { board: countBoard, pcb } = useCountStation(productionLine, workCenter);
 
   return (
 
@@ -62,7 +62,7 @@ export default function Home() {
 
           <StationBar onRaise={raising.raise} />
 
-          {countBoard && <CountStrip key={countBoard} board={countBoard} productionLine={productionLine} workCenter={workCenter} />}
+          {countBoard && <CountStrip key={`${countBoard}-${pcb}`} board={countBoard} pcb={pcb} productionLine={productionLine} workCenter={workCenter} />}
 
           <RaiseFeedback raising={raising} />
 

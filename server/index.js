@@ -48,7 +48,8 @@ const { startDailyBackups } = require("./services/dailyBackup");
 const { ROLES, STEPS, lineGroupOf, startEscalationShadow } = require("./services/escalation");
 const { BOARDS, familyFor, rateFor, priceRuns, planFor } = require("./services/hourlyBoard");
 const { PERIODS } = require("./services/hourlyPlan");
-const { countStationFor, periodAt, withActuals } = require("./services/hourlyActual");
+const { countStationFor, fpyOf, periodAt, withActuals, PCB_STATION } = require("./services/hourlyActual");
+const { buildReport } = require("./services/hourlyReport");
 const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
@@ -2766,7 +2767,7 @@ app.get("/hourly/boards", authenticateToken, (req, res) => {
 
     names.sort((a, b) => (BOARDS.indexOf(a) + 1 || 99) - (BOARDS.indexOf(b) + 1 || 99));
 
-    res.json({ boards: names, periods: PERIODS, today: todayNY(), countStations: Object.fromEntries(names.map(n => [n, countStationFor(n)])) });
+    res.json({ boards: names, periods: PERIODS, today: todayNY(), countStations: Object.fromEntries(names.map(n => [n, countStationFor(n)])), pcbStation: PCB_STATION });
 
 });
 
@@ -2900,10 +2901,37 @@ const boardDay = (board, date) => ({
     ...withActuals(planFor(statements, board, date), statements.getActuals.all({ board, date }), hourlySettings(), Date.now(), {
         fails: statements.getFailsByPeriod.all(board, date),
         dispositions: statements.getDispositionsByPeriod.all(board, date),
-        open: statements.getOpenFailures.all(board).length
+        open: statements.getOpenFailures.all(board, "FINAL").length
     }),
+    pcb: pcbDay(board, date),
     corrections: statements.getAdjustments.all(board, date)
 });
+
+// PCB Test (0012): PASS / FAIL per board, for PCB FPY. Never part of Actual.
+function pcbDay(board, date) {
+
+    const rows = statements.getPcbDay.all(board, date, board, date);
+    const pass = rows.filter(r => r.kind === "PASS").reduce((a, r) => a + r.n, 0);
+    const fail = rows.filter(r => r.kind === "FAIL").reduce((a, r) => a + r.n, 0);
+
+    return {
+        pass,
+        fail,
+        fpy: fpyOf(pass, fail),
+        open: statements.getOpenFailures.all(board, "PCB").length,
+        periods: PERIODS.map((p, i) => {
+
+            const ps = rows.filter(r => r.kind === "PASS" && r.period === i).reduce((a, r) => a + r.n, 0);
+            const fs = rows.filter(r => r.kind === "FAIL" && r.period === i).reduce((a, r) => a + r.n, 0);
+
+            return { label: p.label, pass: ps, fail: fs, fpy: fpyOf(ps, fs) };
+
+        })
+    };
+
+}
+
+const stationOf = s => (s === "PCB" ? "PCB" : "FINAL");
 
 app.get("/hourly/plan/:board/:date", authenticateToken, (req, res) => {
 
@@ -2927,7 +2955,7 @@ const UNDO_MS = 45 * 1000;   // 30 s on the tablet + delivery grace
 
 app.post("/hourly/taps", authenticateToken, (req, res) => {
 
-    const { tapId, board, sku, tappedAt, productionLine, workCenter } = req.body || {};
+    const { tapId, board, sku, tappedAt, productionLine, workCenter, station } = req.body || {};
     const now = Date.now();
 
     if (!TAP_ID.test(String(tapId || "")))
@@ -2950,7 +2978,7 @@ app.post("/hourly/taps", authenticateToken, (req, res) => {
     const t = Number(tappedAt);
     const at = Number.isFinite(t) && t <= now + 2 * 60 * 1000 && t >= now - 24 * 60 * 60 * 1000 ? Math.min(t, now) : now;
 
-    statements.insertTap.run(tapId, board, dateNY(at), periodAt(at), cleanSku, String(productionLine || "").slice(0, 100) || null, String(workCenter || "").slice(0, 100) || null, at, now);
+    statements.insertTap.run(tapId, board, dateNY(at), periodAt(at), cleanSku, String(productionLine || "").slice(0, 100) || null, String(workCenter || "").slice(0, 100) || null, at, now, stationOf(station));
 
     res.status(201).json({ success: true, tap: statements.getTap.get(tapId) });
 
@@ -3038,7 +3066,7 @@ app.get("/hourly/failure-codes", authenticateToken, (req, res) => {
 
 app.post("/hourly/failures", authenticateToken, (req, res) => {
 
-    const { failId, board, sku, code, failedAt, productionLine, workCenter } = req.body || {};
+    const { failId, board, sku, code, failedAt, productionLine, workCenter, station } = req.body || {};
     const now = Date.now();
 
     if (!TAP_ID.test(String(failId || "")))
@@ -3066,7 +3094,7 @@ app.post("/hourly/failures", authenticateToken, (req, res) => {
     const t = Number(failedAt);
     const at = Number.isFinite(t) && t <= now + 2 * 60 * 1000 && t >= now - 24 * 60 * 60 * 1000 ? Math.min(t, now) : now;
 
-    statements.insertFailure.run(failId, board, dateNY(at), periodAt(at), cleanSku, fc.code, String(productionLine || "").slice(0, 100) || null, String(workCenter || "").slice(0, 100) || null, at, now);
+    statements.insertFailure.run(failId, board, dateNY(at), periodAt(at), cleanSku, fc.code, String(productionLine || "").slice(0, 100) || null, String(workCenter || "").slice(0, 100) || null, at, now, stationOf(station));
 
     res.status(201).json({ success: true, failure: statements.getFailure.get(failId) });
 
@@ -3119,7 +3147,7 @@ app.post("/hourly/failures/:failId/disposition", authenticateToken, (req, res) =
 
 app.get("/hourly/failures/open/:board", authenticateToken, (req, res) => {
 
-    res.json({ failures: statements.getOpenFailures.all(req.params.board) });
+    res.json({ failures: statements.getOpenFailures.all(req.params.board, stationOf(req.query.station)) });
 
 });
 
@@ -3160,6 +3188,24 @@ app.put("/admin/failure-codes/:id", authenticateToken, requireAdmin, (req, res) 
 
 });
 
+//------------------------------------------------------
+// H4 reports: plan vs actual, FPY, top failure codes, PCB
+// Test, demonstrated rates, for a day or a range (max 62
+// days). Any login can view.
+//------------------------------------------------------
+
+app.get("/reports/hourly", authenticateToken, (req, res) => {
+
+    const from = isDate(req.query.from) ? req.query.from : todayNY();
+    const to = isDate(req.query.to) ? req.query.to : from;
+
+    if (to < from || (Date.parse(to) - Date.parse(from)) / 86400000 > 62)
+        return res.status(400).json({ success: false, message: "Pick a range of up to 62 days, from before to." });
+
+    res.json(buildReport(statements, from, to, boardDay, hourlySettings()));
+
+});
+
 app.get("/hourly/settings", authenticateToken, (req, res) => res.json(hourlySettings()));
 
 app.put("/admin/hourly/settings", authenticateToken, requireAdmin, (req, res) => {
@@ -3172,6 +3218,20 @@ app.put("/admin/hourly/settings", authenticateToken, requireAdmin, (req, res) =>
 
     statements.setHourlySetting.run(green, Date.now(), "green_pct");
     statements.setHourlySetting.run(amber, Date.now(), "amber_pct");
+
+    // FPY colours (0012), optional in the same call.
+    if (req.body?.fpyGreenPct !== undefined || req.body?.fpyAmberPct !== undefined) {
+
+        const fg = Number(req.body.fpyGreenPct);
+        const fa = Number(req.body.fpyAmberPct);
+
+        if (!(fg > 0 && fg <= 100 && fa > 0 && fa < fg))
+            return res.status(400).json({ success: false, message: "Need FPY green % (1-100) and FPY amber % below it." });
+
+        statements.setHourlySetting.run(fg, Date.now(), "fpy_green_pct");
+        statements.setHourlySetting.run(fa, Date.now(), "fpy_amber_pct");
+
+    }
 
     res.json(hourlySettings());
 
