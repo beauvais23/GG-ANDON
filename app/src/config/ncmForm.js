@@ -19,15 +19,15 @@ const ENTRY = {
 // option text. Count station = the board's final test; PCB Test
 // = its PCB station. Blank → the operator picks it in the form.
 // Team A final test = A11, Gigabay final test = C5 (Director,
-// Nov 4 2026). Deca E3 is not in the form yet (Deca will have
-// E1-E3 like Terabay).
+// Nov 4 2026). Deca final test = E3 (E1, E2 = Decabay stations 1, 2).
 const STATIONS = {
     FINAL: {
         "Team A": "A11 - TEAM A LEAK TEST",
         "Gigabay": "C5 - GIGABAY STATION 5",
         "Team B": "B12 - TEAM B FINAL TESTING",
         "Terabay": "D3 - TERABAY TESTING",
-        "Gigabay - Vertical": "V1 - GIGA VERTICAL STATION"
+        "Gigabay - Vertical": "V1 - GIGA VERTICAL STATION",
+        "Deca": "E3 - DECABAY TESTING"
     },
     PCB: {
         "Gigabay": "C6 - GIGABAY PCB TEST / DEPANEL"
