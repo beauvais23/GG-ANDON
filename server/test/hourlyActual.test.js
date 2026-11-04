@@ -324,23 +324,33 @@ test("H3 admin: add a failure code the form's way, turn one off; floor refused",
 
 });
 
-test("PCB Test (0012): PASS / FAIL give PCB FPY and never touch Actual, FPY or open count-station failures", async () => {
+test("PCB Test (0012/0013): PASS / FAIL on the line's PCB part numbers give PCB FPY and never touch Actual, FPY or count-station failures", async () => {
 
     const d13 = (h, m) => Date.parse(`2026-11-13T${String(h + 5).padStart(2, "0")}:${String(m).padStart(2, "0")}:00Z`);
+    const PCB = "30-72027-000-C";
 
     await at(d13(9, 0));
-    await request(app).put("/admin/hourly/plan/Team%20B/2026-11-13").set(admin).send({ runs: [{ sku: "WPX4-RED", qty: null }] });
 
-    for (let i = 0; i < 8; i++) await tap({ station: "PCB" }, d13(8, 10));
-    await tap({}, d13(8, 20));
+    const giga = statements.getProductFamilies.all().find(f => f.prefix === "GIGA");
+
+    await request(app).post("/admin/hourly/rates").set(admin).send({ familyId: giga.id, unitsPerHour: 10, effectiveDate: "2026-11-01" });
+    await request(app).put("/admin/hourly/plan/Gigabay/2026-11-13").set(admin).send({ runs: [{ sku: "GIGA8-TRI-48K-480V", qty: null }] });
+
+    for (let i = 0; i < 8; i++) await tap({ board: "Gigabay", sku: PCB, station: "PCB" }, d13(8, 10));
+    await tap({ board: "Gigabay", sku: "GIGA8-TRI-48K-480V" }, d13(8, 20));
+
+    // PCB Test takes only the line's PCB part numbers; Final Test only finished SKUs.
+    assert.equal((await tap({ board: "Gigabay", sku: "GIGA8-TRI-48K-480V", station: "PCB" }, d13(8, 25))).status, 400);
+    assert.equal((await tap({ board: "Gigabay", sku: "30-35936-48K-B", station: "PCB" }, d13(8, 25))).status, 400, "Terabay's PCB");
+    assert.equal((await tap({ board: "Gigabay", sku: PCB }, d13(8, 25))).status, 400, "a PCB is not a Final Test SKU");
 
     let k = 0;
-    const fail = body => request(app).post("/hourly/failures").set(floor).send({ failId: `pcbf-${String(++k).padStart(6, "0")}`, board: "Team B", sku: "WPX4-RED", code: "BA 100", failedAt: d13(8, 30), ...body });
+    const fail = body => request(app).post("/hourly/failures").set(floor).send({ failId: `pcbf-${String(++k).padStart(6, "0")}`, board: "Gigabay", sku: PCB, code: "BA 100", failedAt: d13(8, 30), station: "PCB", ...body });
 
-    assert.equal((await fail({ station: "PCB" })).status, 201);
-    assert.equal((await fail({ station: "PCB", code: "BA 050" })).status, 201);
+    assert.equal((await fail({})).status, 201);
+    assert.equal((await fail({ code: "BA 050" })).status, 201);
 
-    const b = (await day("Team B", "2026-11-13")).body;
+    const b = (await day("Gigabay", "2026-11-13")).body;
 
     assert.equal(b.periods[2].actualTotal, 1, "PCB passes are not Actual");
     assert.equal(b.periods[2].fails, 0, "PCB fails are not count-station fails");
@@ -350,8 +360,38 @@ test("PCB Test (0012): PASS / FAIL give PCB FPY and never touch Actual, FPY or o
     assert.equal(b.pcb.fpy, 80);
     assert.equal(b.pcb.open, 2);
 
-    assert.equal((await request(app).get("/hourly/failures/open/Team%20B?station=PCB").set(floor)).body.failures.length, 2);
-    assert.equal((await request(app).get("/hourly/failures/open/Team%20B").set(floor)).body.failures.length, 0);
+    assert.equal((await request(app).get("/hourly/failures/open/Gigabay?station=PCB").set(floor)).body.failures.length, 2);
+    assert.equal((await request(app).get("/hourly/failures/open/Gigabay").set(floor)).body.failures.length, 0);
+
+});
+
+test("PCB parts list (0013): seeded from the BOMs per line; admin adds, turns off and back on; floor refused", async () => {
+
+    await at(thu(15, 0));
+
+    const list = async (board, all = false) => (await request(app).get(`/hourly/pcb-parts/${encodeURIComponent(board)}${all ? "?all=1" : ""}`).set(floor)).body.parts.map(p => p.part);
+
+    assert.deepEqual(await list("Gigabay"), ["30-72027-000-C", "30-72027-SO-C", "30-72027-LO-C", "30-72027-4FT-C", "30-72027-4SO-C", "30-67338-000-C"]);
+    assert.deepEqual(await list("Gigabay - Vertical"), ["30-42068-A"]);
+    assert.deepEqual(await list("Terabay"), ["30-35936-48K-B"]);
+    assert.deepEqual(await list("Deca"), ["30-72027-SHO-C", "30-67338-000-C"]);
+    assert.deepEqual(await list("Team A"), []);
+
+    const add = body => request(app).post("/admin/hourly/pcb-parts").set(admin).send(body);
+
+    assert.equal((await add({ board: "Terabay", part: "30-99999-test", description: "Test PCB" })).status, 201);
+    assert.equal((await add({ board: "Terabay", part: "30-99999-TEST" })).status, 409);
+    assert.equal((await add({ board: "Nope", part: "30-1" })).status, 400);
+    assert.equal((await add({ board: "Terabay", part: "x" })).status, 400);
+
+    const row = (await request(app).get("/hourly/pcb-parts/Terabay?all=1").set(floor)).body.parts.find(p => p.part === "30-99999-TEST");
+
+    assert.equal((await request(app).put(`/admin/hourly/pcb-parts/${row.id}`).set(admin).send({ active: false })).status, 200);
+    assert.ok(!(await list("Terabay")).includes("30-99999-TEST"));
+    assert.ok((await list("Terabay", true)).includes("30-99999-TEST"));
+    assert.equal((await add({ board: "Terabay", part: "30-99999-TEST" })).status, 201, "re-adding turns it back on");
+
+    assert.equal((await request(app).post("/admin/hourly/pcb-parts").set(floor).send({ board: "Terabay", part: "30-88888" })).status, 403);
 
 });
 

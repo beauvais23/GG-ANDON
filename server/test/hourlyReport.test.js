@@ -57,8 +57,8 @@ before(async () => {
     await request(app).put("/admin/hourly/plan/Team%20B/2026-11-10").set(admin).send({ runs: [{ sku: "WPX4-RED", qty: 10 }] });
     for (let i = 0; i < 10; i++) await tap("2026-11-10", 6);
     await fail("2026-11-10", 6, "FA 060");
-    for (let i = 0; i < 5; i++) await tap("2026-11-10", 6, { station: "PCB" });
-    await fail("2026-11-10", 6, "BA 050", { station: "PCB" });
+    for (let i = 0; i < 5; i++) await tap("2026-11-10", 6, { station: "PCB", board: "Terabay", sku: "30-35936-48K-B" });
+    await fail("2026-11-10", 6, "BA 050", { station: "PCB", board: "Terabay", sku: "30-35936-48K-B" });
 
     await at(ny("2026-11-13", 9));
 
@@ -84,12 +84,12 @@ test("week report: totals, by board, by day, top codes, PCB, rates", async () =>
     assert.equal(t.pcbFpy, 83.3);
 
     assert.deepEqual(r.body.days.map(d => [d.date, d.plan, d.actual]), [["2026-11-09", 20, 18], ["2026-11-10", 10, 10]]);
-    assert.deepEqual(r.body.boards.map(b => b.board), ["Team B"]);
+    assert.deepEqual(r.body.boards.map(b => b.board).sort(), ["Team B", "Terabay"]);
 
     assert.deepEqual(r.body.topCodes.map(c => [c.code, c.n, c.pct]), [["FA 060", 2, 66.7], ["BA 100", 1, 33.3]]);
     assert.equal(r.body.topCodes[0].label, "FA 060 - FUNCTIONAL TEST FAILURE");
 
-    assert.deepEqual(r.body.pcb.bySku.map(x => [x.sku, x.pass, x.fail, x.fpy]), [["WPX4-RED", 5, 1, 83.3]]);
+    assert.deepEqual(r.body.pcb.bySku.map(x => [x.board, x.sku, x.pass, x.fail, x.fpy]), [["Terabay", "30-35936-48K-B", 5, 1, 83.3]]);
     assert.deepEqual(r.body.pcb.topCodes.map(c => c.code), ["BA 050"]);
 
     // WPX4: 28 good over the 6-7 (55 min) and 7-8 (60 min) hours Mon + 6-7 Tue (55) = 170 min → 9.9/hr.

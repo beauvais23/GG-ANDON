@@ -662,6 +662,23 @@ openFailureCounts: db.prepare(`
     GROUP BY board, station
 `),
 
+getPcbParts: db.prepare(`
+    SELECT * FROM board_pcb_parts WHERE board = ? ORDER BY sort, part
+`),
+
+getPcbPart: db.prepare(`
+    SELECT * FROM board_pcb_parts WHERE board = ? AND part = ?
+`),
+
+insertPcbPart: db.prepare(`
+    INSERT INTO board_pcb_parts (board, part, description, sort, active, created_at, updated_at)
+    VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 10 FROM board_pcb_parts WHERE board = ?), 1, ?, ?)
+`),
+
+setPcbPartActive: db.prepare(`
+    UPDATE board_pcb_parts SET active = ?, updated_at = ? WHERE id = ?
+`),
+
 getPlan: db.prepare(`
     SELECT * FROM plans WHERE board = ? AND plan_date = ?
 `),

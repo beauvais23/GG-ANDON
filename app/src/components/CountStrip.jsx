@@ -10,7 +10,7 @@ import FailDialog from "./FailDialog";
 import OpenFailures from "./OpenFailures";
 
 import useTapQueue, { UNDO_SECONDS } from "../hooks/useTapQueue";
-import { getFailureCodes, getOpenFailures, getPlan } from "../api/hourly";
+import { getFailureCodes, getOpenFailures, getPcbParts, getPlan } from "../api/hourly";
 import { labelSx, tokens } from "../theme/theme";
 import { RAG_COLORS } from "../config/ragColors";
 import { fpyColor } from "../config/fpyColors";
@@ -25,7 +25,8 @@ import { fpyColor } from "../config/fpyColors";
 // H3: FAIL → failure code (same queue and 30 s undo); open
 // failures → REWORK PASSED or SCRAP (then the NCM form).
 // PCB Test (pcb, 0012): the same strip with PASS / FAIL per
-// board for PCB FPY; passes never count toward Actual.
+// board for PCB FPY; passes never count toward Actual. The chips
+// are the line's PCB part numbers (0013), no plan needed.
 //------------------------------------------------------
 
 const todayNY = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -94,7 +95,10 @@ export default function CountStrip({ board, productionLine, workCenter, pcb = fa
     const [failing, setFailing] = useState(false);
     const [showOpen, setShowOpen] = useState(false);
 
+    const [pcbParts, setPcbParts] = useState([]);
+
     useEffect(() => { getFailureCodes().then(r => setCodes(r.codes)).catch(() => setCodes([])); }, []);
+    useEffect(() => { if (pcb) getPcbParts(board).then(r => setPcbParts(r.parts)).catch(() => setPcbParts([])); }, [board, pcb]);
 
     const load = useCallback(async () => {
 
@@ -117,13 +121,13 @@ export default function CountStrip({ board, productionLine, workCenter, pcb = fa
     useEffect(() => { load(); const id = setInterval(load, 60 * 1000); return () => clearInterval(id); }, [load]);
     useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
 
-    const skus = useMemo(() => [...new Set((day?.runs || []).map(r => r.sku))], [day]);
+    const skus = useMemo(() => (pcb ? pcbParts.map(p => p.part) : [...new Set((day?.runs || []).map(r => r.sku))]), [day, pcb, pcbParts]);
     const current = day?.periods.find(p => p.status === "now") || null;
 
     // Default SKU: the remembered one if it is on today's plan, else the
     // run planned for this hour, else the first run.
     const planNow = current ? Object.entries(current.plan).sort((a, b) => b[1] - a[1])[0]?.[0] : null;
-    const chosen = skus.includes(sku) ? sku : (planNow || skus[0] || "");
+    const chosen = skus.includes(sku) ? sku : ((!pcb && planNow) || skus[0] || "");
 
     const choose = s => {
 
@@ -147,7 +151,15 @@ export default function CountStrip({ board, productionLine, workCenter, pcb = fa
     if (!day)
         return null;
 
-    if (!day.saved || skus.length === 0)
+    if (pcb && skus.length === 0)
+        return (
+            <Box sx={{ mx: 3, mt: 1.5, px: 2, py: 1.5, bgcolor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.muted }}>
+                <Box component="span" sx={{ ...labelSx, mr: 1.5 }}>PCB test</Box>
+                No PCB part numbers for {board} yet. Add them in Admin → Products &amp; rates → PCB parts.
+            </Box>
+        );
+
+    if (!pcb && (!day.saved || skus.length === 0))
         return (
             <Box sx={{ mx: 3, mt: 1.5, px: 2, py: 1.5, bgcolor: tokens.panel, border: `1px solid ${tokens.line}`, color: tokens.muted }}>
                 <Box component="span" sx={{ ...labelSx, mr: 1.5 }}>Count · {workCenter}</Box>
@@ -161,10 +173,14 @@ export default function CountStrip({ board, productionLine, workCenter, pcb = fa
 
             <Box sx={{ flex: 1, minWidth: 0 }}>
 
-                <Box sx={{ ...labelSx, mb: 0.75 }}>{pcb ? "PCB test · pass / fail" : `Count · ${workCenter}`} · SKU</Box>
+                <Box sx={{ ...labelSx, mb: 0.75 }}>{pcb ? "PCB test · pass / fail · PCB part" : `Count · ${workCenter} · SKU`}</Box>
 
-                <Box sx={{ display: "flex", gap: 1, overflowX: "auto", pb: 0.5 }}>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, pb: 0.5 }}>
                     {skus.map(s => <SkuChip key={s} selected={s === chosen} onClick={() => choose(s)}>{s}</SkuChip>)}
+                </Box>
+
+                <Box sx={{ fontSize: 12, color: tokens.muted, minHeight: pcb ? 16 : 0 }}>
+                    {pcb && (pcbParts.find(p => p.part === chosen)?.description || "")}
                 </Box>
 
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.75 }}>
