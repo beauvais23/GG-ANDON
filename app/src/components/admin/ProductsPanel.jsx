@@ -7,6 +7,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 import { AdminPanel, AdminRow, EmptyRow, Tag } from "./adminUi";
+import RateImport from "./RateImport";
 
 import { addPcbPart, addRate, addSku, deleteRate, getBoards, getPcbParts, getPlanSettings, getProducts, removeSku, resolveSku, saveHourlySettings, setPcbPartActive } from "../../api/hourly";
 import { labelSx, tokens } from "../../theme/theme";
@@ -243,6 +244,8 @@ export default function ProductsPanel() {
                     </Button>
                 ))}
             </Box>
+
+            <RateImport today={today} onSaved={load} />
 
             <RagSettings />
 

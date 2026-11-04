@@ -36,7 +36,7 @@ async function call(path, { method = "GET", body } = {}) {
     const data = await response.json();
 
     if (!response.ok)
-        throw new Error(data.message || "Request failed.");
+        throw Object.assign(new Error(data.message || "Request failed."), { data });
 
     return data;
 
@@ -87,3 +87,4 @@ export const setFailureCodeActive = (id, active) => call(`/admin/failure-codes/$
 export const getPcbParts = (board, all = false) => call(`/hourly/pcb-parts/${enc(board)}${all ? "?all=1" : ""}`);
 export const addPcbPart = (board, part, description) => call("/admin/hourly/pcb-parts", { method: "POST", body: { board, part, description } });
 export const setPcbPartActive = (id, active) => call(`/admin/hourly/pcb-parts/${id}`, { method: "PUT", body: { active } });
+export const importRates = body => call("/admin/hourly/rates/import", { method: "POST", body });
