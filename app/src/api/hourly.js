@@ -82,3 +82,8 @@ export const getReport = (from, to) => call(`/reports/hourly?from=${from}&to=${t
 export const getAllFailureCodes = () => call("/admin/failure-codes");
 export const addFailureCode = label => call("/admin/failure-codes", { method: "POST", body: { label } });
 export const setFailureCodeActive = (id, active) => call(`/admin/failure-codes/${id}`, { method: "PUT", body: { active } });
+
+// PCB part numbers at PCB Test (0013).
+export const getPcbParts = (board, all = false) => call(`/hourly/pcb-parts/${enc(board)}${all ? "?all=1" : ""}`);
+export const addPcbPart = (board, part, description) => call("/admin/hourly/pcb-parts", { method: "POST", body: { board, part, description } });
+export const setPcbPartActive = (id, active) => call(`/admin/hourly/pcb-parts/${id}`, { method: "PUT", body: { active } });
