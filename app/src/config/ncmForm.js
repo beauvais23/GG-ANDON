@@ -23,7 +23,7 @@ const ENTRY = {
 const STATIONS = {
     FINAL: {
         "Team A": "A11 - TEAM A LEAK TEST",
-        "Gigabay": "C5 - GIGABAY STATION 5",
+        "Gigabay": "C5 - GIGABAY FINAL TEST STATION 5",
         "Team B": "B12 - TEAM B FINAL TESTING",
         "Terabay": "D3 - TERABAY TESTING",
         "Gigabay - Vertical": "V1 - GIGA VERTICAL STATION",
