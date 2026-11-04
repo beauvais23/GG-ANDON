@@ -63,7 +63,7 @@ export default function OpenFailures({ failures, codes, onClose, onChanged }) {
                 <DialogContent sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                     <Box sx={{ fontFamily: tokens.mono }}>{scrapped.sku} · {scrapped.codeLabel}</Box>
                     <Button variant="contained" size="large" startIcon={<OpenInNewIcon />} href={url} target="_blank" rel="noopener" sx={{ minHeight: 56, px: 3 }}>Fill out NCM form</Button>
-                    <QrCode value={url} />
+                    <QrCode value={url} size={280} />
                     <Box sx={{ fontSize: 13, color: tokens.muted }}>Or scan with your phone.</Box>
                 </DialogContent>
                 <DialogActions><Button onClick={onClose}>Done</Button></DialogActions>
