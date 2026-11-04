@@ -1,17 +1,18 @@
 // G&G Non Conformance Report (Google Form). SCRAP on the tablet
-// opens it for the scrapped unit. Until the Director sends the
-// form's pre-filled link (⋮ → Get pre-filled link), ENTRY is empty
-// and the plain form opens; then fill in the entry IDs below and
-// FORM_URL with the /d/e/…/viewform address from that link.
+// opens it for the scrapped unit with these questions filled in.
+// IDs come from the form's pre-filled link (Director, Nov 4 2026);
+// if a question is replaced in the form, its ID changes: get a new
+// pre-filled link and update ENTRY. Station and Failure Code must
+// match the form's option text exactly. Quantity is not pre-filled
+// (not in the link).
 
-const FORM_URL = "https://docs.google.com/forms/d/1lCsrEJx4JtFaqoX9HQkiWjCPxp0RSqDhrR2Z0EROY90/viewform";
+const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfC38IyD-wuawc8tTrwpyrdjsAFYBmq3gbw94DRKjA_4Ho16Q/viewform";
 
 const ENTRY = {
-    // partNumber: "entry.…",    // Affected Part Number
-    // failureCode: "entry.…",   // Failure Code (exact option text)
-    // quantity: "entry.…",      // Quantity
-    // station: "entry.…",       // Station of Occurence (exact option text)
-    // description: "entry.…"    // brief description of the observed defect
+    station: "entry.1959917029",      // Station of Occurence (dropdown)
+    partNumber: "entry.1729124195",   // Affected Part Number
+    failureCode: "entry.956504614",   // Failure Code (dropdown)
+    description: "entry.2106367373"   // brief description of the observed defect
 };
 
 // Station of Occurence per board (Director, Nov 3 2026), exact
@@ -38,9 +39,8 @@ export function ncmFormUrl(failure) {
     const values = {
         partNumber: failure.sku,
         failureCode: failure.codeLabel || failure.code,
-        quantity: "1",
         station: STATIONS[failure.station === "PCB" ? "PCB" : "FINAL"][failure.board] || "",
-        description: `ANDON ${failure.board} ${failure.work_center || ""}: ${failure.codeLabel || failure.code}`.trim()
+        description: failure.station === "PCB" ? "ANDON scrap (PCB Test)" : "ANDON scrap"
     };
 
     const params = new URLSearchParams();
