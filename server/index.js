@@ -50,6 +50,7 @@ const { BOARDS, familyFor, rateFor, priceRuns, planFor } = require("./services/h
 const { PERIODS } = require("./services/hourlyPlan");
 const { countStationFor, fpyOf, periodAt, withActuals, PCB_STATION } = require("./services/hourlyActual");
 const { buildReport } = require("./services/hourlyReport");
+const { checkRows } = require("./services/rateImport");
 const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
@@ -2808,6 +2809,48 @@ app.get("/hourly/resolve", authenticateToken, (req, res) => {
     const rate = family ? rateFor(statements, sku, family, date) : null;
 
     res.json({ sku, family: family ? { id: family.id, prefix: family.prefix, board: family.board } : null, rate });
+
+});
+
+// Bulk import (services/rateImport.js): check, then save all or nothing.
+app.post("/admin/hourly/rates/import", authenticateToken, requireAdmin, (req, res) => {
+
+    const { text, unit, effectiveDate, save } = req.body || {};
+
+    if (typeof text !== "string" || !text.trim() || text.length > 100000)
+        return res.status(400).json({ success: false, message: "Paste the rows to import (up to 100,000 characters)." });
+
+    if (!["seconds", "perHour"].includes(unit))
+        return res.status(400).json({ success: false, message: "unit must be seconds or perHour." });
+
+    const defaultDate = effectiveDate || todayNY();
+
+    if (!isDate(defaultDate))
+        return res.status(400).json({ success: false, message: "Effective date must be YYYY-MM-DD." });
+
+    const result = checkRows(statements, text, { unit, defaultDate });
+
+    if (result.rows.length > 1000)
+        return res.status(400).json({ success: false, message: "Up to 1,000 rows at a time." });
+
+    if (!save)
+        return res.json({ success: true, saved: 0, ...result });
+
+    if (result.errors || !result.ok)
+        return res.status(400).json({ success: false, message: result.errors ? `${result.errors} row${result.errors === 1 ? " has" : "s have"} a problem. Nothing was saved.` : "Nothing to save.", ...result });
+
+    const now = Date.now();
+
+    db.transaction(() => {
+
+        for (const r of result.rows)
+            statements.insertRate.run(r.target === "family" ? r.familyId : null, r.target === "sku" ? r.sku : null, r.unitsPerHour, r.effectiveDate, now);
+
+    })();
+
+    console.log(`✓ Rates imported: ${result.ok} (${unit})`);
+
+    res.status(201).json({ success: true, saved: result.ok, ...result });
 
 });
 
