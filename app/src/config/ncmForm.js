@@ -3,8 +3,7 @@
 // IDs come from the form's pre-filled link (Director, Nov 4 2026);
 // if a question is replaced in the form, its ID changes: get a new
 // pre-filled link and update ENTRY. Station and Failure Code must
-// match the form's option text exactly. Quantity is not pre-filled
-// (not in the link).
+// match the form's option text exactly.
 
 const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfC38IyD-wuawc8tTrwpyrdjsAFYBmq3gbw94DRKjA_4Ho16Q/viewform";
 
@@ -12,6 +11,7 @@ const ENTRY = {
     station: "entry.1959917029",      // Station of Occurence (dropdown)
     partNumber: "entry.1729124195",   // Affected Part Number
     failureCode: "entry.956504614",   // Failure Code (dropdown)
+    quantity: "entry.1799970331",     // Quantity (one scrapped unit)
     description: "entry.2106367373"   // brief description of the observed defect
 };
 
@@ -39,6 +39,7 @@ export function ncmFormUrl(failure) {
     const values = {
         partNumber: failure.sku,
         failureCode: failure.codeLabel || failure.code,
+        quantity: "1",
         station: STATIONS[failure.station === "PCB" ? "PCB" : "FINAL"][failure.board] || "",
         description: failure.station === "PCB" ? "ANDON scrap (PCB Test)" : "ANDON scrap"
     };
