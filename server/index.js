@@ -2933,6 +2933,24 @@ function pcbDay(board, date) {
 
 const stationOf = s => (s === "PCB" ? "PCB" : "FINAL");
 
+// Count station: a SKU of the board's families. PCB Test (0013): one
+// of the board's active PCB part numbers.
+function checkSku(board, sku, station) {
+
+    if (stationOf(station) === "PCB") {
+
+        const part = statements.getPcbPart.get(board, sku);
+
+        return part && part.active ? null : `${sku || "Part"} is not a PCB part on the ${board} PCB Test list.`;
+
+    }
+
+    const family = familyFor(sku, statements.getProductFamilies.all());
+
+    return family && family.board === board ? null : `${sku || "SKU"} is not on the ${board} board.`;
+
+}
+
 app.get("/hourly/plan/:board/:date", authenticateToken, (req, res) => {
 
     if (!isDate(req.params.date))
@@ -2970,10 +2988,10 @@ app.post("/hourly/taps", authenticateToken, (req, res) => {
         return res.status(400).json({ success: false, message: "Unknown board." });
 
     const cleanSku = String(sku || "").trim().toUpperCase();
-    const family = familyFor(cleanSku, statements.getProductFamilies.all());
+    const skuError = checkSku(board, cleanSku, station);
 
-    if (!family || family.board !== board)
-        return res.status(400).json({ success: false, message: `${cleanSku || "SKU"} is not on the ${board} board.` });
+    if (skuError)
+        return res.status(400).json({ success: false, message: skuError });
 
     const t = Number(tappedAt);
     const at = Number.isFinite(t) && t <= now + 2 * 60 * 1000 && t >= now - 24 * 60 * 60 * 1000 ? Math.min(t, now) : now;
@@ -3081,10 +3099,10 @@ app.post("/hourly/failures", authenticateToken, (req, res) => {
         return res.status(400).json({ success: false, message: "Unknown board." });
 
     const cleanSku = String(sku || "").trim().toUpperCase();
-    const family = familyFor(cleanSku, statements.getProductFamilies.all());
+    const skuError = checkSku(board, cleanSku, station);
 
-    if (!family || family.board !== board)
-        return res.status(400).json({ success: false, message: `${cleanSku || "SKU"} is not on the ${board} board.` });
+    if (skuError)
+        return res.status(400).json({ success: false, message: skuError });
 
     const fc = statements.getFailureCode.get(String(code || ""));
 
@@ -3203,6 +3221,56 @@ app.get("/reports/hourly", authenticateToken, (req, res) => {
         return res.status(400).json({ success: false, message: "Pick a range of up to 62 days, from before to." });
 
     res.json(buildReport(statements, from, to, boardDay, hourlySettings()));
+
+});
+
+//------------------------------------------------------
+// PCB part numbers at PCB Test (0013)
+//------------------------------------------------------
+
+app.get("/hourly/pcb-parts/:board", authenticateToken, (req, res) => {
+
+    const all = statements.getPcbParts.all(req.params.board);
+
+    res.json({ parts: req.query.all ? all : all.filter(p => p.active) });
+
+});
+
+app.post("/admin/hourly/pcb-parts", authenticateToken, requireAdmin, (req, res) => {
+
+    const board = req.body?.board;
+    const part = String(req.body?.part || "").trim().toUpperCase();
+    const description = String(req.body?.description || "").trim().slice(0, 120) || null;
+
+    if (!BOARDS.includes(board))
+        return res.status(400).json({ success: false, message: "Unknown board." });
+
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(part))
+        return res.status(400).json({ success: false, message: "Part number: letters, digits and dashes (3-40)." });
+
+    const existing = statements.getPcbPart.get(board, part);
+
+    if (existing?.active)
+        return res.status(409).json({ success: false, message: `${part} is already on the ${board} list.` });
+
+    if (existing)
+        statements.setPcbPartActive.run(1, Date.now(), existing.id);
+    else
+        statements.insertPcbPart.run(board, part, description, board, Date.now(), Date.now());
+
+    res.status(201).json({ success: true, part: statements.getPcbPart.get(board, part) });
+
+});
+
+app.put("/admin/hourly/pcb-parts/:id", authenticateToken, requireAdmin, (req, res) => {
+
+    if (typeof req.body?.active !== "boolean")
+        return res.status(400).json({ success: false, message: "active must be true or false." });
+
+    if (!statements.setPcbPartActive.run(req.body.active ? 1 : 0, Date.now(), req.params.id).changes)
+        return res.status(404).json({ success: false, message: "Part not found." });
+
+    res.json({ success: true });
 
 });
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Alert, Box, Button, IconButton, TextField, Tooltip } from "@mui/material";
+import { Alert, Box, Button, IconButton, Switch, TextField, Tooltip } from "@mui/material";
 
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -8,7 +8,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 import { AdminPanel, AdminRow, EmptyRow, Tag } from "./adminUi";
 
-import { addRate, addSku, deleteRate, getBoards, getPlanSettings, getProducts, removeSku, resolveSku, saveHourlySettings } from "../../api/hourly";
+import { addPcbPart, addRate, addSku, deleteRate, getBoards, getPcbParts, getPlanSettings, getProducts, removeSku, resolveSku, saveHourlySettings, setPcbPartActive } from "../../api/hourly";
 import { labelSx, tokens } from "../../theme/theme";
 
 //------------------------------------------------------
@@ -114,6 +114,53 @@ function RagSettings() {
             <Button size="small" variant="outlined" onClick={save}>Save</Button>
             <Box sx={{ fontSize: 13, color: tokens.muted }}>{note || "Below amber is red. FPY target 99% (company)."}</Box>
         </AdminRow>
+
+    );
+
+}
+
+// PCB part numbers at PCB Test (0013): the chips on the line's PCB
+// Test tablet. Seeded from the QuickBooks BOMs (30- parts).
+function PcbParts({ board }) {
+
+    const [parts, setParts] = useState([]);
+    const [part, setPart] = useState("");
+    const [desc, setDesc] = useState("");
+    const [error, setError] = useState("");
+
+    const load = useCallback(() => getPcbParts(board, true).then(r => setParts(r.parts)).catch(err => setError(err.message)), [board]);
+
+    useEffect(() => { load(); }, [load]);
+
+    async function act(run) {
+
+        try { await run(); setError(""); await load(); } catch (err) { setError(err.message); }
+
+    }
+
+    return (
+
+        <>
+            <Box sx={{ ...labelSx, px: 2.25, py: 1.25, bgcolor: tokens.ground }}>
+                PCB parts · PCB Test tablet · {parts.filter(p => p.active).length} on
+            </Box>
+
+            {parts.map(p => (
+                <AdminRow key={p.id} inactive={!p.active} sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "260px minmax(240px, 1fr) 80px" } }}>
+                    <Box sx={{ fontFamily: tokens.mono }}>{p.part}</Box>
+                    <Box sx={{ fontSize: 13, color: tokens.muted }}>{p.description}</Box>
+                    <Switch size="small" checked={Boolean(p.active)} onChange={e => act(() => setPcbPartActive(p.id, e.target.checked))} slotProps={{ input: { "aria-label": `${p.part} on` } }} />
+                </AdminRow>
+            ))}
+
+            <AdminRow sx={{ bgcolor: tokens.ground }}>
+                <TextField size="small" label="PCB part number" value={part} onChange={e => setPart(e.target.value.toUpperCase())} sx={{ minWidth: 240 }} slotProps={{ inputLabel: { shrink: true } }} />
+                <TextField size="small" label="Description" value={desc} onChange={e => setDesc(e.target.value)} sx={{ minWidth: 300 }} slotProps={{ inputLabel: { shrink: true } }} />
+                <Button size="small" variant="outlined" disabled={part.trim().length < 3} onClick={() => act(async () => { await addPcbPart(board, part.trim(), desc.trim()); setPart(""); setDesc(""); })}>Add PCB part</Button>
+            </AdminRow>
+
+            {error && <Box sx={{ px: 2.25, py: 1 }}><Alert severity="error">{error}</Alert></Box>}
+        </>
 
     );
 
@@ -265,6 +312,8 @@ export default function ProductsPanel() {
                         );
 
                     })}
+
+                    <PcbParts key={board} board={board} />
 
                     <Box sx={{ ...labelSx, px: 2.25, py: 1.25, bgcolor: tokens.ground }}>
                         SKU rates · every SKU override, newest first · add a SKU to the list or give it its own rate
