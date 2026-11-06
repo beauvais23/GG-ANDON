@@ -14,7 +14,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import useClock from "../hooks/useClock";
 
-import { getAssemblies, getBom, refreshItems } from "../api/bom";
+import { getAssemblies, getBom, listRequests, refreshItems } from "../api/bom";
 import { downloadCsv } from "../utils/csv";
 import ChangeRequestPanel, { AddComponent } from "../components/bom/ChangeRequestPanel";
 import { CHANGE_COLORS, CHANGE_LABELS } from "../components/bom/changeColors";
@@ -125,7 +125,7 @@ function AddedRow({ a, onRemove }) {
 
 }
 
-function BomRow({ r, editing, mark, onMark }) {
+function BomRow({ r, editing, mark, onMark, inOpen }) {
 
     const flag = r.cycle ? "Loop: not expanded" : r.truncated ? "More levels below" : r.notLoaded ? "Not loaded" : r.unknown ? "Not in QuickBooks" : !r.active ? "Inactive" : "";
     const color = mark ? CHANGE_COLORS[mark.action] : null;
@@ -141,8 +141,10 @@ function BomRow({ r, editing, mark, onMark }) {
                 {r.component}
             </Box>
             <Box sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: r.description ? tokens.text : tokens.muted, ...struck }} title={r.description || ""}>
+                {inOpen && <Box component="span" title="Already in an open BOM change request" sx={{ mr: 1, px: 0.75, fontSize: 12, fontWeight: 700, color: tokens.blueText, border: `1px solid ${tokens.blueText}`, borderRadius: "3px" }}>{inOpen.join(", ")}</Box>}
                 {r.description || "—"}
                 {flag && <Box component="span" sx={{ ml: 1, fontSize: 12, color: "#E3A008" }}>({flag})</Box>}
+
             </Box>
             <Box sx={{ fontFamily: tokens.mono, ...struck }}>
                 {changed ? <Box component="span" sx={{ color: CHANGE_COLORS.CHANGE_QTY, fontWeight: 700 }}>{num(r.qty)} → {mark.newQty}</Box> : num(r.qty)}
@@ -177,6 +179,7 @@ export default function BomViewer() {
     const [marks, setMarks] = useState({});
     const [adds, setAdds] = useState([]);
     const [sentCode, setSentCode] = useState(null);
+    const [openReqs, setOpenReqs] = useState([]);
 
     function resetChanges() {
 
@@ -230,6 +233,37 @@ export default function BomViewer() {
         return () => { live = false; };
 
     }, [sku]);
+
+    // Open change requests for this config (duplicate guard): shown
+    // above the BOM and as "(in BOM-…)" on their lines.
+    useEffect(() => {
+
+        if (!sku) {
+
+            setOpenReqs([]);
+            return;
+
+        }
+
+        let live = true;
+
+        listRequests({ status: "OPEN", sku }).then(r => { if (live) setOpenReqs(r.requests); }, () => {});
+
+        return () => { live = false; };
+
+    }, [sku, sentCode]);
+
+    const openByComponent = useMemo(() => {
+
+        const m = new Map();
+
+        for (const r of openReqs)
+            for (const l of r.lines)
+                m.set(l.component, [...(m.get(l.component) || []), r.code]);
+
+        return m;
+
+    }, [openReqs]);
 
     const options = useMemo(() => (list ? list.assemblies.filter(a => group === ALL || a.lineGroup === group) : []), [list, group]);
     const selected = list?.assemblies.find(a => a.sku === sku) || null;
@@ -381,6 +415,20 @@ export default function BomViewer() {
                             {bom.truncated > 0 && ` · deeper than 5 levels: ${bom.truncated}`}
                         </Box>
 
+                        {openReqs.length > 0 && (
+                            <Alert severity="info" sx={{ m: 2, mb: 0 }}>
+                                Open change request{openReqs.length === 1 ? "" : "s"} for this config:{" "}
+                                {openReqs.map((r, i) => (
+                                    <span key={r.code}>
+                                        {i > 0 && " · "}
+                                        <Box component={RouterLink} to={`/bom/requests?code=${r.code}`} sx={{ color: "inherit", fontWeight: 700 }}>{r.code}</Box>
+                                        {` ${r.reason}, ${r.lines.length} change${r.lines.length === 1 ? "" : "s"}, ${r.requested_by}`}
+                                    </span>
+                                ))}
+                                . Check it before sending another.
+                            </Alert>
+                        )}
+
                         {sentCode && !editing && (
                             <Alert severity="success" sx={{ m: 2 }} action={<Button component={RouterLink} to={`/bom/requests?code=${sentCode}`} color="inherit">Open {sentCode}</Button>}>{sentCode} sent to the BOM alert space.</Alert>
                         )}
@@ -392,7 +440,7 @@ export default function BomViewer() {
                                     {editing && <span>Change</span>}
                                 </Box>
                                 {rows.length === 0 && <Box sx={{ px: 2.25, py: 2, color: tokens.muted }}>This assembly has no BOM lines in QuickBooks.</Box>}
-                                {rows.map((r, i) => <BomRow key={`${r.parent}-${r.line}-${i}`} r={r} editing={editing} mark={editing ? marks[r.line] : null} onMark={mark} />)}
+                                {rows.map((r, i) => <BomRow key={`${r.parent}-${r.line}-${i}`} r={r} editing={editing} mark={editing ? marks[r.line] : null} onMark={mark} inOpen={r.level === 1 ? openByComponent.get(r.component) : null} />)}
                                 {editing && adds.map((a, i) => <AddedRow key={a.component} a={a} onRemove={() => setAdds(prev => prev.filter((_, j) => j !== i))} />)}
                             </Box>
                         </Box>
