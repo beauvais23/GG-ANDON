@@ -14,6 +14,8 @@ import Login from "./pages/Login";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import Reports from "./pages/Reports";
+import BomViewer from "./pages/BomViewer";
+import BomRequests from "./pages/BomRequests";
 import StagingBanner from "./components/StagingBanner";
 import { useAlert } from "./context/AlertContext";
 import useAutoReload from "./hooks/useAutoReload";
@@ -92,6 +94,24 @@ function App() {
                 element={
                     <ProtectedRoute>
                         <Reports />
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/bom/requests"
+                element={
+                    <ProtectedRoute>
+                        <BomRequests />
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/bom"
+                element={
+                    <ProtectedRoute>
+                        <BomViewer />
                     </ProtectedRoute>
                 }
             />

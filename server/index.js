@@ -51,6 +51,8 @@ const { PERIODS } = require("./services/hourlyPlan");
 const { countStationFor, fpyOf, periodAt, withActuals, PCB_STATION } = require("./services/hourlyActual");
 const { buildReport } = require("./services/hourlyReport");
 const { checkRows } = require("./services/rateImport");
+const { createQbBom } = require("./services/qbBom");
+const { bomRoutes } = require("./routes/bom");
 const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
@@ -117,6 +119,11 @@ const PORT =
 app.use(cors());
 
 app.use(express.json());
+
+// BOM viewer (QuickBooks via CData, read only): routes/bom.js
+const qbBom = createQbBom({ db });
+
+app.use(bomRoutes(qbBom, db));
 
 //------------------------------------------------------
 // Authentication
@@ -3780,6 +3787,8 @@ if (require.main === module) {
         startDailyBackups(db, dbPath);
 
         startEscalationShadow(statements);
+
+        qbBom.start();
 
         await configureTelegramWebhook();
 
