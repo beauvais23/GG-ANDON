@@ -26,12 +26,36 @@ const configured = () => Boolean(process.env.CDATA_USER && process.env.CDATA_PAT
 // quotes are doubled anyway.
 const lit = value => `'${String(value).replace(/'/g, "''")}'`;
 
+// CData's error text, wherever the reply carries it.
+function errorText(data) {
+
+    if (typeof data === "string")
+        return data.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || "empty reply";
+
+    if (!data || typeof data !== "object")
+        return null;
+
+    const first = Array.isArray(data.results) ? data.results[0] : null;
+    const err = data.error || (first && first.error) || data.errors;
+
+    if (err)
+        return typeof err === "string" ? err : err.message || JSON.stringify(err).slice(0, 300);
+
+    return data.message || null;
+
+}
+
 function rowsOf(data) {
 
     const result = data && Array.isArray(data.results) ? data.results[0] : null;
 
-    if (!result || !Array.isArray(result.schema) || !Array.isArray(result.rows))
-        throw new Error("CData returned no result set.");
+    if (!result || !Array.isArray(result.schema) || !Array.isArray(result.rows)) {
+
+        const keys = data && typeof data === "object" ? Object.keys(data).join(", ") : typeof data;
+
+        throw new Error(`CData returned no result set: ${errorText(data) || `reply had ${keys || "nothing"}`}`);
+
+    }
 
     const names = result.schema.map(c => c.columnLabel || c.columnName);
 
@@ -51,7 +75,9 @@ async function query(sql) {
         const response = await axios.post(URL, { query: sql }, {
             params,
             timeout: TIMEOUT_MS,
-            auth: { username: process.env.CDATA_USER, password: process.env.CDATA_PAT }
+            auth: { username: process.env.CDATA_USER, password: process.env.CDATA_PAT },
+            // A redirect (e.g. to a login page) is an error, not data.
+            maxRedirects: 0
         });
 
         return rowsOf(response.data);
@@ -61,9 +87,7 @@ async function query(sql) {
     catch (err) {
 
         const status = err.response ? err.response.status : null;
-        const message = err.response && err.response.data
-            ? (err.response.data.error && err.response.data.error.message) || err.response.data.message
-            : null;
+        const message = err.response ? errorText(err.response.data) : null;
 
         throw new Error(`CData query failed${status ? ` (HTTP ${status})` : ""}: ${String(message || err.message).slice(0, 300)}`);
 
@@ -89,4 +113,4 @@ async function queryAll(sql, run = query) {
 
 }
 
-module.exports = { query, queryAll, configured, schema, lit, rowsOf, PAGE };
+module.exports = { query, queryAll, configured, schema, lit, rowsOf, errorText, PAGE };
