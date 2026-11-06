@@ -234,3 +234,18 @@ test("routes: login required; refresh is admin only; without CData set up the re
     assert.ok(list.body.lineGroups.includes("SpaceX"));
 
 });
+
+test("CData replies: rows by column name; an error body, an HTML page or an unknown shape gives CData's reason, not a blank", () => {
+
+    const { rowsOf, errorText } = require("../services/cdataClient");
+
+    assert.deepEqual(rowsOf({ results: [{ schema: [{ columnName: "FullName" }, { columnLabel: "n" }], rows: [["A", 1]] }] }), [{ FullName: "A", n: 1 }]);
+
+    assert.throws(() => rowsOf({ error: { code: "x", message: "Catalog 'Company' not found" } }), /no result set: Catalog 'Company' not found/);
+    assert.throws(() => rowsOf({ results: [{ error: { message: "Table not found" } }] }), /Table not found/);
+    assert.throws(() => rowsOf("<html><body><h1>Sign in</h1></body></html>"), /no result set: Sign in/);
+    assert.throws(() => rowsOf({ data: [], count: 0 }), /reply had data, count/);
+
+    assert.equal(errorText({ message: "Unauthorized" }), "Unauthorized");
+
+});
