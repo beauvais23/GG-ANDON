@@ -53,6 +53,7 @@ const { buildReport } = require("./services/hourlyReport");
 const { checkRows } = require("./services/rateImport");
 const { createQbBom } = require("./services/qbBom");
 const { bomRoutes } = require("./routes/bom");
+const { mrpRoutes } = require("./routes/mrp");
 const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
@@ -124,6 +125,9 @@ app.use(express.json());
 const qbBom = createQbBom({ db });
 
 app.use(bomRoutes(qbBom, db));
+
+// Material check (open orders × BOM explosion): routes/mrp.js
+app.use(mrpRoutes(qbBom));
 
 //------------------------------------------------------
 // Authentication
