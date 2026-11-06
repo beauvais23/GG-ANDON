@@ -179,6 +179,7 @@ test("routes: outside production with no staging space nothing is posted, even w
     delete process.env.GOOGLE_CHAT_BOM_WEBHOOK_STAGING;
     process.env.GOOGLE_CHAT_BOM_WEBHOOK = "https://chat.example.test/PRODUCTION";
     posts.length = 0;
+    db.prepare("UPDATE bom_requests SET status = 'CANCELLED' WHERE status = 'OPEN'").run(); // no duplicate guard here
 
     const floor = (await request(app).post("/auth/login").send({ username: "test_floor", password: "test-floor-pw" })).body.token;
 
@@ -199,5 +200,42 @@ test("routes: outside production with no staging space nothing is posted, even w
     assert.equal(none.body.items.length, 0, "service items can't be added");
 
     delete process.env.GOOGLE_CHAT_BOM_WEBHOOK;
+
+});
+
+test("duplicate guard: a component already in an open request for the config → 409 with the request; confirmDuplicate sends it; other components and closed requests don't count; list filters by config", async () => {
+
+    seed();
+    delete process.env.GOOGLE_CHAT_BOM_WEBHOOK_STAGING;
+
+    const floor = (await request(app).post("/auth/login").send({ username: "test_floor", password: "test-floor-pw" })).body.token;
+    const send = body => request(app).post("/bom/requests").set("Authorization", `Bearer ${floor}`).send({ sku: "TOP-1", ...base, ...body });
+
+    db.prepare("UPDATE bom_requests SET status = 'CANCELLED' WHERE status = 'OPEN'").run();
+
+    const first = await send({ lines: [{ action: "CHANGE_QTY", line: 1, component: "20-111-A", newQty: 5 }] }).expect(201);
+
+    const dup = await send({ lines: [{ action: "DELETE", line: 1, component: "20-111-A" }, { action: "ADD", component: "20-999-A", newQty: 1 }] }).expect(409);
+
+    assert.equal(dup.body.duplicates.length, 1);
+    assert.equal(dup.body.duplicates[0].code, first.body.request.code);
+    assert.equal(dup.body.duplicates[0].component, "20-111-A");
+    assert.match(dup.body.message, new RegExp(`Already in open request ${first.body.request.code}: 20-111-A`));
+
+    await send({ lines: [{ action: "DELETE", line: 2, component: "20-222-A" }] }).expect(201);
+
+    const confirmed = await send({ confirmDuplicate: true, lines: [{ action: "DELETE", line: 1, component: "20-111-A" }] }).expect(201);
+
+    await request(app).post(`/bom/requests/${first.body.request.code}/cancel`).set("Authorization", `Bearer ${floor}`).send({ by: "Tester", note: "dup" }).expect(200);
+    await request(app).post(`/bom/requests/${confirmed.body.request.code}/cancel`).set("Authorization", `Bearer ${floor}`).send({ by: "Tester", note: "dup" }).expect(200);
+
+    await send({ lines: [{ action: "CHANGE_QTY", line: 1, component: "20-111-A", newQty: 7 }] }).expect(201);
+
+    const open = await request(app).get("/bom/requests?status=OPEN&sku=TOP-1").set("Authorization", `Bearer ${floor}`).expect(200);
+    const none = await request(app).get("/bom/requests?sku=OTHER-SKU").set("Authorization", `Bearer ${floor}`).expect(200);
+
+    assert.equal(open.body.requests.length, 2);
+    assert.ok(open.body.requests.every(r => r.sku === "TOP-1" && r.status === "OPEN"));
+    assert.equal(none.body.requests.length, 0);
 
 });

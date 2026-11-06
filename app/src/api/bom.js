@@ -44,6 +44,6 @@ export const refreshItems = () => call("/admin/bom/refresh", { method: "POST" })
 export const searchItems = q => call(`/bom/items?q=${encodeURIComponent(q)}`);
 export const getReasons = () => call("/bom/reasons");
 export const sendRequest = body => call("/bom/requests", { method: "POST", body });
-export const listRequests = ({ status, from, to } = {}) => call(`/bom/requests?${new URLSearchParams(Object.entries({ status, from, to }).filter(([, v]) => v))}`);
+export const listRequests = ({ status, from, to, sku } = {}) => call(`/bom/requests?${new URLSearchParams(Object.entries({ status, from, to, sku }).filter(([, v]) => v))}`);
 export const getRequest = code => call(`/bom/requests/${encodeURIComponent(code)}`);
 export const closeRequest = (code, kind, body) => call(`/bom/requests/${encodeURIComponent(code)}/${kind}`, { method: "POST", body });

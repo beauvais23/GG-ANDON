@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { Link as RouterLink } from "react-router-dom";
 import { Alert, Autocomplete, Box, Button, MenuItem, TextField } from "@mui/material";
 
 import AddIcon from "@mui/icons-material/Add";
@@ -83,18 +84,22 @@ export default function ChangeRequestPanel({ sku, changes, onSent, onCancel }) {
     const [note, setNote] = useState("");
     const [name, setName] = useState(remembered);
     const [errors, setErrors] = useState([]);
+    const [duplicates, setDuplicates] = useState(null);
     const [sending, setSending] = useState(false);
 
     useEffect(() => { getReasons().then(r => setReasons(r.reasons), () => {}); }, []);
 
-    async function send() {
+    // confirmDuplicate: the person saw the open request(s) for the same
+    // components and pressed Send anyway (duplicate guard, 409).
+    async function send(confirmDuplicate = false) {
 
         setSending(true);
         setErrors([]);
+        setDuplicates(null);
 
         try {
 
-            const r = await sendRequest({ sku, reason, reference, note, requestedBy: name, lines: changes });
+            const r = await sendRequest({ sku, reason, reference, note, requestedBy: name, lines: changes, confirmDuplicate });
 
             try { localStorage.setItem(NAME_KEY, name.trim()); } catch { /* private window */ }
 
@@ -102,7 +107,10 @@ export default function ChangeRequestPanel({ sku, changes, onSent, onCancel }) {
 
         } catch (err) {
 
-            setErrors(err.data?.errors || [err.message]);
+            if (err.data?.duplicates)
+                setDuplicates(err.data.duplicates);
+            else
+                setErrors(err.data?.errors || [err.message]);
 
         } finally {
 
@@ -134,8 +142,20 @@ export default function ChangeRequestPanel({ sku, changes, onSent, onCancel }) {
                 </Alert>
             )}
 
+            {duplicates && (
+                <Alert severity="warning" sx={{ mt: 1.5 }} action={<Button color="inherit" disabled={sending} onClick={() => send(true)}>Send anyway</Button>}>
+                    Already in an open request for this config:
+                    {duplicates.map(d => (
+                        <div key={`${d.code}-${d.component}`}>
+                            <Box component={RouterLink} to={`/bom/requests?code=${d.code}`} sx={{ color: "inherit", fontWeight: 700 }}>{d.code}</Box> · {d.component} ({d.action === "CHANGE_QTY" ? "change qty" : d.action.toLowerCase()}) · {d.requested_by}
+                        </div>
+                    ))}
+                    Finish or cancel that request, or send this one anyway.
+                </Alert>
+            )}
+
             <Box sx={{ display: "flex", gap: 1, mt: 1.5 }}>
-                <Button variant="contained" startIcon={<SendIcon />} disabled={sending || !n || !reason || !name.trim()} onClick={send}>
+                <Button variant="contained" startIcon={<SendIcon />} disabled={sending || !n || !reason || !name.trim()} onClick={() => send(false)}>
                     {sending ? "Sending…" : "Send alert"}
                 </Button>
                 <Button color="inherit" onClick={onCancel}>Discard changes</Button>
