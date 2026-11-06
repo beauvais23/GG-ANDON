@@ -123,7 +123,7 @@ app.use(express.json());
 // BOM viewer (QuickBooks via CData, read only): routes/bom.js
 const qbBom = createQbBom({ db });
 
-app.use(bomRoutes(qbBom));
+app.use(bomRoutes(qbBom, db));
 
 //------------------------------------------------------
 // Authentication
