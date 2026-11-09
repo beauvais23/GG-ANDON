@@ -3,7 +3,7 @@
 //
 // global.fetch is replaced by a fake Google (token
 // endpoint + Drive files API) and axios.post by a fake
-// Google Chat, so nothing leaves the process. The
+// Slack, so nothing leaves the process. The
 // service account key is generated per test run.
 //------------------------------------------------------
 
@@ -48,7 +48,7 @@ let dir;
 let drive;      // [{ name, parents, bytes }]
 let calls;      // ["token", "list", "session", "put"]
 let failNext;   // status code for the next Drive call, or "hang"
-let chat;       // Google Chat posts
+let chat;       // Slack posts (axios)
 
 function json(status, body, headers = {}) {
 
@@ -328,10 +328,15 @@ test("status: newest copy in Drive and stale after 26 hours", async () => {
 
 });
 
-test("stale alert: Google Chat once per New York day, production only", async () => {
+test("stale alert: Slack #mos-system once per New York day, production only; never Google Chat", async () => {
 
     configure();
-    process.env.GOOGLE_CHAT_WEBHOOK = "https://chat.test/hook";
+    process.env.GOOGLE_CHAT_WEBHOOK = "https://chat.test/hook"; // left over in Railway: ignored
+
+    axios.post = async (url, body) => {
+        chat.push({ url, body });
+        return { data: url.startsWith("https://slack.com/api/") ? { ok: true, channel: body.channel, ts: "1.1" } : {} };
+    };
 
     writeBackup(DAILY);
     await syncOffsite(dir);
@@ -344,18 +349,35 @@ test("stale alert: Google Chat once per New York day, production only", async ()
 
     process.env.APP_ENV = "production";
 
-    assert.equal(await alertIfStale(late), true);
-    assert.equal(chat.length, 1);
-    assert.equal(chat[0].url, "https://chat.test/hook");
-    assert.match(chat[0].body.text, /off-site backup is behind/);
-    assert.match(chat[0].body.text, /Oct 27, 2026, 5:08 PM ET/);
+    // Slack not set up: nothing sent, tried again next tick.
+    assert.equal(await alertIfStale(late), false);
+    assert.equal(chat.length, 0);
 
-    // Same New York day: not repeated.
-    assert.equal(await alertIfStale(late + 3600 * 1000), false);
-    assert.equal(chat.length, 1);
+    process.env.SLACK_BOT_TOKEN = "xoxb-prod-test";
+    process.env.SLACK_CHANNEL_SYSTEM = "C_SYSTEM";
 
-    // Not stale: nothing.
-    assert.equal(await alertIfStale(T("2026-10-28T12:00:00Z")), false);
+    try {
+
+        assert.equal(await alertIfStale(late), true);
+        assert.deepEqual(chat.map(c => c.url), ["https://slack.com/api/chat.postMessage"]);
+        assert.equal(chat[0].body.channel, "C_SYSTEM");
+        assert.match(chat[0].body.text, /off-site backup is behind/);
+        assert.match(chat[0].body.text, /Oct 27, 2026, 5:08 PM ET/);
+
+        // Same New York day: not repeated.
+        assert.equal(await alertIfStale(late + 3600 * 1000), false);
+        assert.equal(chat.length, 1);
+
+        // Not stale: nothing.
+        assert.equal(await alertIfStale(T("2026-10-28T12:00:00Z")), false);
+
+    } finally {
+
+        delete process.env.SLACK_BOT_TOKEN;
+        delete process.env.SLACK_CHANNEL_SYSTEM;
+        delete process.env.GOOGLE_CHAT_WEBHOOK;
+
+    }
 
 });
 

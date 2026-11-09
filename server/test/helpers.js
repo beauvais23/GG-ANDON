@@ -33,6 +33,8 @@ function loadApp() {
     delete process.env.TELEGRAM_BOT_TOKEN;
     delete process.env.TELEGRAM_CHAT_ID;
     delete process.env.GOOGLE_CHAT_WEBHOOK;
+    delete process.env.TELEGRAM_NEAR_MISS_CHAT_ID;
+    delete process.env.TELEGRAM_BOM_CHAT_ID;
     delete process.env.GDRIVE_SERVICE_ACCOUNT_JSON;
     delete process.env.GDRIVE_BACKUP_FOLDER_ID;
     delete process.env.RESTORE_FROM_DRIVE;

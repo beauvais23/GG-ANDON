@@ -3,7 +3,7 @@ const express = require("express");
 const { authenticateToken, requireAdmin } = require("../middleware/auth");
 const { LINE_GROUPS } = require("../services/qbBom");
 const { REASONS, ADDABLE, validateRequest, codeFor } = require("../services/bomRequest");
-const { requestCard, closedMessage, postToSpace, requestUrl } = require("../services/bomChat");
+const { requestUrl, postBomToTelegram, updateBomInTelegram } = require("../services/telegramGroups");
 const { postBomToSlack, updateBomInSlack } = require("../services/slack");
 const { queueNotification } = require("../services/notificationQueue");
 const { dateNY, startOfDayNY } = require("../services/nyTime");
@@ -28,8 +28,6 @@ function bomRoutes(qbBom, db) {
         lines: db.prepare("SELECT * FROM bom_request_lines WHERE request_id = ? ORDER BY id"),
         list: db.prepare("SELECT * FROM bom_requests WHERE requested_at >= ? AND requested_at < ? ORDER BY requested_at DESC LIMIT 1000"),
         close: db.prepare("UPDATE bom_requests SET status = ?, closed_by = ?, closed_at = ?, close_note = ? WHERE id = ? AND status = 'OPEN'"),
-        chatOk: db.prepare("UPDATE bom_requests SET chat_sent_at = ?, chat_error = NULL WHERE id = ?"),
-        chatErr: db.prepare("UPDATE bom_requests SET chat_error = ? WHERE id = ?"),
         searchItems: db.prepare(`SELECT full_name, type, description, uom, on_hand FROM qb_items
             WHERE active = 1 AND type IN (${ADDABLE.map(() => "?").join(", ")}) AND (full_name LIKE ? OR description LIKE ?)
             ORDER BY CASE WHEN full_name LIKE ? THEN 0 ELSE 1 END, full_name LIMIT 40`),
@@ -40,46 +38,24 @@ function bomRoutes(qbBom, db) {
 
     const withLines = r => ({ ...r, lines: st.lines.all(r.id), snapshot: undefined });
 
-    // Card / reply in the background, in order per request; the
-    // result is saved on the request (shown on the requests page).
-    function notify(req, payload, label) {
+    // Slack #bom-changes + the BOM Telegram group, in the background,
+    // in order per request; each channel runs on its own. Results are
+    // saved on the request (shown on the requests page).
+    function notify(req, label) {
 
         return queueNotification(`bom:${req.code}`, label, async () => {
 
-            // Slack #bom-changes (S3): runs first and never blocks Chat.
-            try {
+            const lines = st.lines.all(req.id);
+            const card = label === "bom-card";
 
-                const lines = st.lines.all(req.id);
-
-                await (label === "bom-card"
+            await Promise.all([
+                Promise.resolve().then(() => card
                     ? postBomToSlack(req, lines, requestUrl(req.code))
-                    : updateBomInSlack(req, lines, requestUrl(req.code)));
-
-            }
-
-            catch (err) {
-
-                console.error(`✗ Slack ${req.code}:`, err.message);
-
-            }
-
-            try {
-
-                const r = await postToSpace(req.code, payload);
-
-                if (r.sent && label === "bom-card")
-                    st.chatOk.run(Date.now(), req.id);
-                else if (r.skipped)
-                    st.chatErr.run(`Not sent: ${r.skipped}`, req.id);
-
-            }
-
-            catch (err) {
-
-                st.chatErr.run(String(err.message).slice(0, 300), req.id);
-                throw err;
-
-            }
+                    : updateBomInSlack(req, lines, requestUrl(req.code)))
+                    .catch(err => console.error(`✗ Slack ${req.code}:`, err.message)),
+                Promise.resolve().then(() => card ? postBomToTelegram(req, lines) : updateBomInTelegram(req, lines))
+                    .catch(err => console.error(`✗ Telegram ${req.code}:`, err.message))
+            ]);
 
         });
 
@@ -195,7 +171,7 @@ function bomRoutes(qbBom, db) {
 
         const out = withLines(saved);
 
-        notify(saved, requestCard(saved, out.lines), "bom-card");
+        notify(saved, "bom-card");
 
         res.status(201).json({ success: true, request: out, bomStale: bom.stale, bomError: bom.error });
 
@@ -251,7 +227,7 @@ function bomRoutes(qbBom, db) {
 
             const closed = st.byCode.get(r.code);
 
-            notify(closed, closedMessage(closed), `bom-${path}`);
+            notify(closed, `bom-${path}`);
 
             res.json({ success: true, request: withLines(closed) });
 

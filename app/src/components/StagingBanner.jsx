@@ -53,7 +53,7 @@ export default function StagingBanner() {
                 px: 2
             }}
         >
-            STAGING (test system): alerts raised here are NOT sent to Telegram or Google Chat.
+            STAGING (test system): alerts raised here are NOT sent to Telegram; Slack goes only to #mos-staging.
         </Box>
 
     );
