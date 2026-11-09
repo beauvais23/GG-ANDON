@@ -375,9 +375,34 @@ export default function BomViewer() {
                     options={options}
                     value={selected}
                     onChange={(e, v) => setParams(v ? { sku: v.sku } : {})}
-                    getOptionLabel={o => `${o.sku}${o.description ? ` — ${o.description}` : ""}`}
+                    getOptionLabel={o => o.sku}
+                    filterOptions={(opts, { inputValue }) => {
+
+                        // Part number or description (Director, Nov 9 2026: the list
+                        // shows the part number large, the description small).
+                        const t = inputValue.trim().toLowerCase();
+
+                        return t ? opts.filter(o => o.sku.toLowerCase().includes(t) || (o.description || "").toLowerCase().includes(t)) : opts;
+
+                    }}
+                    renderOption={(props, o) => {
+
+                        const { key, ...rest } = props;
+
+                        return (
+                            <Box component="li" key={key} {...rest} sx={{ display: "block !important", py: "6px !important" }}>
+                                <Box sx={{ fontFamily: tokens.mono, fontWeight: 700, fontSize: 15 }}>{o.sku}</Box>
+                                {o.description && (
+                                    <Box sx={{ fontSize: 12, color: tokens.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 660 }} title={o.description}>
+                                        {o.description}
+                                    </Box>
+                                )}
+                            </Box>
+                        );
+
+                    }}
                     isOptionEqualToValue={(a, b) => a.sku === b.sku}
-                    renderInput={p => <TextField {...p} label={`Config (assembly SKU) · ${options.length.toLocaleString()} in ${group}`} placeholder="Type to search" />}
+                    renderInput={p => <TextField {...p} label={`Config (assembly SKU) · ${options.length.toLocaleString()} in ${group}`} placeholder="Type a part number or description" />}
                     sx={{ mb: 1, maxWidth: 720 }}
                 />
 
