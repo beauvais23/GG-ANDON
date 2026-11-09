@@ -389,7 +389,7 @@ async function alertIfStale(now = Date.now()) {
     const webhook = process.env.GOOGLE_CHAT_WEBHOOK;
     const today = dateNY(now);
 
-    if (!webhook || state.lastAlertDate === today)
+    if (state.lastAlertDate === today)
         return false;
 
     const newest = status.newestOffsiteAt
@@ -407,23 +407,42 @@ async function alertIfStale(now = Date.now()) {
         "Check /admin → Backups."
     ].filter(Boolean).join("\n");
 
+    let sent = false;
+
+    // Slack #mos-system (S3) and the ANDON Google Chat space (until S5).
     try {
 
-        await axios.post(webhook, { text }, { timeout: TIMEOUT_MS });
-
-        state.lastAlertDate = today;
-
-        console.warn("Off-site backup is stale; Google Chat warning sent.");
-
-        return true;
+        sent = await require("./slack").postSystemToSlack(text);
 
     } catch (err) {
 
-        console.error("Off-site backup warning to Google Chat failed:", err.message);
-
-        return false;
+        console.error("Off-site backup warning to Slack failed:", err.message);
 
     }
+
+    if (webhook) {
+
+        try {
+
+            await axios.post(webhook, { text }, { timeout: TIMEOUT_MS });
+            sent = true;
+
+        } catch (err) {
+
+            console.error("Off-site backup warning to Google Chat failed:", err.message);
+
+        }
+
+    }
+
+    if (sent) {
+
+        state.lastAlertDate = today;
+        console.warn("Off-site backup is stale; warning sent.");
+
+    }
+
+    return sent;
 
 }
 

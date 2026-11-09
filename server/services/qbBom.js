@@ -442,6 +442,22 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     }
 
+    // One #mos-system warning per New York day (Slack S3).
+    let warnedOn = null;
+
+    function warnSystem(text) {
+
+        const day = new Date(now()).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+        if (warnedOn === day)
+            return;
+
+        warnedOn = day;
+
+        require("./slack").postSystemToSlack(text).catch(err => console.error("✗ Slack system warning:", err.message));
+
+    }
+
     // Refresh the item list at boot if it's old, then check every 10 min.
     function start() {
 
@@ -461,7 +477,12 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
             refreshItems().then(
                 n => console.log(`QuickBooks items refreshed: ${n}`),
-                err => console.error(`QuickBooks item refresh failed: ${err.message}`)
+                err => {
+
+                    console.error(`QuickBooks item refresh failed: ${err.message}`);
+                    warnSystem(`⚠️ ManufacturingOS could not read QuickBooks (item list): ${String(err.message).slice(0, 300)}. BOM viewer and Material check show the last good data. Check the CData connection.`);
+
+                }
             );
 
         };
@@ -478,7 +499,7 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     }
 
-    return { refreshItems, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf };
+    return { refreshItems, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf, warnSystem };
 
 }
 
