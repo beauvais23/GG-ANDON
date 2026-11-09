@@ -1,0 +1,24 @@
+# Slack app for STAGING (Slack S1, Nov 9 2026). A separate app so staging
+# can never post to production channels: invite it ONLY to #mos-staging.
+# Its bot token goes ONLY in Railway staging as SLACK_STAGING_BOT_TOKEN.
+display_information:
+  name: ManufacturingOS (staging)
+  description: TEST copy of ManufacturingOS alerts. Posts only to #mos-staging.
+  background_color: "#c2410c"
+features:
+  bot_user:
+    display_name: ManufacturingOS-staging
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - users:read
+      - im:write
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://gg-andon-staging-staging.up.railway.app/slack/interact
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

@@ -27,7 +27,8 @@ const {
     notifyCreated,
     notifyAcknowledged,
     notifyResolved,
-    notifyCancelled
+    notifyCancelled,
+    notifyNoteAdded
 } = require("./services/notificationManager");
 
 const { updateTelegram } = require("./services/telegramUpdate");
@@ -658,7 +659,7 @@ app.patch("/alerts/:id/note", authenticateToken, (req, res) => {
     console.log(`✓ Resolution note added to Alert #${alert.id}${by ? ` by ${by}` : ""}`);
 
     // The Telegram channel message shows the note under RESOLUTION.
-    queueNotification(alert.id, "note added", () => updateTelegram(alert));
+    queueNotification(alert.id, "note added", () => notifyNoteAdded(alert));
 
     res.json({ success: true, alert: statements.getAlert.get(alert.id) });
 
