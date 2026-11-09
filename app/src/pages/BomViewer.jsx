@@ -28,7 +28,7 @@ import { labelSx, tokens } from "../theme/theme";
 // one directly.
 // REQUEST A CHANGE (Nov 6 2026): level-1 lines only; type a new
 // qty (amber) or Delete (red) per line, Add components (green),
-// then reason / name → Send alert (BOM alert Chat space).
+// then reason / name → Send alert (Slack #bom-changes + BOM Telegram group).
 //------------------------------------------------------
 
 const ALL = "All";
@@ -455,7 +455,7 @@ export default function BomViewer() {
                         )}
 
                         {sentCode && !editing && (
-                            <Alert severity="success" sx={{ m: 2 }} action={<Button component={RouterLink} to={`/bom/requests?code=${sentCode}`} color="inherit">Open {sentCode}</Button>}>{sentCode} sent to the BOM alert space.</Alert>
+                            <Alert severity="success" sx={{ m: 2 }} action={<Button component={RouterLink} to={`/bom/requests?code=${sentCode}`} color="inherit">Open {sentCode}</Button>}>{sentCode} sent to Slack #bom-changes and the BOM Telegram group.</Alert>
                         )}
 
                         <Box sx={{ overflowX: "auto" }}>

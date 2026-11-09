@@ -16,14 +16,12 @@ mock.method(console, "log", () => {});
 mock.method(console, "error", () => {});
 
 const { buildMessage } = require("../services/telegram");
-const { sendGoogleChatCard } = require("../services/googleChat");
 
 const realPost = axios.post;
 
 after(() => {
     axios.post = realPost;
     process.env.APP_ENV = "test";
-    delete process.env.GOOGLE_CHAT_WEBHOOK;
 });
 
 const cancelled = {
@@ -73,23 +71,3 @@ test("Telegram: a resolved alert is unchanged (Resolved time, RESOLUTION, no Can
 
 });
 
-test("Google Chat: cancelled card has no Resolution row and labels the note as the cancel reason", async () => {
-
-    process.env.APP_ENV = "production";
-    process.env.GOOGLE_CHAT_WEBHOOK = "https://chat.test/hook";
-
-    let payload;
-
-    axios.post = async (url, body) => { payload = body; return { data: {} }; };
-
-    await sendGoogleChatCard(cancelled, "CANCELLED");
-
-    const json = JSON.stringify(payload);
-
-    assert.ok(payload, "card was sent");
-    assert.match(json, /Cancel reason/);
-    assert.match(json, /Smoke test/);
-    assert.doesNotMatch(json, /🏁/);          // the Resolution elapsed row
-    assert.doesNotMatch(json, /"Resolution"/);
-
-});

@@ -21,8 +21,8 @@ import { labelSx, tokens } from "../theme/theme";
 // /bom. Filter by status, dates, text (config, requester,
 // component, code); open one for the before/after BOM; the
 // person who edits QuickBooks presses DONE (or anyone CANCELS
-// with a reason), which replies in the card's Chat thread.
-// ?code= opens one (the Chat card's OPEN REQUEST button).
+// with a reason), which edits and replies to its Slack / Telegram message.
+// ?code= opens one (the Open request link in Slack / Telegram).
 //------------------------------------------------------
 
 const STATUSES = ["OPEN", "DONE", "CANCELLED", "ALL"];
@@ -150,7 +150,7 @@ function CloseDialog({ kind, request, onClose, onDone }) {
             <DialogTitle>{done ? `Mark ${request.code} done` : `Cancel ${request.code}`}</DialogTitle>
             <DialogContent>
                 <Box sx={{ color: tokens.muted, fontSize: 14, mb: 2 }}>
-                    {done ? "Only after the BOM is edited in QuickBooks. A reply goes to the request's thread in the BOM alert space." : "The request is no longer needed (or was sent by mistake). A reply goes to its Chat thread."}
+                    {done ? "Only after the BOM is edited in QuickBooks. A reply goes to the request's message in Slack #bom-changes and the BOM Telegram group." : "The request is no longer needed (or was sent by mistake). A reply goes to its message in Slack and Telegram."}
                 </Box>
                 <TextField fullWidth size="small" label="Your name" value={by} onChange={e => setBy(e.target.value)} sx={{ mb: 2 }} slotProps={{ htmlInput: { maxLength: 60 } }} />
                 <TextField fullWidth size="small" label={done ? "Note (optional)" : "Why cancel?"} value={note} onChange={e => setNote(e.target.value)} slotProps={{ htmlInput: { maxLength: 500 } }} />
@@ -189,8 +189,8 @@ function Detail({ code, onChanged }) {
         ["NCM / ECO", request.reference || "—"],
         ["Note", request.note || "—"],
         ["BOM read from QuickBooks", when(request.bom_as_of)],
-        ["Chat", request.chat_sent_at ? `Posted ${when(request.chat_sent_at)}` : request.chat_error || "Sending…"],
         ["Slack", request.slack_ts ? "Posted in #bom-changes" : "Not posted (Slack off or failed)"],
+        ["Telegram", request.telegram_message_id ? "Posted in the BOM group" : request.telegram_error || "Not posted"],
         ...(request.status !== "OPEN" ? [[request.status === "DONE" ? "Done" : "Cancelled", `${when(request.closed_at)} by ${request.closed_by}${request.close_note ? `: ${request.close_note}` : ""}`]] : [])
     ];
 
@@ -216,7 +216,7 @@ function Detail({ code, onChanged }) {
                 {facts.map(([k, v]) => (
                     <Box key={k}>
                         <Box sx={{ ...labelSx, fontSize: 11 }}>{k}</Box>
-                        <Box sx={{ fontSize: 14, color: k === "Chat" && !request.chat_sent_at ? "#F2A33A" : tokens.text }}>{v}</Box>
+                        <Box sx={{ fontSize: 14, color: (k === "Slack" && !request.slack_ts) || (k === "Telegram" && !request.telegram_message_id) ? "#F2A33A" : tokens.text }}>{v}</Box>
                     </Box>
                 ))}
             </Box>
@@ -340,7 +340,7 @@ export default function BomRequests() {
                                     </Box>
                                     <Box>{r.reason}</Box>
                                     <Box sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.requested_by}</Box>
-                                    <Box><Status s={r.status} />{!r.chat_sent_at && <Box component="span" title={r.chat_error || "Chat not sent yet"} sx={{ ml: 0.75, color: "#F2A33A" }}>!</Box>}</Box>
+                                    <Box><Status s={r.status} />{!r.slack_ts && !r.telegram_message_id && <Box component="span" title={r.telegram_error || "Not posted in Slack or Telegram"} sx={{ ml: 0.75, color: "#F2A33A" }}>!</Box>}</Box>
                                 </Box>
                             ))}
                         </Box>

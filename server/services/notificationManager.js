@@ -1,61 +1,44 @@
 const { sendNotification } = require("./notifications_old");
-const { sendGoogleChatCard } = require("./googleChat");
 const { sendTelegram } = require("./telegram");
 const { updateTelegram } = require("./telegramUpdate");
 const { postAlertToSlack, updateAlertInSlack } = require("./slack");
-
-// Slack runs beside Telegram and Google Chat (parallel run, S1):
-// its failure is logged and never stops the other channels.
-function slackSafe(label, fn) {
-
-    return Promise.resolve().then(fn).catch(err => console.error(`✗ Slack ${label}:`, err.message));
-
-}
+const { postNearMissToTelegram, updateNearMissInTelegram } = require("./telegramGroups");
 
 //------------------------------------------------------
-// Near Miss routing (Director, Oct 30 2026)
+// Alert channels (Director, Nov 9 2026): Slack + Telegram.
+// Google Chat removed.
 //
-// NEAR_MISS alerts go only to the "Near Miss & Safety
-// Incident Alert" Google Chat space: no Telegram, no ANDON
-// Chat space. If GOOGLE_CHAT_NEAR_MISS_WEBHOOK is not set
-// they fall back to the ANDON Chat space, so none are lost.
+// - Andon alerts: Slack #andon-alerts + the ANDON Telegram
+//   channel (buttons).
+// - Near misses: Slack #safety-near-miss + the Near Miss
+//   Telegram group (no buttons; nothing to acknowledge). Never
+//   the ANDON Telegram channel.
+//
+// Each channel runs on its own: an error in one is logged and
+// never stops the other.
 //------------------------------------------------------
 
-function nearMissWebhook(alert) {
+function safe(label, fn) {
 
-    if (alert.type !== "NEAR_MISS")
-        return null;
-
-    const webhook = process.env.GOOGLE_CHAT_NEAR_MISS_WEBHOOK;
-
-    if (!webhook)
-        console.warn("GOOGLE_CHAT_NEAR_MISS_WEBHOOK not set: NEAR MISS sent to the ANDON Chat space.");
-
-    return webhook || null;
+    return Promise.resolve().then(fn).catch(err => console.error(`✗ ${label}:`, err.message));
 
 }
 
-// Acknowledge / resolve / cancel updates. A Near Miss alert
-// raised before the routing was on still has a Telegram
-// message, so that message is kept up to date.
+// Acknowledge / resolve / cancel (a near miss: undo / void).
 async function notifyUpdate(alert, event) {
 
     await sendNotification(event, alert);
 
-    const nearMiss = nearMissWebhook(alert);
+    const updates = [safe(`Slack update alert #${alert.id}`, () => updateAlertInSlack(alert))];
 
-    const updates = [
-        nearMiss
-            ? sendGoogleChatCard(alert, event, nearMiss)
-            : sendGoogleChatCard(alert, event)
-    ];
+    if (alert.type === "NEAR_MISS")
+        updates.push(safe(`Telegram near miss #${alert.id}`, () => updateNearMissInTelegram(alert)));
 
-    if (!nearMiss || alert.telegram_message_id)
-        updates.push(updateTelegram(alert));
+    // updateTelegram skips alerts without an ANDON channel message
+    // (near misses since Oct 30 2026); older ones are kept current.
+    updates.push(safe(`Telegram update alert #${alert.id}`, () => updateTelegram(alert)));
 
-    updates.push(slackSafe(`update alert #${alert.id}`, () => updateAlertInSlack(alert)));
-
-    await Promise.allSettled(updates);
+    await Promise.all(updates);
 
 }
 
@@ -68,30 +51,17 @@ async function notifyCreated(alert) {
     // Log locally
     await sendNotification("CREATED", alert);
 
-    // Near Miss: logged closed, one "REPORTED" card, never Telegram
-    // (there is nothing to acknowledge). Its own Chat space when set.
+    const slack = safe(`Slack post alert #${alert.id}`, () => postAlertToSlack(alert));
+
+    // Near Miss: logged closed, one "REPORTED" message in the Near
+    // Miss group, never the ANDON Telegram channel.
     if (alert.type === "NEAR_MISS") {
 
-        // Slack #safety-near-miss (S3), beside the Near Miss Chat space.
-        const slackNearMiss = slackSafe(`post near miss #${alert.id}`, () => postAlertToSlack(alert));
-
-        const nearMiss = nearMissWebhook(alert);
-
-        await (nearMiss
-            ? sendGoogleChatCard(alert, "REPORTED", nearMiss)
-            : sendGoogleChatCard(alert, "REPORTED"));
-
-        await slackNearMiss;
+        await Promise.all([slack, safe(`Telegram near miss #${alert.id}`, () => postNearMissToTelegram(alert))]);
 
         return;
 
     }
-
-    // Slack (#andon-alerts), started first and independent of the rest.
-    const slack = slackSafe(`post alert #${alert.id}`, () => postAlertToSlack(alert));
-
-    // Google Chat
-    await sendGoogleChatCard(alert, "CREATED");
 
     // Telegram (returns message ID)
     const telegramMessageId =
@@ -126,9 +96,9 @@ const notifyCancelled = alert => notifyUpdate(alert, "CANCELLED");
 // Telegram and Slack messages; no new Slack thread reply.
 async function notifyNoteAdded(alert) {
 
-    await Promise.allSettled([
-        updateTelegram(alert),
-        slackSafe(`note on alert #${alert.id}`, () => updateAlertInSlack(alert, { step: false }))
+    await Promise.all([
+        safe(`Telegram note on alert #${alert.id}`, () => updateTelegram(alert)),
+        safe(`Slack note on alert #${alert.id}`, () => updateAlertInSlack(alert, { step: false }))
     ]);
 
 }

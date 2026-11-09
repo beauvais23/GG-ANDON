@@ -19,7 +19,6 @@ mock.method(console, "log", () => {});
 mock.method(console, "error", () => {});
 
 const { buildMessage } = require("../services/telegram");
-const { sendGoogleChatCard } = require("../services/googleChat");
 
 const realPost = axios.post;
 
@@ -45,7 +44,6 @@ after(() => {
 
     axios.post = realPost;
     process.env.APP_ENV = "test";
-    delete process.env.GOOGLE_CHAT_WEBHOOK;
 
 });
 
@@ -99,19 +97,3 @@ test("Telegram: NEAR MISS ALERT with its icon; Downtime has its own icon", () =>
 
 });
 
-test("Google Chat: the card header reads NEAR MISS ALERT", async () => {
-
-    const posts = [];
-
-    process.env.APP_ENV = "production";
-    process.env.GOOGLE_CHAT_WEBHOOK = "https://chat.test/hook";
-    axios.post = async (url, body) => { posts.push(body); return { data: {} }; };
-
-    await sendGoogleChatCard(nearMiss, "CREATED");
-
-    const card = JSON.stringify(posts[0]);
-
-    assert.match(card, /NEAR MISS ALERT/);
-    assert.doesNotMatch(card, /NEAR_MISS ALERT/);
-
-});
