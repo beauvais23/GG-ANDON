@@ -761,6 +761,15 @@ saveTelegramMessageId: db.prepare(`
         )
     `),
 
+    // Slack S2: the responder linked to a Slack user (Admin → Responders).
+    getResponderBySlack: db.prepare(`
+    SELECT * FROM response_team WHERE slack_user_id = ? AND archived_at IS NULL LIMIT 1
+`),
+
+    setResponderSlack: db.prepare(`
+    UPDATE response_team SET slack_user_id = ?, updated_at = ? WHERE id = ?
+`),
+
     updateResponseTeam: db.prepare(`
     UPDATE response_team
     SET
