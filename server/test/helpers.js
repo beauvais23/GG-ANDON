@@ -36,7 +36,7 @@ function loadApp() {
     delete process.env.GDRIVE_SERVICE_ACCOUNT_JSON;
     delete process.env.GDRIVE_BACKUP_FOLDER_ID;
     delete process.env.RESTORE_FROM_DRIVE;
-    for (const k of ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ANDON", "SLACK_STAGING_BOT_TOKEN", "SLACK_STAGING_CHANNEL"])
+    for (const k of ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ANDON", "SLACK_CHANNEL_NEAR_MISS", "SLACK_CHANNEL_BOM", "SLACK_CHANNEL_SYSTEM", "SLACK_SIGNING_SECRET", "SLACK_STAGING_BOT_TOKEN", "SLACK_STAGING_CHANNEL", "SLACK_STAGING_SIGNING_SECRET"])
         delete process.env[k];
 
     return { app: require("../index"), dir };
