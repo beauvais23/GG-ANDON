@@ -3,7 +3,8 @@ const express = require("express");
 const { authenticateToken, requireAdmin } = require("../middleware/auth");
 const { LINE_GROUPS } = require("../services/qbBom");
 const { REASONS, ADDABLE, validateRequest, codeFor } = require("../services/bomRequest");
-const { requestCard, closedMessage, postToSpace } = require("../services/bomChat");
+const { requestCard, closedMessage, postToSpace, requestUrl } = require("../services/bomChat");
+const { postBomToSlack, updateBomInSlack } = require("../services/slack");
 const { queueNotification } = require("../services/notificationQueue");
 const { dateNY, startOfDayNY } = require("../services/nyTime");
 
@@ -44,6 +45,23 @@ function bomRoutes(qbBom, db) {
     function notify(req, payload, label) {
 
         return queueNotification(`bom:${req.code}`, label, async () => {
+
+            // Slack #bom-changes (S3): runs first and never blocks Chat.
+            try {
+
+                const lines = st.lines.all(req.id);
+
+                await (label === "bom-card"
+                    ? postBomToSlack(req, lines, requestUrl(req.code))
+                    : updateBomInSlack(req, lines, requestUrl(req.code)));
+
+            }
+
+            catch (err) {
+
+                console.error(`✗ Slack ${req.code}:`, err.message);
+
+            }
 
             try {
 

@@ -3829,6 +3829,8 @@ if (require.main === module) {
 
         qbBom.start();
 
+        console.log(require("./services/slack").describeSlack());
+
         await configureTelegramWebhook();
 
     });

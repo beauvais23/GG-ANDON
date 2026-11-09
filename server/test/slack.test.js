@@ -147,15 +147,18 @@ test("flow: raise → one message (ts saved) → acknowledge → message updated
 
 });
 
-test("near misses are not sent to Slack in S1; a Slack error is logged and the alert is still created and acknowledged", async () => {
+test("near miss (S3): one NEAR MISS REPORTED message, no buttons; a Slack error is logged and the alert is still created and acknowledged", async () => {
 
     useStaging();
     calls.length = 0;
 
     await request(app).post("/alerts").set(floor).send({ productionLine: LINE, workCenter: WC, type: "NEAR_MISS" }).expect(200);
-    await new Promise(r => setTimeout(r, 100));
+    await waitFor(() => calls.length >= 1);
 
-    assert.equal(calls.length, 0);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.channel, "C_STAGING");
+    assert.match(JSON.stringify(calls[0].body.blocks), /NEAR MISS REPORTED/);
+    assert.doesNotMatch(JSON.stringify(calls[0].body.blocks), /action_id/);
 
     failWith = "channel_not_found";
 

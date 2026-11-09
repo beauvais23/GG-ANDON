@@ -72,11 +72,16 @@ async function notifyCreated(alert) {
     // (there is nothing to acknowledge). Its own Chat space when set.
     if (alert.type === "NEAR_MISS") {
 
+        // Slack #safety-near-miss (S3), beside the Near Miss Chat space.
+        const slackNearMiss = slackSafe(`post near miss #${alert.id}`, () => postAlertToSlack(alert));
+
         const nearMiss = nearMissWebhook(alert);
 
         await (nearMiss
             ? sendGoogleChatCard(alert, "REPORTED", nearMiss)
             : sendGoogleChatCard(alert, "REPORTED"));
+
+        await slackNearMiss;
 
         return;
 
