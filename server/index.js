@@ -46,7 +46,7 @@ const {
 const { startOfDayNY } = require("./services/nyTime");
 const { workingMs, overtimeDatesFrom, responseStats } = require("./services/workingTime");
 const { startDailyBackups } = require("./services/dailyBackup");
-const { ROLES, STEPS, lineGroupOf, startEscalationShadow } = require("./services/escalation");
+const { ROLES, STEPS, lineGroupOf, startEscalationShadow, isLive } = require("./services/escalation");
 const { BOARDS, familyFor, rateFor, priceRuns, planFor } = require("./services/hourlyBoard");
 const { PERIODS } = require("./services/hourlyPlan");
 const { countStationFor, fpyOf, periodAt, withActuals, PCB_STATION } = require("./services/hourlyActual");
@@ -2683,8 +2683,12 @@ app.get("/admin/escalation", authenticateToken, requireAdmin, (req, res) => {
 
     const lines = statements.getLineGroups.all();
 
+    const live = isLive(statements);
+
     res.json({
-        shadow: true,
+        shadow: !live,
+        live,
+        slackReady: Boolean(require("./services/slack").slackConfig("andon")),
         roles: ROLES,
         steps: STEPS,
         alertTypes: ["*", ...ESCALATION_TYPES],
@@ -2692,6 +2696,24 @@ app.get("/admin/escalation", authenticateToken, requireAdmin, (req, res) => {
         rules: statements.getEscalationRules.all(),
         team: statements.getRoutingTeam.all()
     });
+
+});
+
+// Slack S4: the live switch. On = each step is also posted as
+// @mentions in the alert's Slack thread; off = shadow (log only).
+app.put("/admin/escalation/settings", authenticateToken, requireAdmin, (req, res) => {
+
+    if (typeof req.body?.sendSlack !== "boolean")
+        return res.status(400).json({ success: false, message: "sendSlack must be true or false." });
+
+    if (req.body.sendSlack && !require("./services/slack").slackConfig("andon"))
+        return res.status(409).json({ success: false, message: "Slack isn't set up on this server (bot token / #andon-alerts channel), so escalations can't be sent." });
+
+    statements.setEscalationSetting.run("send_slack", req.body.sendSlack ? "1" : "0", Date.now());
+
+    console.log(`Escalation matrix switched to ${req.body.sendSlack ? "LIVE in Slack" : "SHADOW (nothing sent)"}`);
+
+    res.json({ success: true, live: req.body.sendSlack });
 
 });
 
