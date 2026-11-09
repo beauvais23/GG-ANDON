@@ -9,9 +9,9 @@ const { validateRequest, codeFor, describeLine } = require("../services/bomReque
 //------------------------------------------------------
 // BOM change requests: validation (invalid Add, Delete or
 // Change of a line not on the BOM, one change per component),
-// numbering BOM-YYYY-NNN, Google Chat card + Done reply in the
-// card's thread, and staging never using the production space.
-// CData and Google Chat are faked.
+// numbering BOM-YYYY-NNN, BOM Telegram group message + Done
+// edit and reply to it (Google Chat removed Nov 9 2026), and
+// staging never sending to Telegram. CData and Telegram are faked.
 //------------------------------------------------------
 
 const ITEMS = {
@@ -93,8 +93,15 @@ const { app } = loadApp();
 const { db } = require("../database");
 const { dateNY } = require("../services/nyTime");
 
+// Telegram (fetch) and Slack / anything else (axios) recorded.
 const posts = [];
-axios.post = async (url, body) => { posts.push({ url, body }); return { status: 200 }; };
+const other = [];
+
+axios.post = async url => { other.push(url); return { status: 200, data: {} }; };
+global.fetch = async (url, opts) => {
+    posts.push({ method: url.split("/").pop(), token: url.split("/")[3], body: JSON.parse(opts.body) });
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 4100 + posts.length } }));
+};
 
 const waitFor = async (fn, ms = 2000) => {
     const end = Date.now() + ms;
@@ -113,12 +120,13 @@ function seed() {
 
 }
 
-test("routes: send → BOM-YYYY-001 with lines and the BOM snapshot, card to the test space in its own thread; Done → reply in that thread; then 409", async () => {
+test("routes: send → BOM-YYYY-001 with lines and the BOM snapshot, one message in the BOM Telegram group (ID saved); Done → message edited + a reply to it; then 409", async () => {
 
     seed();
 
-    process.env.GOOGLE_CHAT_BOM_WEBHOOK_STAGING = "https://chat.example.test/v1/spaces/T/messages?key=k&token=t";
-    process.env.GOOGLE_CHAT_BOM_WEBHOOK = "https://chat.example.test/PRODUCTION";
+    process.env.APP_ENV = "production";
+    process.env.TELEGRAM_BOT_TOKEN = "test-token";
+    process.env.TELEGRAM_BOM_CHAT_ID = "-100BOM";
 
     const floor = (await request(app).post("/auth/login").send({ username: "test_floor", password: "test-floor-pw" })).body.token;
     const auth = r => r.set("Authorization", `Bearer ${floor}`);
@@ -138,19 +146,22 @@ test("routes: send → BOM-YYYY-001 with lines and the BOM snapshot, card to the
     assert.equal(sent.body.request.code, code);
     assert.equal(sent.body.request.lines.length, 2);
 
-    await waitFor(() => posts.length === 1);
+    await waitFor(() => db.prepare("SELECT telegram_message_id FROM bom_requests WHERE code = ?").get(code).telegram_message_id);
 
     assert.equal(posts.length, 1);
-    assert.ok(posts[0].url.startsWith("https://chat.example.test/v1/spaces/T/messages?"), "staging space, never the production variable");
-    assert.equal(new URL(posts[0].url).searchParams.get("threadKey"), code);
-    assert.match(JSON.stringify(posts[0].body), /20-111-A.*4 → 6/);
-    assert.match(JSON.stringify(posts[0].body), new RegExp(`/bom/requests\\?code=${code}`));
+    assert.equal(posts[0].method, "sendMessage");
+    assert.equal(posts[0].body.chat_id, "-100BOM");
+    assert.match(posts[0].body.text, new RegExp(`BOM CHANGE REQUEST ${code}`));
+    assert.match(posts[0].body.text, /20-111-A.*4 → 6/);
+    assert.match(posts[0].body.text, /ECO-12/);
+    assert.match(posts[0].body.text, new RegExp(`/bom/requests\\?code=${code}`));
+    assert.deepEqual(other, [], "no Google Chat (and Slack is not set up here)");
+
+    const messageId = Number(db.prepare("SELECT telegram_message_id FROM bom_requests WHERE code = ?").get(code).telegram_message_id);
 
     const detail = await auth(request(app).get(`/bom/requests/${code}`)).expect(200);
 
     assert.deepEqual(detail.body.request.snapshot.map(s => [s.line, s.component, s.qty]), [[1, "20-111-A", 4], [2, "20-222-A", 2]]);
-    await waitFor(() => db.prepare("SELECT chat_sent_at FROM bom_requests WHERE code = ?").get(code).chat_sent_at);
-    assert.ok(db.prepare("SELECT chat_sent_at FROM bom_requests WHERE code = ?").get(code).chat_sent_at);
 
     const second = await auth(request(app).post("/bom/requests")).send({ sku: "TOP-1", ...base, lines: [{ action: "DELETE", line: 2, component: "20-222-A" }] }).expect(201);
 
@@ -161,12 +172,15 @@ test("routes: send → BOM-YYYY-001 with lines and the BOM snapshot, card to the
     await auth(request(app).post(`/bom/requests/${code}/cancel`)).send({ by: "Someone", note: "late" }).expect(409);
     await auth(request(app).post(`/bom/requests/BOM-${year}-002/cancel`)).send({ by: "Tester" }).expect(400);
 
-    await waitFor(() => posts.length === 3);
+    await waitFor(() => posts.length === 4);
 
-    const done = posts.find(p => /DONE/.test(p.body.text || "") && !p.body.cardsV2);
+    const edit = posts.find(p => p.method === "editMessageText");
+    const reply = posts.find(p => p.body.reply_parameters);
 
-    assert.equal(new URL(done.url).searchParams.get("threadKey"), code, "Done reply goes in the card's thread");
-    assert.match(done.body.text, /DONE in QuickBooks by QB Editor: Edited in QB/);
+    assert.equal(edit.body.message_id, messageId);
+    assert.match(edit.body.text, /DONE in QuickBooks<\/b> by QB Editor: Edited in QB/);
+    assert.equal(reply.body.reply_parameters.message_id, messageId, "Done reply answers the request's message");
+    assert.match(reply.body.text, /done in QuickBooks by <b>QB Editor<\/b>: Edited in QB/);
 
     const open = await auth(request(app).get("/bom/requests?status=OPEN")).expect(200);
 
@@ -174,10 +188,9 @@ test("routes: send → BOM-YYYY-001 with lines and the BOM snapshot, card to the
 
 });
 
-test("routes: outside production with no staging space nothing is posted, even with the production webhook set; the reason is saved", async () => {
+test("routes: production without TELEGRAM_BOM_CHAT_ID → the reason is saved; outside production nothing is sent to Telegram even with the variables set", async () => {
 
-    delete process.env.GOOGLE_CHAT_BOM_WEBHOOK_STAGING;
-    process.env.GOOGLE_CHAT_BOM_WEBHOOK = "https://chat.example.test/PRODUCTION";
+    delete process.env.TELEGRAM_BOM_CHAT_ID;
     posts.length = 0;
     db.prepare("UPDATE bom_requests SET status = 'CANCELLED' WHERE status = 'OPEN'").run(); // no duplicate guard here
 
@@ -186,10 +199,22 @@ test("routes: outside production with no staging space nothing is posted, even w
     const r = await request(app).post("/bom/requests").set("Authorization", `Bearer ${floor}`)
         .send({ sku: "TOP-1", ...base, lines: [{ action: "CHANGE_QTY", line: 2, component: "20-222-A", newQty: 3 }] }).expect(201);
 
-    await waitFor(() => db.prepare("SELECT chat_error FROM bom_requests WHERE code = ?").get(r.body.request.code).chat_error);
+    await waitFor(() => db.prepare("SELECT telegram_error FROM bom_requests WHERE code = ?").get(r.body.request.code).telegram_error);
 
     assert.equal(posts.length, 0);
-    assert.match(db.prepare("SELECT chat_error FROM bom_requests WHERE code = ?").get(r.body.request.code).chat_error, /not production and no staging BOM space/);
+    assert.match(db.prepare("SELECT telegram_error FROM bom_requests WHERE code = ?").get(r.body.request.code).telegram_error, /BOM Telegram group not set up/);
+
+    process.env.APP_ENV = "test";
+    process.env.TELEGRAM_BOM_CHAT_ID = "-100BOM";
+    db.prepare("UPDATE bom_requests SET status = 'CANCELLED' WHERE status = 'OPEN'").run();
+
+    const staged = await request(app).post("/bom/requests").set("Authorization", `Bearer ${floor}`)
+        .send({ sku: "TOP-1", ...base, lines: [{ action: "CHANGE_QTY", line: 2, component: "20-222-A", newQty: 5 }] }).expect(201);
+
+    await new Promise(res => setTimeout(res, 100));
+
+    assert.equal(posts.length, 0, "staging never sends to Telegram");
+    assert.equal(db.prepare("SELECT telegram_message_id FROM bom_requests WHERE code = ?").get(staged.body.request.code).telegram_message_id, null);
 
     const items = await request(app).get("/bom/items?q=20-9").set("Authorization", `Bearer ${floor}`).expect(200);
 
@@ -199,14 +224,14 @@ test("routes: outside production with no staging space nothing is posted, even w
 
     assert.equal(none.body.items.length, 0, "service items can't be added");
 
-    delete process.env.GOOGLE_CHAT_BOM_WEBHOOK;
+    delete process.env.TELEGRAM_BOM_CHAT_ID;
+    delete process.env.TELEGRAM_BOT_TOKEN;
 
 });
 
 test("duplicate guard: a component already in an open request for the config → 409 with the request; confirmDuplicate sends it; other components and closed requests don't count; list filters by config", async () => {
 
     seed();
-    delete process.env.GOOGLE_CHAT_BOM_WEBHOOK_STAGING;
 
     const floor = (await request(app).post("/auth/login").send({ username: "test_floor", password: "test-floor-pw" })).body.token;
     const send = body => request(app).post("/bom/requests").set("Authorization", `Bearer ${floor}`).send({ sku: "TOP-1", ...base, ...body });

@@ -1,11 +1,12 @@
 //------------------------------------------------------
-// Near Miss routing (Director, Oct 30 2026)
+// Near Miss routing (Director, Oct 30 2026; Telegram groups
+// Nov 9 2026, Google Chat removed)
 //
-// NEAR_MISS alerts go only to the Near Miss Google Chat
-// space (GOOGLE_CHAT_NEAR_MISS_WEBHOOK): no Telegram, no
-// ANDON Chat space. Without that variable they fall back
-// to the usual channels. fetch (Telegram) and axios.post
-// (Google Chat) are replaced; nothing leaves the process.
+// NEAR_MISS alerts go to the Near Miss Telegram group
+// (TELEGRAM_NEAR_MISS_CHAT_ID), never the ANDON Telegram
+// channel; the other types go to the ANDON channel. Nothing
+// goes to Google Chat. fetch (Telegram) and axios.post are
+// replaced; nothing leaves the process.
 //------------------------------------------------------
 
 const { test, before, after, beforeEach, mock } = require("node:test");
@@ -37,16 +38,13 @@ const {
     notifyCancelled
 } = require("../services/notificationManager");
 
-const ANDON_CHAT = "https://chat.test/andon";
-const NEAR_MISS_CHAT = "https://chat.test/near-miss";
+const NEAR_MISS_GROUP = "-100777";
 
 const realFetch = global.fetch;
 const realPost = axios.post;
 
 let sent;
-
-const telegram = () => sent.filter(s => s.startsWith("telegram:"));
-const chat = () => sent.filter(s => s.startsWith("chat:"));
+let other;
 
 let floor;
 
@@ -78,20 +76,20 @@ before(async () => {
 beforeEach(() => {
 
     sent = [];
+    other = [];
 
-    global.fetch = async url => {
-        sent.push(`telegram:${url.split("/").pop()}`);
+    global.fetch = async (url, opts) => {
+        sent.push(`${url.split("/").pop()}:${JSON.parse(opts.body).chat_id}`);
         return new Response(JSON.stringify({ ok: true, result: { message_id: 500 } }));
     };
 
     axios.post = async url => {
-        sent.push(`chat:${url}`);
+        other.push(url);
         return { data: {} };
     };
 
     process.env.APP_ENV = "production";
-    process.env.GOOGLE_CHAT_WEBHOOK = ANDON_CHAT;
-    process.env.GOOGLE_CHAT_NEAR_MISS_WEBHOOK = NEAR_MISS_CHAT;
+    process.env.TELEGRAM_NEAR_MISS_CHAT_ID = NEAR_MISS_GROUP;
 
 });
 
@@ -100,8 +98,7 @@ after(() => {
     global.fetch = realFetch;
     axios.post = realPost;
     process.env.APP_ENV = "test";
-    delete process.env.GOOGLE_CHAT_WEBHOOK;
-    delete process.env.GOOGLE_CHAT_NEAR_MISS_WEBHOOK;
+    delete process.env.TELEGRAM_NEAR_MISS_CHAT_ID;
     delete process.env.TELEGRAM_BOT_TOKEN;
     delete process.env.TELEGRAM_CHAT_ID;
 
@@ -119,35 +116,36 @@ async function raiseQuietly(type) {
 
 }
 
-test("a new NEAR MISS alert posts only to the Near Miss Chat space", async () => {
+test("a new NEAR MISS posts only to the Near Miss Telegram group (message ID saved), not the ANDON channel or Chat", async () => {
 
     const alert = await raiseQuietly("NEAR_MISS");
 
     await notifyCreated(alert);
 
-    assert.deepEqual(chat(), [`chat:${NEAR_MISS_CHAT}`]);
-    assert.deepEqual(telegram(), [], "no Telegram");
-    assert.equal(statements.getAlert.get(alert.id).telegram_message_id, null);
+    assert.deepEqual(sent, [`sendMessage:${NEAR_MISS_GROUP}`]);
+    assert.deepEqual(other, [], "no Google Chat");
+
+    const row = statements.getAlert.get(alert.id);
+
+    assert.equal(row.telegram_message_id, null, "no ANDON channel message");
+    assert.equal(row.telegram_group_message_id, "500");
 
 });
 
-test("acknowledge, resolve and cancel updates of a NEAR MISS go only to the Near Miss space", async () => {
+test("undo / void of a NEAR MISS edits its Near Miss group message only", async () => {
 
     const alert = await raiseQuietly("NEAR_MISS");
 
-    for (const notify of [notifyAcknowledged, notifyResolved, notifyCancelled]) {
+    await notifyCreated(alert);
+    sent = [];
 
-        sent = [];
-        await notify(alert);
+    await notifyCancelled(statements.getAlert.get(alert.id));
 
-        assert.deepEqual(chat(), [`chat:${NEAR_MISS_CHAT}`], notify.name);
-        assert.deepEqual(telegram(), [], notify.name);
-
-    }
+    assert.deepEqual(sent, [`editMessageText:${NEAR_MISS_GROUP}`]);
 
 });
 
-test("the other six types are unchanged: ANDON Chat space + Telegram", async () => {
+test("the other six types go to the ANDON Telegram channel only; acknowledge edits that message; no Google Chat", async () => {
 
     for (const type of ["QUALITY", "MAINTENANCE", "MATERIAL", "SUPERVISOR", "SAFETY", "DOWNTIME"]) {
 
@@ -155,8 +153,13 @@ test("the other six types are unchanged: ANDON Chat space + Telegram", async () 
 
         await notifyCreated(alert);
 
-        assert.deepEqual(chat(), [`chat:${ANDON_CHAT}`], type);
-        assert.deepEqual(telegram(), ["telegram:sendMessage"], type);
+        assert.deepEqual(sent, ["sendMessage:1"], type);
+
+        sent = [];
+        await notifyAcknowledged(statements.getAlert.get(alert.id));
+
+        assert.deepEqual(sent, ["editMessageText:1"], type);
+        assert.deepEqual(other, [], type);
 
         // Close it so the next type isn't a duplicate on the station.
         process.env.APP_ENV = "test";
@@ -167,21 +170,20 @@ test("the other six types are unchanged: ANDON Chat space + Telegram", async () 
 
 });
 
-test("without GOOGLE_CHAT_NEAR_MISS_WEBHOOK a NEAR MISS falls back to the ANDON Chat space (never Telegram: nothing to acknowledge)", async () => {
+test("without TELEGRAM_NEAR_MISS_CHAT_ID a NEAR MISS is not sent to Telegram at all (never the ANDON channel), with a warning", async () => {
 
-    delete process.env.GOOGLE_CHAT_NEAR_MISS_WEBHOOK;
+    delete process.env.TELEGRAM_NEAR_MISS_CHAT_ID;
 
     const alert = await raiseQuietly("NEAR_MISS");
 
     await notifyCreated(alert);
 
-    assert.deepEqual(chat(), [`chat:${ANDON_CHAT}`]);
-    assert.deepEqual(telegram(), []);
-    assert.ok(console.warn.mock.calls.some(c => /GOOGLE_CHAT_NEAR_MISS_WEBHOOK not set/.test(c.arguments[0])));
+    assert.deepEqual(sent, []);
+    assert.ok(console.warn.mock.calls.some(c => /TELEGRAM_NEAR_MISS_CHAT_ID not set/.test(c.arguments[0])));
 
 });
 
-test("a NEAR MISS raised before routing was on keeps its Telegram message up to date", async () => {
+test("a NEAR MISS raised before routing was on keeps its ANDON Telegram message up to date", async () => {
 
     const alert = await raiseQuietly("NEAR_MISS");
 
@@ -189,7 +191,6 @@ test("a NEAR MISS raised before routing was on keeps its Telegram message up to 
 
     await notifyAcknowledged(statements.getAlert.get(alert.id));
 
-    assert.deepEqual(chat(), [`chat:${NEAR_MISS_CHAT}`]);
-    assert.deepEqual(telegram(), ["telegram:editMessageText"]);
+    assert.deepEqual(sent, ["editMessageText:1"]);
 
 });

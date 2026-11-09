@@ -21,7 +21,7 @@ mock.method(console, "warn", () => {});
 
 const { statements } = require("../database");
 const { responseStats } = require("../services/workingTime");
-const { sendGoogleChatCard } = require("../services/googleChat");
+const { nearMissText } = require("../services/telegramGroups");
 const { NEAR_MISS_LOGGED_NOTE } = require("../services/alertTypes");
 
 const LINE = "Team A";
@@ -153,36 +153,16 @@ test("MTTA/MTTR leave near misses out", () => {
 
 });
 
-test("the Google Chat card for a logged near miss reads REPORTED, with no responder or timers", async () => {
+test("the Telegram near miss message reads REPORTED / LOGGED, VOIDED with the reason once undone", () => {
 
-    const realPost = axios.post;
-    let body;
+    const alert = { id: 12, type: "NEAR_MISS", status: "RESOLVED", production_line: "Team A", work_center: "Assembly", requested: Date.now() };
 
-    axios.post = async (url, payload) => { body = payload; return { data: {} }; };
-    process.env.APP_ENV = "production";
-
-    try {
-
-        const alert = (await raise("NEAR_MISS")).body.alert;
-
-        await sendGoogleChatCard(alert, "REPORTED", "https://chat.test/near-miss");
-
-    } finally {
-
-        axios.post = realPost;
-        process.env.APP_ENV = "test";
-
-    }
-
-    const text = JSON.stringify(body);
-
-    assert.equal(body.cardsV2[0].card.header.title, "⚠️ NEAR MISS REPORTED");
-    assert.match(text, /Team A \/ Logged Station/);
-    assert.match(text, /Near Miss &amp; Safety Incident Form/);
-    assert.doesNotMatch(text, /Unassigned|PRIORITY|Resolution/);
+    assert.match(nearMissText(alert), /NEAR MISS REPORTED #12/);
+    assert.match(nearMissText(alert), /LOGGED/);
+    assert.doesNotMatch(nearMissText(alert), /VOIDED/);
+    assert.match(nearMissText({ ...alert, status: "CANCELLED", resolution_notes: "Voided by Admin: <test>" }), /VOIDED<\/b>: Voided by Admin: &lt;test&gt;/);
 
 });
-
 
 test("Admin Void: lists logged near misses and voids one after the Undo window, admin only, reason required", async () => {
 

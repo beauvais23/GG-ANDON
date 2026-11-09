@@ -20,7 +20,6 @@
 
 const fs = require("fs");
 const path = require("path");
-const axios = require("axios");
 const jwt = require("jsonwebtoken");
 
 const { listBackups } = require("../migrations/restore");
@@ -386,7 +385,6 @@ async function alertIfStale(now = Date.now()) {
     if (!status.stale || !notificationsEnabled())
         return false;
 
-    const webhook = process.env.GOOGLE_CHAT_WEBHOOK;
     const today = dateNY(now);
 
     if (state.lastAlertDate === today)
@@ -409,7 +407,7 @@ async function alertIfStale(now = Date.now()) {
 
     let sent = false;
 
-    // Slack #mos-system (S3) and the ANDON Google Chat space (until S5).
+    // Slack #mos-system (Google Chat removed, Nov 9 2026).
     try {
 
         sent = await require("./slack").postSystemToSlack(text);
@@ -417,21 +415,6 @@ async function alertIfStale(now = Date.now()) {
     } catch (err) {
 
         console.error("Off-site backup warning to Slack failed:", err.message);
-
-    }
-
-    if (webhook) {
-
-        try {
-
-            await axios.post(webhook, { text }, { timeout: TIMEOUT_MS });
-            sent = true;
-
-        } catch (err) {
-
-            console.error("Off-site backup warning to Google Chat failed:", err.message);
-
-        }
 
     }
 
