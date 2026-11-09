@@ -55,6 +55,7 @@ const { checkRows } = require("./services/rateImport");
 const { createQbBom } = require("./services/qbBom");
 const { bomRoutes } = require("./routes/bom");
 const { mrpRoutes } = require("./routes/mrp");
+const { slackRoutes } = require("./routes/slack");
 const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
 const {
@@ -129,6 +130,9 @@ app.use(bomRoutes(qbBom, db));
 
 // Material check (open orders × BOM explosion): routes/mrp.js
 app.use(mrpRoutes(qbBom));
+
+// Slack buttons (S2): signed requests only; routes/slack.js
+app.use(slackRoutes({ statements, releaseResponders, queueNotification, notifyAcknowledged, notifyResolved, notifyCancelled }));
 
 //------------------------------------------------------
 // Authentication
@@ -2410,6 +2414,33 @@ if (availability !== undefined && !cleanAvailability) {
 
         
 
+        // Slack member ID (S2): optional; "" clears it. One active responder per Slack user.
+        const slackId = req.body.slack_user_id === undefined ? undefined : String(req.body.slack_user_id || "").trim().toUpperCase();
+
+        if (slackId && !/^[UW][A-Z0-9]{6,20}$/.test(slackId)) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Slack member ID looks like U0123ABCD (Slack profile → ⋮ → Copy member ID)."
+            });
+
+        }
+
+        if (slackId) {
+
+            const owner = statements.getResponderBySlack.get(slackId);
+
+            if (owner && String(owner.id) !== String(req.params.id)) {
+
+                return res.status(409).json({
+                    success: false,
+                    message: `That Slack member ID is already linked to ${owner.name}.`
+                });
+
+            }
+
+        }
+
         //----------------------------------------------
         // Verify responder exists
         //----------------------------------------------
@@ -2445,6 +2476,9 @@ if (availability !== undefined && !cleanAvailability) {
     req.params.id
 
 );
+
+        if (slackId !== undefined)
+            statements.setResponderSlack.run(slackId || null, now, req.params.id);
 
         const responder =
             statements.getResponder.get(req.params.id);

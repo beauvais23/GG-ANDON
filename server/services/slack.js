@@ -5,13 +5,16 @@ const { notifyTimeoutMs } = require("./notificationQueue");
 const { label } = require("./alertTypes");
 
 //------------------------------------------------------
-// Slack, S1 (Nov 9 2026): andon alerts in #andon-alerts
+// Slack, S1–S2 (Nov 9 2026): andon alerts in #andon-alerts
 //
 // One message per alert (chat.postMessage), updated in place
 // (chat.update) on acknowledge / resolve / cancel / note, with a
 // short reply in its thread for each step. Runs beside Telegram
 // and Google Chat (parallel run, 1 week). Near misses are not
-// sent to Slack yet (S3). No buttons yet (S2).
+// sent to Slack yet (S3).
+// S2: Acknowledge / Resolve / Cancel buttons on open alerts, shown
+// only when this environment's signing secret is set (presses are
+// verified in routes/slack.js); Resolve and Cancel open a box.
 //
 // Bot tokens (Slack Web API, Bearer):
 //   production: SLACK_BOT_TOKEN + SLACK_CHANNEL_ANDON, read only
@@ -25,6 +28,14 @@ const { label } = require("./alertTypes");
 //------------------------------------------------------
 
 const API = "https://slack.com/api";
+
+// Signing secret of this environment's Slack app (verifies button
+// presses). Without it the message has no buttons.
+function signingSecret() {
+
+    return (notificationsEnabled() ? process.env.SLACK_SIGNING_SECRET : process.env.SLACK_STAGING_SIGNING_SECRET) || null;
+
+}
 
 function slackConfig() {
 
@@ -124,9 +135,108 @@ function alertBlocks(alert, now = Date.now()) {
     if (alert.resolution_notes && (alert.status === "RESOLVED" || alert.status === "CANCELLED"))
         blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${alert.status === "CANCELLED" ? "Cancel reason" : "Resolution"}*\n${esc(alert.resolution_notes).slice(0, 2500)}` } });
 
+    const buttons = alertButtons(alert);
+
+    if (buttons.length && signingSecret())
+        blocks.push({ type: "actions", block_id: "alert_actions", elements: buttons });
+
     blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `<${supervisorUrl}|Open the Response Center> · G&G ManufacturingOS` }] });
 
     return blocks;
+
+}
+
+// Open alert → Acknowledge (ACTIVE) or Resolve (ACKNOWLEDGED), and
+// Cancel. The value is the alert ID.
+function alertButtons(alert) {
+
+    const id = String(alert.id);
+
+    if (alert.status === "ACTIVE")
+        return [
+            { type: "button", action_id: "ack", text: { type: "plain_text", text: "👷 Acknowledge" }, style: "primary", value: id },
+            { type: "button", action_id: "cancel", text: { type: "plain_text", text: "Cancel" }, value: id }
+        ];
+
+    if (alert.status === "ACKNOWLEDGED")
+        return [
+            { type: "button", action_id: "resolve", text: { type: "plain_text", text: "✅ Resolve" }, style: "primary", value: id },
+            { type: "button", action_id: "cancel", text: { type: "plain_text", text: "Cancel" }, value: id }
+        ];
+
+    return [];
+
+}
+
+// Same reasons as the tablet (#28).
+const CANCEL_REASONS = ["Pressed by mistake", "Problem cleared itself", "Test", "Other"];
+
+function resolveModal(alert) {
+
+    return {
+        type: "modal",
+        callback_id: "resolve_alert",
+        private_metadata: String(alert.id),
+        title: { type: "plain_text", text: `Resolve alert #${alert.id}` },
+        submit: { type: "plain_text", text: "Resolve" },
+        close: { type: "plain_text", text: "Back" },
+        blocks: [
+            { type: "section", text: { type: "mrkdwn", text: `*${esc(label(alert.type))}* · ${esc(alert.production_line)} / ${esc(alert.work_center)}` } },
+            { type: "input", block_id: "note", label: { type: "plain_text", text: "What fixed it?" }, element: { type: "plain_text_input", action_id: "value", multiline: true, max_length: 500 } }
+        ]
+    };
+
+}
+
+function cancelModal(alert) {
+
+    return {
+        type: "modal",
+        callback_id: "cancel_alert",
+        private_metadata: String(alert.id),
+        title: { type: "plain_text", text: `Cancel alert #${alert.id}` },
+        submit: { type: "plain_text", text: "Cancel alert" },
+        close: { type: "plain_text", text: "Keep it open" },
+        blocks: [
+            { type: "section", text: { type: "mrkdwn", text: `*${esc(label(alert.type))}* · ${esc(alert.production_line)} / ${esc(alert.work_center)}` } },
+            {
+                type: "input", block_id: "reason", label: { type: "plain_text", text: "Why cancel this alert?" },
+                element: { type: "static_select", action_id: "value", options: CANCEL_REASONS.map(r => ({ text: { type: "plain_text", text: r }, value: r })) }
+            },
+            { type: "input", block_id: "other", optional: true, label: { type: "plain_text", text: "If Other: what happened?" }, element: { type: "plain_text_input", action_id: "value", max_length: 200 } }
+        ]
+    };
+
+}
+
+async function openModal(triggerId, view, post) {
+
+    const cfg = slackConfig();
+
+    if (!cfg)
+        throw new Error("Slack is not set up in this environment.");
+
+    return slackApi("views.open", { trigger_id: triggerId, view }, cfg.token, post);
+
+}
+
+// Private answer to the person who pressed (response_url from Slack).
+async function tellUser(responseUrl, text, post = axios.post) {
+
+    if (!responseUrl || !/^https:\/\/hooks\.slack\.com\//.test(responseUrl))
+        return;
+
+    try {
+
+        await post(responseUrl, { response_type: "ephemeral", replace_original: false, text }, { timeout: notifyTimeoutMs() });
+
+    }
+
+    catch (err) {
+
+        console.error(`✗ Slack: could not answer the press: ${err.code || err.message}`);
+
+    }
 
 }
 
@@ -192,4 +302,4 @@ async function updateAlertInSlack(alert, { step = true, post } = {}) {
 
 }
 
-module.exports = { slackConfig, slackApi, alertBlocks, stepText, postAlertToSlack, updateAlertInSlack, span };
+module.exports = { slackConfig, signingSecret, slackApi, alertBlocks, alertButtons, stepText, postAlertToSlack, updateAlertInSlack, span, resolveModal, cancelModal, openModal, tellUser, CANCEL_REASONS };

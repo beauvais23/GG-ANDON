@@ -322,7 +322,12 @@ export default function RespondersPanel() {
                     >
 
                         <Box sx={{ minWidth: 0, flex: "1 1 220px" }}>
-                            <Box sx={{ fontWeight: 600 }}>{responder.name}</Box>
+                            <Box sx={{ fontWeight: 600 }}>
+                                {responder.name}
+                                {responder.slack_user_id
+                                    ? <Box component="span" title={`Slack ${responder.slack_user_id}`} sx={{ ml: 1, fontSize: 11, color: tokens.blueText, border: `1px solid ${tokens.blueText}`, borderRadius: "3px", px: 0.5 }}>Slack</Box>
+                                    : <Box component="span" title="No Slack member ID: Slack buttons won't record this person" sx={{ ml: 1, fontSize: 11, color: tokens.muted }}>no Slack</Box>}
+                            </Box>
                             {responder.job_title && (
                                 <Box sx={{ fontSize: 13, color: tokens.muted }}>{responder.job_title}</Box>
                             )}

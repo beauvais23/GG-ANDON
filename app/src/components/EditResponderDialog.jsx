@@ -40,6 +40,7 @@ export default function EditResponderDialog({
     const [jobTitle, setJobTitle] = useState("");
     const [phone, setPhone] = useState("");
     const [email, setEmail] = useState("");
+    const [slackId, setSlackId] = useState("");
     const [availability, setAvailability] =
         useState("Available");
 
@@ -52,6 +53,7 @@ export default function EditResponderDialog({
             setJobTitle(responder.job_title || "");
             setPhone(responder.phone || "");
             setEmail(responder.email || "");
+            setSlackId(responder.slack_user_id || "");
             setAvailability(
                 responder.availability || "Available"
             );
@@ -71,7 +73,8 @@ export default function EditResponderDialog({
             job_title: jobTitle,
             phone,
             email,
-            availability
+            availability,
+            slack_user_id: slackId.trim()
 
         });
 
@@ -102,6 +105,21 @@ export default function EditResponderDialog({
                     onChange={(e) =>
                         setName(e.target.value)
                     }
+                />
+
+                {/* Slack S2: links this person's Slack account, so the
+                    Acknowledge / Resolve / Cancel buttons in Slack are
+                    recorded under their name. */}
+                <TextField
+                    fullWidth
+                    margin="normal"
+                    label="Slack member ID"
+                    placeholder="U0123ABCD"
+                    value={slackId}
+                    onChange={(e) =>
+                        setSlackId(e.target.value)
+                    }
+                    helperText="In Slack: their profile → ⋮ (More) → Copy member ID. Needed to use the Slack buttons."
                 />
 
                 <TextField
