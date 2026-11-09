@@ -456,4 +456,61 @@ async function postSystemToSlack(text, post) {
 
 }
 
-module.exports = { describeSlack, postBomToSlack, updateBomInSlack, bomBlocks, postSystemToSlack, slackConfig, signingSecret, slackApi, alertBlocks, alertButtons, stepText, postAlertToSlack, updateAlertInSlack, span, resolveModal, cancelModal, openModal, tellUser, CANCEL_REASONS };
+//------------------------------------------------------
+// Escalation (S4) → the alert's #andon-alerts thread
+//------------------------------------------------------
+
+function stepHeading(step, minutes) {
+
+    if (step === "START")
+        return "🔔 *New alert*";
+
+    if (step === "UNACK")
+        return `⏰ *${minutes} min unacknowledged*`;
+
+    return `⏳ *${minutes} min acknowledged, still open*`;
+
+}
+
+// items: [{ step, minutes, role, people: [{ name, slack_user_id }] }]
+function escalationText(alert, items) {
+
+    const heading = [...new Set(items.map(i => stepHeading(i.step, i.minutes)))].join(" · ");
+    const who = items.map(i => {
+
+        const names = i.people.length
+            ? i.people.map(p => (p.slack_user_id ? `<@${p.slack_user_id}>` : `${esc(p.name)} (no Slack ID)`)).join(", ")
+            : "⚠️ nobody has this role";
+
+        return `• ${esc(i.role)}: ${names}`;
+
+    });
+
+    return `${heading}: ${label(alert.type)} #${alert.id} · ${esc(alert.production_line)} / ${esc(alert.work_center)}\n${who.join("\n")}`;
+
+}
+
+// In the alert's thread; if the alert has no Slack message (Slack
+// was down when it was raised), as a new message in #andon-alerts.
+async function postEscalationToSlack(alert, items, post) {
+
+    const cfg = slackConfig("andon");
+
+    if (!cfg)
+        return false;
+
+    const latest = db().statements.getAlert.get(alert.id) || alert;
+    const body = { channel: latest.slack_channel || cfg.channel, text: escalationText(latest, items), unfurl_links: false };
+
+    if (latest.slack_ts)
+        body.thread_ts = latest.slack_ts;
+
+    await slackApi("chat.postMessage", body, cfg.token, post);
+
+    console.log(`✓ Slack: escalation for alert #${alert.id} (${items.map(i => i.role).join(", ")})`);
+
+    return true;
+
+}
+
+module.exports = { postEscalationToSlack, escalationText, describeSlack, postBomToSlack, updateBomInSlack, bomBlocks, postSystemToSlack, slackConfig, signingSecret, slackApi, alertBlocks, alertButtons, stepText, postAlertToSlack, updateAlertInSlack, span, resolveModal, cancelModal, openModal, tellUser, CANCEL_REASONS };

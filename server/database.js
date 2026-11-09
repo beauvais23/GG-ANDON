@@ -411,7 +411,7 @@ deleteEscalationRule: db.prepare(`
 `),
 
 getRoutingTeam: db.prepare(`
-    SELECT id, name, department, job_title, role, line_group, active
+    SELECT id, name, department, job_title, role, line_group, active, slack_user_id
     FROM response_team
     WHERE archived_at IS NULL
     ORDER BY name
@@ -436,6 +436,20 @@ logEscalation: db.prepare(`
     INSERT OR IGNORE INTO escalation_log
     (alert_id, rule_id, alert_type, production_line, step, minutes, role, recipients, fired_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`),
+
+// Slack S4: the live switch and each step's Slack result.
+getEscalationSetting: db.prepare(`
+    SELECT value FROM escalation_settings WHERE key = ?
+`),
+
+setEscalationSetting: db.prepare(`
+    INSERT INTO escalation_settings (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+`),
+
+markEscalationSlack: db.prepare(`
+    UPDATE escalation_log SET slack_sent_at = ?, slack_error = ? WHERE id = ?
 `),
 
 getEscalationLog: db.prepare(`
