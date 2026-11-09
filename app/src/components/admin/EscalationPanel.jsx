@@ -21,6 +21,7 @@ import {
     deleteEscalationRule,
     getEscalation,
     getEscalationLog,
+    setEscalationLive,
     setPersonRole,
     updateEscalationRule
 } from "../../api/escalation";
@@ -35,8 +36,10 @@ import { labelSx, tokens } from "../../theme/theme";
 // 2. Rules: who is notified at the start, after N working
 //    minutes unacknowledged, or N working minutes after the
 //    acknowledge while still open.
-// 3. Shadow log: who WOULD have been notified. Nothing is
-//    sent until the Director confirms the thresholds.
+// 3. Log: who was (live) or would have been (shadow) notified.
+// Slack S4 (Nov 9 2026): "Send in Slack" switch. On = each step is
+// also posted as @mentions in the alert's #andon-alerts thread;
+// off = shadow (nothing sent). Each log row shows the Slack result.
 //------------------------------------------------------
 
 const STEP_TEXT = {
@@ -132,9 +135,38 @@ export default function EscalationPanel() {
         <AdminPanel title="Escalation" meta="Who would be notified, and when (working minutes only)">
 
             <Box sx={{ px: 2.25, py: 1.5 }}>
-                <Alert severity="warning" variant="outlined">
-                    <b>SHADOW MODE.</b> The matrix logs who <i>would</i> be notified and <b>sends nothing</b>. It goes live only after you confirm the thresholds from this data.
-                </Alert>
+                <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2, mb: 1.5 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Switch
+                            checked={Boolean(data.live)}
+                            disabled={!data.live && !data.slackReady}
+                            onChange={e => {
+
+                                const on = e.target.checked;
+
+                                if (on && !window.confirm("Send escalations in Slack? Each step will @mention the people in that role in the alert's #andon-alerts thread."))
+                                    return;
+
+                                act(() => setEscalationLive(on));
+
+                            }}
+                            slotProps={{ input: { "aria-label": "Send escalations in Slack" } }}
+                        />
+                        <Box sx={{ fontWeight: 700 }}>Send in Slack</Box>
+                    </Box>
+                    {!data.slackReady && <Box sx={{ fontSize: 13, color: tokens.muted }}>Slack isn't set up on this server (bot token / #andon-alerts).</Box>}
+                </Box>
+                {data.live
+                    ? (
+                        <Alert severity="success" variant="outlined">
+                            <b>LIVE IN SLACK.</b> Each step below @mentions the people in that role in the alert's #andon-alerts thread. People without a Slack member ID (Admin → Responders) are named but not pinged. Turn the switch off to go back to shadow mode.
+                        </Alert>
+                    )
+                    : (
+                        <Alert severity="warning" variant="outlined">
+                            <b>SHADOW MODE.</b> The matrix logs who <i>would</i> be notified and <b>sends nothing</b>. Turn on <b>Send in Slack</b> to go live.
+                        </Alert>
+                    )}
                 {error && <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>}
             </Box>
 
@@ -277,13 +309,13 @@ export default function EscalationPanel() {
 
             </Section>
 
-            <Section title={`Shadow log · last ${log?.days || 14} days · nothing was sent`}>
+            <Section title={`Escalation log · last ${log?.days || 14} days · ${data.live ? "sent in Slack when marked" : "shadow: nothing was sent"}`}>
 
                 {(!log || log.events.length === 0) && <EmptyRow>No escalations would have fired yet.</EmptyRow>}
 
                 {log?.events.map(e => (
 
-                    <AdminRow key={e.id} sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "200px 230px 280px minmax(200px, 1fr)" } }}>
+                    <AdminRow key={e.id} sx={{ display: { xs: "flex", md: "grid" }, gridTemplateColumns: { md: "200px 230px 260px minmax(200px, 1fr) 150px" } }}>
 
                         <Box sx={{ fontFamily: tokens.mono, fontSize: 13 }}>{when(e.fired_at)}</Box>
 
@@ -297,6 +329,10 @@ export default function EscalationPanel() {
                             {e.recipients.length
                                 ? e.recipients.join(", ")
                                 : <Box component="span" sx={{ color: "#FFA040" }}>nobody has this role</Box>}
+                        </Box>
+
+                        <Box sx={{ fontSize: 13, color: e.slack_error ? "#FFA040" : e.slack_sent_at ? tokens.online : tokens.muted }} title={e.slack_error || ""}>
+                            {e.slack_error ? "Slack failed" : e.slack_sent_at ? "Sent in Slack" : "Shadow (not sent)"}
                         </Box>
 
                     </AdminRow>
