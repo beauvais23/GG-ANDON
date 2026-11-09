@@ -32,7 +32,9 @@ function bomRoutes(qbBom, db) {
         searchItems: db.prepare(`SELECT full_name, type, description, uom, on_hand FROM qb_items
             WHERE active = 1 AND type IN (${ADDABLE.map(() => "?").join(", ")}) AND (full_name LIKE ? OR description LIKE ?)
             ORDER BY CASE WHEN full_name LIKE ? THEN 0 ELSE 1 END, full_name LIMIT 40`),
-        item: db.prepare("SELECT * FROM qb_items WHERE full_name = ?")
+        item: db.prepare("SELECT * FROM qb_items WHERE full_name = ?"),
+        openForSku: db.prepare(`SELECT r.code, r.reason, r.requested_by, r.requested_at, l.component, l.action FROM bom_requests r
+            JOIN bom_request_lines l ON l.request_id = r.id WHERE r.sku = ? AND r.status = 'OPEN' ORDER BY r.requested_at`)
     };
 
     const withLines = r => ({ ...r, lines: st.lines.all(r.id), snapshot: undefined });
@@ -135,6 +137,19 @@ function bomRoutes(qbBom, db) {
         if (errors.length)
             return res.status(400).json({ success: false, message: errors[0], errors });
 
+        // Duplicate guard (Nov 6 2026): a component already in an open
+        // request for this config needs confirmDuplicate: true.
+        const wanted = new Set(lines.map(l => l.component));
+        const duplicates = st.openForSku.all(sku).filter(d => wanted.has(d.component));
+
+        if (duplicates.length && req.body?.confirmDuplicate !== true) {
+
+            const codes = [...new Set(duplicates.map(d => d.code))].join(", ");
+
+            return res.status(409).json({ success: false, message: `Already in open request ${codes}: ${[...new Set(duplicates.map(d => d.component))].join(", ")}.`, duplicates });
+
+        }
+
         const now = Date.now();
         const year = Number(dateNY(now).slice(0, 4));
 
@@ -174,8 +189,9 @@ function bomRoutes(qbBom, db) {
         const from = okDate(req.query.from) ? startOfDayNY(Date.parse(`${req.query.from}T12:00:00Z`)) : 0;
         const to = okDate(req.query.to) ? startOfDayNY(Date.parse(`${req.query.to}T12:00:00Z`) + 86400000) : 8.64e15;
         const status = ["OPEN", "DONE", "CANCELLED"].includes(req.query.status) ? req.query.status : null;
+        const sku = req.query.sku ? String(req.query.sku).slice(0, 100) : null;
 
-        const rows = st.list.all(from, to).filter(r => !status || r.status === status);
+        const rows = st.list.all(from, to).filter(r => (!status || r.status === status) && (!sku || r.sku === sku));
 
         res.json({ requests: rows.map(withLines), reasons: REASONS });
 

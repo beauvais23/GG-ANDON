@@ -1,6 +1,7 @@
 const cdata = require("./cdataClient");
 const { explode, MAX_LEVEL } = require("./bomExplode");
 const { familyFor } = require("./hourlyBoard");
+const { isHold } = require("./mrp");
 
 //------------------------------------------------------
 // QuickBooks items + BOMs for the BOM viewer (Nov 5 2026)
@@ -23,6 +24,8 @@ const BOM_TTL_MS = 60 * 60 * 1000;
 const ITEMS_MAX_AGE_MS = 20 * 60 * 60 * 1000;
 const CHECK_MS = 10 * 60 * 1000;
 const BATCH = 40;
+const MRP_TTL_MS = 60 * 60 * 1000;
+const MRP_DEPTH = 12;
 
 const LINE_GROUPS = ["Team A", "Team B", "SpaceX", "PCB Coating", "Other"];
 const SPACEX = ["Gigabay", "Gigabay - Vertical", "Terabay", "Deca"];
@@ -30,6 +33,8 @@ const SPACEX = ["Gigabay", "Gigabay - Vertical", "Terabay", "Deca"];
 const groupOfBoard = board => (SPACEX.includes(board) ? "SpaceX" : board || "Other");
 
 const bool = v => v === true || v === 1 || v === "true" || v === "True";
+const num = v => (v === null || v === undefined || v === "" ? null : Number(v));
+const day = v => (v ? String(v).slice(0, 10) : null);
 
 function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
@@ -37,7 +42,14 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     const st = {
         replaceItems: db.prepare("DELETE FROM qb_items"),
-        insertItem: db.prepare("INSERT OR REPLACE INTO qb_items (full_name, type, description, uom, active, on_hand, time_modified) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+        insertItem: db.prepare("INSERT OR REPLACE INTO qb_items (full_name, type, description, uom, active, on_hand, time_modified, on_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+        allItems: db.prepare("SELECT * FROM qb_items"),
+        clearSo: db.prepare("DELETE FROM qb_open_so_lines"),
+        insertSo: db.prepare("INSERT INTO qb_open_so_lines (so, line, customer, item, ordered, shipped, ship_date, hold) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+        allSo: db.prepare("SELECT * FROM qb_open_so_lines"),
+        clearPo: db.prepare("DELETE FROM qb_open_po_lines"),
+        insertPo: db.prepare("INSERT INTO qb_open_po_lines (po, line, vendor, item, ordered, received, expected_date) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+        allPo: db.prepare("SELECT * FROM qb_open_po_lines"),
         getItem: db.prepare("SELECT * FROM qb_items WHERE full_name = ?"),
         countItems: db.prepare("SELECT COUNT(*) AS n FROM qb_items"),
         assemblies: db.prepare("SELECT full_name, description FROM qb_items WHERE type = 'InventoryAssembly' AND active = 1 ORDER BY full_name"),
@@ -88,7 +100,7 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
         itemsRunning = logged("items", async () => {
 
             const rows = await cdata.queryAll(
-                `SELECT FullName, Type, Description, UnitOfMeasure, IsActive, QuantityOnHand, TimeModified FROM ${s}.[Company_Items] ORDER BY FullName`,
+                `SELECT FullName, Type, Description, UnitOfMeasure, IsActive, QuantityOnHand, TimeModified, QuantityOnOrder FROM ${s}.[Company_Items] ORDER BY FullName`,
                 query
             );
 
@@ -106,7 +118,7 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
                     st.insertItem.run(r.FullName, r.Type || null, r.Description || null, r.UnitOfMeasure || null,
                         bool(r.IsActive) ? 1 : 0, r.QuantityOnHand === null || r.QuantityOnHand === undefined ? null : Number(r.QuantityOnHand),
-                        r.TimeModified || null);
+                        r.TimeModified || null, num(r.QuantityOnOrder));
 
                 }
 
@@ -170,28 +182,17 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     }
 
-    async function getBom(sku) {
-
-        if (!st.countItems.get().n)
-            await refreshItems();
-
-        const top = itemOf(sku);
-
-        if (!top || top.type !== "InventoryAssembly") {
-
-            const err = new Error(`${sku} is not a QuickBooks assembly.`);
-            err.status = 404;
-            throw err;
-
-        }
+    // Fetch the BOM lines of these assemblies and their sub-assemblies
+    // (one CData query per level, batches of BATCH, only what is older
+    // than BOM_TTL). Returns the first error, or null. Used by the BOM
+    // viewer (one SKU) and the Material check (every SKU on order).
+    async function loadTrees(roots, depthLimit = MAX_LEVEL) {
 
         let error = null;
         const seen = new Set();
-        let level = [sku];
+        let level = [...new Set(roots)];
 
-        // Level by level: fetch what's stale, then the next level's
-        // sub-assemblies. Depth MAX_LEVEL is enough for the explosion.
-        for (let depth = 1; depth <= MAX_LEVEL && level.length; depth++) {
+        for (let depth = 1; depth <= depthLimit && level.length; depth++) {
 
             level.forEach(a => seen.add(a));
 
@@ -231,6 +232,137 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
             level = [...next];
 
         }
+
+        return error;
+
+    }
+
+    // Open sales-order and purchase-order lines, replaced as a whole
+    // after a complete pull (a failed pull keeps the last good lines).
+    let ordersRunning = null;
+
+    function refreshOrders() {
+
+        if (ordersRunning)
+            return ordersRunning;
+
+        ordersRunning = (async () => {
+
+            const so = await logged("so", async () => {
+
+                const rows = await cdata.queryAll(
+                    `SELECT ReferenceNumber, ItemLineNumber, CustomerName, ItemName, QtyOrdered, QtyShipped, ExpectedShipDate, CustomFields FROM ${s}.[Company_OpenOrderLines] ORDER BY ReferenceNumber, ItemLineNumber`,
+                    query
+                );
+
+                db.transaction(() => {
+
+                    st.clearSo.run();
+
+                    for (const r of rows)
+                        st.insertSo.run(r.ReferenceNumber || null, r.ItemLineNumber == null ? null : String(r.ItemLineNumber), r.CustomerName || null, r.ItemName || null,
+                            num(r.QtyOrdered), num(r.QtyShipped), day(r.ExpectedShipDate), isHold(r.CustomFields) ? 1 : 0);
+
+                })();
+
+                return rows.length;
+
+            });
+
+            const po = await logged("po", async () => {
+
+                const rows = await cdata.queryAll(
+                    `SELECT ReferenceNumber, ItemLineNumber, VendorName, ItemName, QtyOrdered, QtyReceived, ExpectedDate FROM ${s}.[Company_OpenPOLines] ORDER BY ReferenceNumber, ItemLineNumber`,
+                    query
+                );
+
+                db.transaction(() => {
+
+                    st.clearPo.run();
+
+                    for (const r of rows)
+                        st.insertPo.run(r.ReferenceNumber || null, r.ItemLineNumber == null ? null : String(r.ItemLineNumber), r.VendorName || null, r.ItemName || null,
+                            num(r.QtyOrdered), num(r.QtyReceived), day(r.ExpectedDate));
+
+                })();
+
+                return rows.length;
+
+            });
+
+            return { so, po };
+
+        })().finally(() => { ordersRunning = null; });
+
+        return ordersRunning;
+
+    }
+
+    // Everything the Material check needs, from the cache. Refreshes
+    // items + open orders when older than MRP_TTL_MS (or when forced),
+    // then the BOMs of every assembly on order. A failed refresh keeps
+    // the last good data and is returned as `error`.
+    async function mrpInputs({ force = false } = {}) {
+
+        let error = null;
+        const lastSo = st.lastOk.get("so");
+        const lastItems = st.lastOk.get("items");
+
+        if (force || !lastSo || now() - lastSo.finished_at > MRP_TTL_MS || !lastItems || now() - lastItems.finished_at > MRP_TTL_MS) {
+
+            try {
+
+                await refreshItems();
+                await refreshOrders();
+
+            }
+
+            catch (err) {
+
+                error = err.message;
+
+            }
+
+        }
+
+        const soLines = st.allSo.all();
+        const items = new Map(st.allItems.all().map(i => [i.full_name, i]));
+        const roots = [...new Set(soLines.map(l => l.item).filter(n => n && (items.get(n) || {}).type === "InventoryAssembly"))];
+        const bomError = await loadTrees(roots, MRP_DEPTH);
+
+        const linesOf = a => (st.fetched.get(a) ? st.lines.all(a) : null);
+
+        return {
+            soLines,
+            poLines: st.allPo.all(),
+            items,
+            linesOf,
+            error: error || bomError,
+            asOf: {
+                items: (st.lastOk.get("items") || {}).finished_at || null,
+                orders: (st.lastOk.get("so") || {}).finished_at || null,
+                pos: (st.lastOk.get("po") || {}).finished_at || null
+            }
+        };
+
+    }
+
+    async function getBom(sku) {
+
+        if (!st.countItems.get().n)
+            await refreshItems();
+
+        const top = itemOf(sku);
+
+        if (!top || top.type !== "InventoryAssembly") {
+
+            const err = new Error(`${sku} is not a QuickBooks assembly.`);
+            err.status = 404;
+            throw err;
+
+        }
+
+        const error = await loadTrees([sku], MAX_LEVEL);
 
         if (!st.fetched.get(sku)) {
 
@@ -346,8 +478,8 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     }
 
-    return { refreshItems, getBom, assemblies, status, start, lineGroupOf };
+    return { refreshItems, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf };
 
 }
 
-module.exports = { createQbBom, LINE_GROUPS, BOM_TTL_MS, groupOfBoard };
+module.exports = { createQbBom, LINE_GROUPS, BOM_TTL_MS, MRP_TTL_MS, groupOfBoard };
