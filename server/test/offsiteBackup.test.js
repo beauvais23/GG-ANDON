@@ -359,6 +359,37 @@ test("stale alert: Google Chat once per New York day, production only", async ()
 
 });
 
+test("stale alert (S5): Slack #mos-system set up → Slack only, Google Chat not used", async () => {
+
+    configure();
+    process.env.GOOGLE_CHAT_WEBHOOK = "https://chat.test/hook";
+    process.env.APP_ENV = "production";
+    process.env.SLACK_BOT_TOKEN = "xoxb-prod-test";
+    process.env.SLACK_CHANNEL_SYSTEM = "C_SYSTEM";
+
+    axios.post = async (url, body) => {
+        chat.push({ url, body });
+        return { data: url.startsWith("https://slack.com/api/") ? { ok: true, channel: body.channel, ts: "1.1" } : {} };
+    };
+
+    writeBackup(DAILY);
+    await syncOffsite(dir);
+
+    try {
+
+        assert.equal(await alertIfStale(T("2026-10-29T14:00:00Z")), true);
+        assert.deepEqual(chat.map(c => c.url), ["https://slack.com/api/chat.postMessage"]);
+        assert.equal(chat[0].body.channel, "C_SYSTEM");
+
+    } finally {
+
+        delete process.env.SLACK_BOT_TOKEN;
+        delete process.env.SLACK_CHANNEL_SYSTEM;
+
+    }
+
+});
+
 //------------------------------------------------------
 // Download (RESTORE_FROM_DRIVE, #22 part 2)
 //------------------------------------------------------

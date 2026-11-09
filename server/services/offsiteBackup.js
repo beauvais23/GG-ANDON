@@ -409,7 +409,8 @@ async function alertIfStale(now = Date.now()) {
 
     let sent = false;
 
-    // Slack #mos-system (S3) and the ANDON Google Chat space (until S5).
+    // Slack #mos-system; the ANDON Google Chat space only as the
+    // backup when Slack is off or failed (S5).
     try {
 
         sent = await require("./slack").postSystemToSlack(text);
@@ -420,7 +421,7 @@ async function alertIfStale(now = Date.now()) {
 
     }
 
-    if (webhook) {
+    if (!sent && webhook) {
 
         try {
 

@@ -2,13 +2,40 @@ const { sendNotification } = require("./notifications_old");
 const { sendGoogleChatCard } = require("./googleChat");
 const { sendTelegram } = require("./telegram");
 const { updateTelegram } = require("./telegramUpdate");
-const { postAlertToSlack, updateAlertInSlack } = require("./slack");
+const { postAlertToSlack, updateAlertInSlack, slackConfig } = require("./slack");
+const { notificationsEnabled } = require("./appEnv");
 
-// Slack runs beside Telegram and Google Chat (parallel run, S1):
-// its failure is logged and never stops the other channels.
+//------------------------------------------------------
+// S5 cut-over (Director, Nov 9 2026): Slack is the alert channel.
+//
+// An alert lives where it was first posted:
+// - posted in Slack → every update goes to Slack only;
+// - Slack not set up, or the post failed → Telegram + Google
+//   Chat as before (backup while their variables still exist),
+//   with a log warning, so no alert goes unannounced;
+// - raised during the parallel run (has a Telegram message) →
+//   Telegram and Chat keep getting its updates until it closes.
+//------------------------------------------------------
+
+// A Slack error is logged and never stops the rest.
 function slackSafe(label, fn) {
 
     return Promise.resolve().then(fn).catch(err => console.error(`✗ Slack ${label}:`, err.message));
+
+}
+
+function latestRow(alert) {
+
+    const { statements } = require("../database");
+
+    return statements.getAlert.get(alert.id) || alert;
+
+}
+
+function warnBackup(alert) {
+
+    if (notificationsEnabled())
+        console.warn(`⚠️ Alert #${alert.id} (${alert.type}) is not in Slack: sent to Telegram / Google Chat instead (backup).`);
 
 }
 
@@ -42,6 +69,25 @@ async function notifyUpdate(alert, event) {
 
     await sendNotification(event, alert);
 
+    const latest = latestRow(alert);
+    const slack = slackSafe(`update alert #${alert.id}`, () => updateAlertInSlack(alert));
+
+    const inSlack = latest.slack_ts && slackConfig(latest.type === "NEAR_MISS" ? "nearMiss" : "andon");
+
+    if (inSlack && !latest.telegram_message_id) {
+
+        await slack;
+        return;
+
+    }
+
+    await Promise.allSettled([slack, legacyUpdate(alert, event)]);
+
+}
+
+// Telegram + Google Chat update (backup, parallel-run alerts).
+async function legacyUpdate(alert, event) {
+
     const nearMiss = nearMissWebhook(alert);
 
     const updates = [
@@ -52,8 +98,6 @@ async function notifyUpdate(alert, event) {
 
     if (!nearMiss || alert.telegram_message_id)
         updates.push(updateTelegram(alert));
-
-    updates.push(slackSafe(`update alert #${alert.id}`, () => updateAlertInSlack(alert)));
 
     await Promise.allSettled(updates);
 
@@ -68,12 +112,24 @@ async function notifyCreated(alert) {
     // Log locally
     await sendNotification("CREATED", alert);
 
+    // Slack: #andon-alerts, or #safety-near-miss for a near miss.
+    await slackSafe(`post alert #${alert.id}`, () => postAlertToSlack(alert));
+
+    if (latestRow(alert).slack_ts)
+        return;
+
+    warnBackup(alert);
+
+    await legacyCreated(alert);
+
+}
+
+// Telegram + Google Chat (backup when Slack is off or failed).
+async function legacyCreated(alert) {
+
     // Near Miss: logged closed, one "REPORTED" card, never Telegram
     // (there is nothing to acknowledge). Its own Chat space when set.
     if (alert.type === "NEAR_MISS") {
-
-        // Slack #safety-near-miss (S3), beside the Near Miss Chat space.
-        const slackNearMiss = slackSafe(`post near miss #${alert.id}`, () => postAlertToSlack(alert));
 
         const nearMiss = nearMissWebhook(alert);
 
@@ -81,14 +137,9 @@ async function notifyCreated(alert) {
             ? sendGoogleChatCard(alert, "REPORTED", nearMiss)
             : sendGoogleChatCard(alert, "REPORTED"));
 
-        await slackNearMiss;
-
         return;
 
     }
-
-    // Slack (#andon-alerts), started first and independent of the rest.
-    const slack = slackSafe(`post alert #${alert.id}`, () => postAlertToSlack(alert));
 
     // Google Chat
     await sendGoogleChatCard(alert, "CREATED");
@@ -109,8 +160,6 @@ async function notifyCreated(alert) {
         );
 
     }
-
-    await slack;
 
 }
 

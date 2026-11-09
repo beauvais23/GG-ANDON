@@ -4,7 +4,7 @@ const { authenticateToken, requireAdmin } = require("../middleware/auth");
 const { LINE_GROUPS } = require("../services/qbBom");
 const { REASONS, ADDABLE, validateRequest, codeFor } = require("../services/bomRequest");
 const { requestCard, closedMessage, postToSpace, requestUrl } = require("../services/bomChat");
-const { postBomToSlack, updateBomInSlack } = require("../services/slack");
+const { postBomToSlack, updateBomInSlack, slackConfig } = require("../services/slack");
 const { queueNotification } = require("../services/notificationQueue");
 const { dateNY, startOfDayNY } = require("../services/nyTime");
 
@@ -46,7 +46,9 @@ function bomRoutes(qbBom, db) {
 
         return queueNotification(`bom:${req.code}`, label, async () => {
 
-            // Slack #bom-changes (S3): runs first and never blocks Chat.
+            // Slack #bom-changes. S5: Slack only; Google Chat is the
+            // backup when Slack is off or failed, and still gets the
+            // Done / Cancelled reply of a card it already has.
             try {
 
                 const lines = st.lines.all(req.id);
@@ -62,6 +64,11 @@ function bomRoutes(qbBom, db) {
                 console.error(`✗ Slack ${req.code}:`, err.message);
 
             }
+
+            const latest = st.byCode.get(req.code);
+
+            if (latest.slack_ts && slackConfig("bom") && !latest.chat_sent_at)
+                return;
 
             try {
 

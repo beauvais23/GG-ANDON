@@ -189,8 +189,10 @@ function Detail({ code, onChanged }) {
         ["NCM / ECO", request.reference || "—"],
         ["Note", request.note || "—"],
         ["BOM read from QuickBooks", when(request.bom_as_of)],
-        ["Chat", request.chat_sent_at ? `Posted ${when(request.chat_sent_at)}` : request.chat_error || "Sending…"],
         ["Slack", request.slack_ts ? "Posted in #bom-changes" : "Not posted (Slack off or failed)"],
+        ...(request.chat_sent_at || request.chat_error || !request.slack_ts
+            ? [["Google Chat (backup)", request.chat_sent_at ? `Posted ${when(request.chat_sent_at)}` : request.chat_error || "Sending…"]]
+            : []),
         ...(request.status !== "OPEN" ? [[request.status === "DONE" ? "Done" : "Cancelled", `${when(request.closed_at)} by ${request.closed_by}${request.close_note ? `: ${request.close_note}` : ""}`]] : [])
     ];
 
@@ -216,7 +218,7 @@ function Detail({ code, onChanged }) {
                 {facts.map(([k, v]) => (
                     <Box key={k}>
                         <Box sx={{ ...labelSx, fontSize: 11 }}>{k}</Box>
-                        <Box sx={{ fontSize: 14, color: k === "Chat" && !request.chat_sent_at ? "#F2A33A" : tokens.text }}>{v}</Box>
+                        <Box sx={{ fontSize: 14, color: k === "Slack" && !request.slack_ts && !request.chat_sent_at ? "#F2A33A" : tokens.text }}>{v}</Box>
                     </Box>
                 ))}
             </Box>
@@ -340,7 +342,7 @@ export default function BomRequests() {
                                     </Box>
                                     <Box>{r.reason}</Box>
                                     <Box sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.requested_by}</Box>
-                                    <Box><Status s={r.status} />{!r.chat_sent_at && <Box component="span" title={r.chat_error || "Chat not sent yet"} sx={{ ml: 0.75, color: "#F2A33A" }}>!</Box>}</Box>
+                                    <Box><Status s={r.status} />{!r.slack_ts && !r.chat_sent_at && <Box component="span" title={r.chat_error || "Not posted in Slack or Chat yet"} sx={{ ml: 0.75, color: "#F2A33A" }}>!</Box>}</Box>
                                 </Box>
                             ))}
                         </Box>
