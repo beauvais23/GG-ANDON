@@ -1,0 +1,28 @@
+# Slack app for PRODUCTION (Slack S1, Nov 9 2026).
+# api.slack.com/apps → Create New App → From a manifest → pick the G&G
+# workspace → paste this → Create → Install to Workspace.
+# Then invite the app to #andon-alerts (and later #safety-near-miss,
+# #bom-changes, #mos-system): /invite @ManufacturingOS in each channel.
+# The bot token (xoxb-…) goes ONLY in Railway production as SLACK_BOT_TOKEN.
+# Interactivity (buttons) is used from S2; the URL answers once S2 ships.
+display_information:
+  name: ManufacturingOS
+  description: G&G production alerts (ANDON, near miss, BOM changes)
+  background_color: "#0b0d10"
+features:
+  bot_user:
+    display_name: ManufacturingOS
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - users:read
+      - im:write
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://gg-andon-production.up.railway.app/slack/interact
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
