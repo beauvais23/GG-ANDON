@@ -190,6 +190,7 @@ function Detail({ code, onChanged }) {
         ["Note", request.note || "—"],
         ["BOM read from QuickBooks", when(request.bom_as_of)],
         ["Chat", request.chat_sent_at ? `Posted ${when(request.chat_sent_at)}` : request.chat_error || "Sending…"],
+        ["Slack", request.slack_ts ? "Posted in #bom-changes" : "Not posted (Slack off or failed)"],
         ...(request.status !== "OPEN" ? [[request.status === "DONE" ? "Done" : "Cancelled", `${when(request.closed_at)} by ${request.closed_by}${request.close_note ? `: ${request.close_note}` : ""}`]] : [])
     ];
 
