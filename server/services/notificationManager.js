@@ -2,6 +2,15 @@ const { sendNotification } = require("./notifications_old");
 const { sendGoogleChatCard } = require("./googleChat");
 const { sendTelegram } = require("./telegram");
 const { updateTelegram } = require("./telegramUpdate");
+const { postAlertToSlack, updateAlertInSlack } = require("./slack");
+
+// Slack runs beside Telegram and Google Chat (parallel run, S1):
+// its failure is logged and never stops the other channels.
+function slackSafe(label, fn) {
+
+    return Promise.resolve().then(fn).catch(err => console.error(`✗ Slack ${label}:`, err.message));
+
+}
 
 //------------------------------------------------------
 // Near Miss routing (Director, Oct 30 2026)
@@ -44,6 +53,8 @@ async function notifyUpdate(alert, event) {
     if (!nearMiss || alert.telegram_message_id)
         updates.push(updateTelegram(alert));
 
+    updates.push(slackSafe(`update alert #${alert.id}`, () => updateAlertInSlack(alert)));
+
     await Promise.allSettled(updates);
 
 }
@@ -71,6 +82,9 @@ async function notifyCreated(alert) {
 
     }
 
+    // Slack (#andon-alerts), started first and independent of the rest.
+    const slack = slackSafe(`post alert #${alert.id}`, () => postAlertToSlack(alert));
+
     // Google Chat
     await sendGoogleChatCard(alert, "CREATED");
 
@@ -91,6 +105,8 @@ async function notifyCreated(alert) {
 
     }
 
+    await slack;
+
 }
 
 //------------------------------------------------------
@@ -101,6 +117,17 @@ const notifyAcknowledged = alert => notifyUpdate(alert, "ACKNOWLEDGED");
 const notifyResolved = alert => notifyUpdate(alert, "RESOLVED");
 const notifyCancelled = alert => notifyUpdate(alert, "CANCELLED");
 
+// Resolution note added later (Telegram resolves): redraw the
+// Telegram and Slack messages; no new Slack thread reply.
+async function notifyNoteAdded(alert) {
+
+    await Promise.allSettled([
+        updateTelegram(alert),
+        slackSafe(`note on alert #${alert.id}`, () => updateAlertInSlack(alert, { step: false }))
+    ]);
+
+}
+
 //------------------------------------------------------
 // Exports
 //------------------------------------------------------
@@ -110,6 +137,7 @@ module.exports = {
     notifyCreated,
     notifyAcknowledged,
     notifyResolved,
-    notifyCancelled
+    notifyCancelled,
+    notifyNoteAdded
 
 };
