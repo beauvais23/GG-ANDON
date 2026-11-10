@@ -96,6 +96,8 @@ test("where used: top-level assemblies with qty per multiplied along each path a
     assert.deepEqual(top("TOP1").paths, [["X", "A", "B", "TOP1"]]);
     assert.equal(top("TOP2").qty, 6, "4 via C + 2 via A");
     assert.equal(top("TOP2").pathCount, 2);
+    assert.deepEqual(top("TOP1").via, [{ assembly: "A", qty: 2 }], "via = the direct parent and the item's qty in it");
+    assert.deepEqual(top("TOP2").via.map(v => v.assembly).sort(), ["A", "C"]);
     assert.equal(top("TOP3"), undefined, "through an inactive assembly: skipped");
     assert.ok(r.loops >= 1, "the L1 ↔ L2 loop is cut");
 

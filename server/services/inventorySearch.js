@@ -165,7 +165,10 @@ function whereUsed(start, parentsOf, itemOf, { includeInactive = false, maxDepth
     let steps = 0;
     let truncated = false;
 
-    function walk(node, qty, path) {
+    // via: the direct parent each path leaves through, with the item's qty
+    // in that parent (one-table view, Director Nov 10 2026). A top that
+    // uses the item itself has via = the top (shown as "direct").
+    function walk(node, qty, path, first = null) {
 
         if (++steps > maxSteps) {
 
@@ -181,10 +184,13 @@ function whereUsed(start, parentsOf, itemOf, { includeInactive = false, maxDepth
             if (node === start)
                 return;
 
-            const t = tops.get(node) || { assembly: node, qty: 0, paths: [], pathCount: 0 };
+            const t = tops.get(node) || { assembly: node, qty: 0, paths: [], pathCount: 0, via: [] };
 
             t.qty += qty;
             t.pathCount++;
+
+            if (first && !t.via.some(v => v.assembly === first.assembly && v.qty === first.qty))
+                t.via.push(first);
 
             if (t.paths.length < maxPaths)
                 t.paths.push(path);
@@ -203,7 +209,7 @@ function whereUsed(start, parentsOf, itemOf, { includeInactive = false, maxDepth
 
             }
 
-            walk(p.assembly, qty * (Number(p.qty) || 0), [...path, p.assembly]);
+            walk(p.assembly, qty * (Number(p.qty) || 0), [...path, p.assembly], first || { assembly: p.assembly, qty: p.qty });
 
         }
 
