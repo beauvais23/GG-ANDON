@@ -257,6 +257,7 @@ test("0002: cancelled_at added and backfilled for CANCELLED rows only; down drop
         { status: "ACTIVE", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -347,6 +348,7 @@ test("0004: cancelled alerts lose the copied resolved time; resolved alerts unto
         { status: "ACKNOWLEDGED", resolved: null, cancelled_at: null }
     ]);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -405,6 +407,7 @@ test("0005: archived_at added to production_lines and response_team, empty; down
     assert.equal(db.prepare("SELECT archived_at FROM production_lines").get().archived_at, null);
     assert.equal(db.prepare("SELECT archived_at FROM response_team").get().archived_at, null);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -471,6 +474,7 @@ test("0006: line groups set by name, role/line_group columns, default escalation
     assert.ok(rules.some(r => r.step === "OPEN_ACK" && r.minutes === 30));
     assert.ok(!rules.some(r => r.alert_type === "NEAR_MISS"));
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -528,6 +532,7 @@ test("0007: product families from the Ship Report prefixes (+ SpaceX and the 30 
     assert.ok(on("PCB Coating").includes("30-72027-000-C") && !on("PCB Coating").includes("30-"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates").get().n, 0);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -578,6 +583,7 @@ test("0008: SKU list seeded per family (QuickBooks Nov 3 2026 + 30 coating PCBs)
     );
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM product_skus WHERE sku LIKE '%CNTL%' OR sku LIKE '%-JMP-%' OR sku LIKE '%-LDR-%'").get().n, 0);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -627,6 +633,7 @@ test("0009: board_taps (tap_id unique) and RAG settings 100 / 90; down drops the
     add.run();
     assert.throws(() => add.run(), /UNIQUE/);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -670,6 +677,7 @@ test("0010: board_adjustments refuses a zero correction; down drops it", () => {
     add.run(2);
     assert.throws(() => add.run(0), /CHECK/);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -718,6 +726,7 @@ test("0011: 57 failure codes from the NCM form, failures table with fail_id uniq
     add.run();
     assert.throws(() => add.run(), /UNIQUE/);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -757,6 +766,7 @@ test("0012: station column (FINAL default) on taps and failures, FPY colours 99 
     assert.equal(db.prepare("SELECT station FROM board_taps WHERE tap_id = 't1'").get().station, "FINAL");
     assert.equal(db.prepare("SELECT value FROM hourly_settings WHERE key = 'fpy_green_pct'").get().value, 99);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -796,6 +806,7 @@ test("0013: PCB part numbers per line from the BOMs (30- PCBs only); down drops 
     assert.deepEqual(rows, [{ board: "Deca", n: 2 }, { board: "Gigabay", n: 6 }, { board: "Gigabay - Vertical", n: 1 }, { board: "Terabay", n: 1 }]);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM board_pcb_parts WHERE part NOT LIKE '30-%'").get().n, 0);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -829,6 +840,7 @@ test("0014: QuickBooks BOM cache tables (items, BOM lines, fetch times, sync log
     for (const t of ["qb_items", "qb_bom_lines", "qb_bom_fetched", "qb_sync_log"])
         assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n, 0);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -863,6 +875,7 @@ test("0015: BOM change requests (code unique, status OPEN/DONE/CANCELLED) and th
     assert.throws(() => add.run("BOM-2026-001", 2, "OPEN"), /UNIQUE/);
     assert.throws(() => add.run("BOM-2026-003", 3, "APPROVED"), /CHECK/);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -893,6 +906,7 @@ test("0016: on_order on qb_items, open SO and PO line tables; down removes them"
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM qb_open_so_lines").get().n, 0);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM qb_open_po_lines").get().n, 0);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -922,6 +936,7 @@ test("0017: slack_channel and slack_ts on alerts; down removes them", () => {
 
     assert.ok(cols().includes("slack_channel") && cols().includes("slack_ts"));
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -948,6 +963,7 @@ test("0018: slack_user_id on response_team; down removes it", () => {
 
     assert.ok(cols().includes("slack_user_id"));
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -972,6 +988,7 @@ test("0019: slack_channel and slack_ts on bom_requests; down removes them", () =
 
     assert.ok(cols().includes("slack_channel") && cols().includes("slack_ts"));
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -993,6 +1010,7 @@ test("0020: escalation_settings (send_slack off by default), Slack result column
     assert.equal(db.prepare("SELECT value FROM escalation_settings WHERE key = 'send_slack'").get().value, "0");
     assert.ok(db.prepare("PRAGMA table_info(escalation_log)").all().some(c => c.name === "slack_sent_at"));
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
     migrateDown(db, dbPath); // 0020
@@ -1015,6 +1033,7 @@ test("0021: Telegram group message columns on alerts and bom_requests; down remo
     assert.ok(has("alerts", "telegram_group_message_id"));
     assert.ok(has("bom_requests", "telegram_message_id") && has("bom_requests", "telegram_error"));
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
     migrateDown(db, dbPath); // 0021
 
@@ -1043,10 +1062,33 @@ test("0022: RRX4 / RRX8 families on Team A with 16 SKUs; down removes them (and 
     db.prepare("INSERT INTO plans (board, plan_date) VALUES ('Team A', '2026-11-10')").run();
     db.prepare("INSERT INTO plan_runs (plan_id, seq, sku, family_id, qty, rate) VALUES (last_insert_rowid(), 1, 'RRX4-50K-120V-3P', ?, 20, 30)").run(fam("RRX4").id);
 
+    migrateDown(db, dbPath); // 0023
     migrateDown(db, dbPath); // 0022
 
     assert.equal(fam("RRX8"), undefined, "unused family deleted");
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM rates WHERE units_per_hour = 31.3").get().n, 0, "its rate too");
     assert.equal(fam("RRX4").active, 0, "family used in a plan is turned off, not deleted");
+
+});
+
+test("0023: item search fields on qb_items and the full BOM table qb_bom_all; down removes them", () => {
+
+    const { db, dbPath } = open();
+
+    db.exec(LIVE_SCHEMA);
+
+    migrateUp(db, dbPath);
+
+    const cols = () => db.prepare("PRAGMA table_info(qb_items)").all().map(c => c.name);
+
+    for (const c of ["part_number", "purchase_description", "preferred_vendor", "on_sales_order", "reorder_point", "item_class"])
+        assert.ok(cols().includes(c), c);
+
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'qb_bom_all'").get().n, 1);
+
+    migrateDown(db, dbPath); // 0023
+
+    assert.ok(!cols().includes("part_number"));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'qb_bom_all'").get().n, 0);
 
 });

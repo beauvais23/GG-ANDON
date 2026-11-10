@@ -55,6 +55,7 @@ const { checkRows } = require("./services/rateImport");
 const { createQbBom } = require("./services/qbBom");
 const { bomRoutes } = require("./routes/bom");
 const { mrpRoutes } = require("./routes/mrp");
+const { inventoryRoutes } = require("./routes/inventory");
 const { slackRoutes } = require("./routes/slack");
 const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
@@ -130,6 +131,7 @@ app.use(bomRoutes(qbBom, db));
 
 // Material check (open orders × BOM explosion): routes/mrp.js
 app.use(mrpRoutes(qbBom));
+app.use(inventoryRoutes(qbBom));
 
 // Slack buttons (S2): signed requests only; routes/slack.js
 app.use(slackRoutes({ statements, releaseResponders, queueNotification, notifyAcknowledged, notifyResolved, notifyCancelled }));
