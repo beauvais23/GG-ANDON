@@ -18,6 +18,7 @@ import BomViewer from "./pages/BomViewer";
 import BomRequests from "./pages/BomRequests";
 import MaterialCheck from "./pages/MaterialCheck";
 import InventorySearch from "./pages/InventorySearch";
+import Backlog from "./pages/Backlog";
 import StagingBanner from "./components/StagingBanner";
 import { useAlert } from "./context/AlertContext";
 import useAutoReload from "./hooks/useAutoReload";
@@ -105,6 +106,15 @@ function App() {
                 element={
                     <ProtectedRoute>
                         <MaterialCheck />
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/backlog"
+                element={
+                    <ProtectedRoute>
+                        <Backlog />
                     </ProtectedRoute>
                 }
             />
