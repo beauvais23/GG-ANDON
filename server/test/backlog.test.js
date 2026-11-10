@@ -103,6 +103,11 @@ test("HOLD, Loeb / Walmart blanket and unscheduled orders are GREY and take no s
     assert.equal(find(r, "REAL").lines[0].fromStock, 2, "the grey orders didn't take the 2 kits");
     assert.equal(find(r, "RW"), undefined);
 
+    const sx = run([so("SX", "KIT", 1, "2026-12-01", { hold: 1, customer: "SpaceX - Texas" })]);
+
+    assert.equal(find(sx, "SX").kind, "DATED", "SpaceX HOLDs count as orders (Director, Nov 10 2026)");
+    assert.equal(find(sx, "SX").rag, "GREEN");
+
 });
 
 test("recovery status: none → NEEDS DATE, passed → MISSED, future → ON PLAN; shortage summary covers late and at-risk orders; $ = open qty × price", () => {

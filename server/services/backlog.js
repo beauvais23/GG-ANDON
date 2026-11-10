@@ -19,7 +19,7 @@
 //   AMBER  relies on a PO that is already late, or due within 5
 //          days and still waiting on a PO
 //   GREEN  covered
-//   GREY   HOLD, BLANKET (Loeb / Walmart; release rows come with
+//   GREY   HOLD (not SpaceX: Director, Nov 10 2026), BLANKET (Loeb / Walmart; release rows come with
 //          PR 2) or UNSCHEDULED (no date / 12/31/2027 placeholder)
 //------------------------------------------------------
 
@@ -37,6 +37,10 @@ const md = d => (d && d !== "9999" ? `${Number(d.slice(5, 7))}/${Number(d.slice(
 const isShipping = item => /^S&H/i.test(item);
 const isReturns = customer => /returns\s*&\s*warranty/i.test(customer || "");
 const isBlanket = l => /loeb/i.test(l.customer || "") && /walmart/i.test(l.project || "");
+
+// SpaceX marks scheduled orders HOLD in QuickBooks; the Director counts
+// them as real orders (Nov 10 2026). Other customers' HOLDs stay grey.
+const countsDespiteHold = l => /spacex/i.test(l.customer || "");
 
 function recoveryStatus(note, today) {
 
@@ -65,7 +69,7 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
 
         const it = items.get(item);
         const date = l.ship_date || null;
-        const kind = l.hold ? "HOLD" : isBlanket(l) ? "BLANKET" : !date || date >= PLACEHOLDER ? "UNSCHEDULED" : "DATED";
+        const kind = l.hold && !countsDespiteHold(l) ? "HOLD" : isBlanket(l) ? "BLANKET" : !date || date >= PLACEHOLDER ? "UNSCHEDULED" : "DATED";
 
         lines.push({
             so: String(l.so), line: l.line, customer: l.customer, project: l.project || null, industry: l.industry || null, rep: l.sales_rep || null,
