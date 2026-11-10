@@ -20,9 +20,9 @@ import { labelSx, tokens } from "../theme/theme";
 // Inventory search + where used (Director, Nov 10 2026). Type a
 // word or number: fuzzy match on part number, description,
 // manufacturer P/N and vendor (server side). Pick an item for
-// its details (no costs) and where used: every top-level
-// assembly it ends up in, with qty per assembly and the path,
-// plus the assemblies that use it directly. ?q= and ?item= keep
+// its details (no costs) and where used: one table of every
+// top-level assembly it ends up in, with qty per assembly and
+// "Via" = the direct parent it goes into (Director, Nov 10 2026). ?q= and ?item= keep
 // the search and the item in the address (shareable).
 //------------------------------------------------------
 
@@ -58,8 +58,7 @@ function Fact({ label, children, warn }) {
 
 }
 
-const TOP_GRID = "minmax(170px, 1.2fr) minmax(200px, 2fr) 110px 100px 100px 90px";
-const DIRECT_GRID = "minmax(170px, 1.2fr) minmax(200px, 2fr) 110px 100px";
+const TOP_GRID = "minmax(170px, 1.2fr) minmax(180px, 1.8fr) minmax(150px, 1.1fr) 100px 100px 100px 90px";
 
 function TableHead({ grid, cols }) {
 
@@ -99,6 +98,23 @@ function ItemLink({ name, onOpen }) {
 
 }
 
+// "Direct" when the top uses the item itself; else the sub-assembly
+// the item goes into on the way up (and the item's qty in it).
+const isDirectVia = (t, v) => v.assembly === t.assembly;
+const viaText = t => t.via.map(v => (isDirectVia(t, v) ? "Direct" : `${v.assembly} (${num(v.qty)} per)`)).join("; ");
+
+function Via({ t, onOpen }) {
+
+    return (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+            {t.via.map(v => (isDirectVia(t, v)
+                ? <Box key="direct" sx={{ color: tokens.muted }}>— direct</Box>
+                : <Box key={`${v.assembly}-${v.qty}`}><ItemLink name={v.assembly} onOpen={onOpen} /> <Box component="span" sx={{ color: tokens.muted, fontSize: 13 }}>({num(v.qty)} per)</Box></Box>))}
+        </Box>
+    );
+
+}
+
 function Details({ data, inactive, onInactive, onOpen }) {
 
     const { item, whereUsed: wu } = data;
@@ -113,6 +129,7 @@ function Details({ data, inactive, onInactive, onOpen }) {
         { label: "On sales orders", key: "on_sales_order" },
         { label: "On hand", key: "on_hand" },
         { label: "Active", value: r => (r.active ? "Yes" : "No") },
+        { label: "Via (direct parent)", value: r => viaText(r, item.full_name) },
         { label: "Path", value: r => r.paths.map(p => p.join(" > ")).join(" | ") }
     ], wu.tops);
 
@@ -153,7 +170,7 @@ function Details({ data, inactive, onInactive, onOpen }) {
             <Box sx={{ px: 2.25, py: 1.25, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap", bgcolor: tokens.raised, borderBottom: `1px solid ${tokens.line}` }}>
                 <Box sx={{ ...labelSx, color: tokens.text, fontSize: 15 }}>Where used</Box>
                 <Box sx={{ color: tokens.muted, fontSize: 14 }}>
-                    {wu.tops.length} top-level assembl{wu.tops.length === 1 ? "y" : "ies"} · used directly in {wu.direct.length}
+                    {wu.tops.length} finished config{wu.tops.length === 1 ? "" : "s"}
                 </Box>
                 <Box sx={{ flex: 1 }} />
                 <FormControlLabel control={<Switch size="small" checked={inactive} onChange={e => onInactive(e.target.checked)} />} label="Include inactive assemblies" />
@@ -170,34 +187,23 @@ function Details({ data, inactive, onInactive, onOpen }) {
                 </Box>
             ) : (
                 <>
-                    <Box sx={{ px: 2.25, pt: 1.5, pb: 0.5, ...labelSx, fontSize: 12 }}>Top-level assemblies (finished configs)</Box>
-                    <TableHead grid={TOP_GRID} cols={["Assembly", "Description", "Line", "Qty per assy", "On SOs", "On hand"]} />
+                    <TableHead grid={TOP_GRID} cols={["Top-level assembly", "Description", "Via (direct parent)", "Line", "Qty per assy", "On SOs", "On hand"]} />
                     {wu.tops.map(t => (
                         <Box key={t.assembly} sx={rowSx(TOP_GRID)}>
                             <Box><ItemLink name={t.assembly} onOpen={onOpen} />{!t.active && <Box component="span" sx={{ ml: 0.75 }}><Tag color="#F85149">Inactive</Tag></Box>}</Box>
                             <Box sx={{ color: tokens.muted, fontSize: 13 }}>
                                 {t.description || "—"}
-                                {t.paths.some(p => p.length > 2) && (
+                                {t.paths.some(p => p.length > 3) && (
                                     <Box sx={{ fontFamily: tokens.mono, fontSize: 11, mt: 0.25 }}>
                                         {t.paths.map(p => p.join(" › ")).join("  |  ")}{t.pathCount > t.paths.length ? `  (+${t.pathCount - t.paths.length} more paths)` : ""}
                                     </Box>
                                 )}
                             </Box>
+                            <Box><Box component="span" sx={{ display: { xs: "inline", md: "none" }, ...labelSx, fontSize: 11, mr: 1 }}>Via</Box><Via t={t} onOpen={onOpen} /></Box>
                             <Cell label="Line">{t.lineGroup || "—"}</Cell>
                             <Cell label="Qty per assy" strong>{num(t.qty)}</Cell>
                             <Cell label="On SOs">{num(t.on_sales_order)}</Cell>
                             <Cell label="On hand">{num(t.on_hand)}</Cell>
-                        </Box>
-                    ))}
-
-                    <Box sx={{ px: 2.25, pt: 2, pb: 0.5, ...labelSx, fontSize: 12 }}>Used directly in</Box>
-                    <TableHead grid={DIRECT_GRID} cols={["Assembly", "Description", "Line", "Qty per"]} />
-                    {wu.direct.map((d, i) => (
-                        <Box key={`${d.assembly}-${i}`} sx={rowSx(DIRECT_GRID)}>
-                            <Box><ItemLink name={d.assembly} onOpen={onOpen} /></Box>
-                            <Box sx={{ color: tokens.muted, fontSize: 13 }}>{d.description || "—"}</Box>
-                            <Cell label="Line">{d.lineGroup || "—"}</Cell>
-                            <Cell label="Qty per">{num(d.qty)}</Cell>
                         </Box>
                     ))}
                 </>
