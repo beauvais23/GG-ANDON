@@ -36,6 +36,15 @@ const bool = v => v === true || v === 1 || v === "true" || v === "True";
 const num = v => (v === null || v === undefined || v === "" ? null : Number(v));
 const day = v => (v ? String(v).slice(0, 10) : null);
 
+// <CustomField><Name>Industry</Name><Value>Car Wash</Value></CustomField>
+function customField(xml, name) {
+
+    const m = String(xml || "").match(new RegExp(`<Name>${name}</Name>\\s*<Value>([^<]*)</Value>`, "i"));
+
+    return m ? m[1].replace(/&amp;/g, "&").trim() || null : null;
+
+}
+
 function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     const s = cdata.schema();
@@ -50,7 +59,9 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
         parents: db.prepare("SELECT assembly, qty FROM qb_bom_all WHERE component = ? ORDER BY assembly, line"),
         allItems: db.prepare("SELECT * FROM qb_items"),
         clearSo: db.prepare("DELETE FROM qb_open_so_lines"),
-        insertSo: db.prepare("INSERT INTO qb_open_so_lines (so, line, customer, item, ordered, shipped, ship_date, hold) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+        insertSo: db.prepare(`INSERT INTO qb_open_so_lines (so, line, customer, item, ordered, shipped, ship_date, hold, unit_price, sales_rep, industry, project)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+        childrenAll: db.prepare("SELECT component, qty FROM qb_bom_all WHERE assembly = ? ORDER BY line"),
         allSo: db.prepare("SELECT * FROM qb_open_so_lines"),
         clearPo: db.prepare("DELETE FROM qb_open_po_lines"),
         insertPo: db.prepare("INSERT INTO qb_open_po_lines (po, line, vendor, item, ordered, received, expected_date) VALUES (?, ?, ?, ?, ?, ?, ?)"),
@@ -316,7 +327,7 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
             const so = await logged("so", async () => {
 
                 const rows = await cdata.queryAll(
-                    `SELECT ReferenceNumber, ItemLineNumber, CustomerName, ItemName, QtyOrdered, QtyShipped, ExpectedShipDate, CustomFields FROM ${s}.[Company_OpenOrderLines] ORDER BY ReferenceNumber, ItemLineNumber`,
+                    `SELECT ReferenceNumber, ItemLineNumber, CustomerName, ItemName, QtyOrdered, QtyShipped, ExpectedShipDate, CustomFields, UnitPrice, SalesRep FROM ${s}.[Company_OpenOrderLines] ORDER BY ReferenceNumber, ItemLineNumber`,
                     query
                 );
 
@@ -326,7 +337,8 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
                     for (const r of rows)
                         st.insertSo.run(r.ReferenceNumber || null, r.ItemLineNumber == null ? null : String(r.ItemLineNumber), r.CustomerName || null, r.ItemName || null,
-                            num(r.QtyOrdered), num(r.QtyShipped), day(r.ExpectedShipDate), isHold(r.CustomFields) ? 1 : 0);
+                            num(r.QtyOrdered), num(r.QtyShipped), day(r.ExpectedShipDate), isHold(r.CustomFields) ? 1 : 0,
+                            num(r.UnitPrice), r.SalesRep || null, customField(r.CustomFields, "Industry"), customField(r.CustomFields, "ProjectName"));
 
                 })();
 
@@ -582,8 +594,54 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     }
 
-    return { refreshItems, refreshAllBoms, searchIndex, itemOf, parentsOf, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf, warnSystem };
+    //--------------------------------------------------
+    // Backlog & delivery risk (Nov 10 2026): items + open SO / PO
+    // lines re-read when older than 1 h (Refresh forces it), BOMs
+    // from qb_bom_all (every assembly, nightly) so no per-SKU
+    // CData calls.
+    //--------------------------------------------------
+
+    async function backlogInputs({ force = false } = {}) {
+
+        let error = null;
+        const lastSo = st.lastOk.get("so");
+        const lastItems = st.lastOk.get("items");
+
+        if (force || !lastSo || now() - lastSo.finished_at > MRP_TTL_MS || !lastItems || now() - lastItems.finished_at > MRP_TTL_MS) {
+
+            try {
+
+                await refreshItems();
+                await refreshOrders();
+
+            }
+
+            catch (err) {
+
+                error = err.message;
+
+            }
+
+        }
+
+        return {
+            soLines: st.allSo.all(),
+            poLines: st.allPo.all(),
+            items: new Map(st.allItems.all().map(i => [i.full_name, i])),
+            childrenOf: a => st.childrenAll.all(a),
+            error,
+            asOf: {
+                items: (st.lastOk.get("items") || {}).finished_at || null,
+                orders: (st.lastOk.get("so") || {}).finished_at || null,
+                pos: (st.lastOk.get("po") || {}).finished_at || null,
+                boms: (st.lastOk.get("bom_all") || {}).finished_at || null
+            }
+        };
+
+    }
+
+    return { backlogInputs, refreshItems, refreshAllBoms, searchIndex, itemOf, parentsOf, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf, warnSystem };
 
 }
 
-module.exports = { createQbBom, LINE_GROUPS, BOM_TTL_MS, MRP_TTL_MS, groupOfBoard };
+module.exports = { customField, createQbBom, LINE_GROUPS, BOM_TTL_MS, MRP_TTL_MS, groupOfBoard };
