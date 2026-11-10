@@ -154,7 +154,7 @@ test("SKU list (0008): SpaceX SKUs under their families, Team A / Team B / PCB C
     assert.deepEqual((await list("Gigabay - Vertical")).map(s => s.sku), ["GIGA8-VERT-48K-480V"]);
     assert.equal((await list("Terabay")).length, 5);
     assert.deepEqual((await list("Deca")).map(s => s.sku), ["DECA8-SO-48K-480V"]);
-    assert.equal((await list("Team A")).length, 190);
+    assert.equal((await list("Team A")).length, 206, "190 (0008) + 16 RRX (0022)");
     assert.equal((await list("Team B")).length, 647);
     assert.ok((await list("PCB Coating")).some(s => s.sku === "30-72027-000-C"));
 
@@ -186,5 +186,16 @@ test("SKU list (0008): SpaceX SKUs under their families, Team A / Team B / PCB C
     assert.equal((await add("TERA1-48K-480V-EM")).status, 201, "re-listing a removed SKU works");
 
     assert.equal((await request(app).post("/admin/hourly/skus").set(floor).send({ sku: "DECA8-X" })).status, 403);
+
+});
+
+test("RRX (0022): RRX4 / RRX8 SKUs land on Team A; RRX jumpers and leaders stay off the board", () => {
+
+    const families = statements.getProductFamilies.all();
+
+    assert.equal(familyFor("RRX4-50K-120V-3P", families).prefix, "RRX4");
+    assert.equal(familyFor("RRX8-40K-277V-3P-THRU", families).board, "Team A");
+    assert.equal(familyFor("RRX-JMP-3-3P", families), null);
+    assert.equal(familyFor("RRX-LDR-6-3P", families), null);
 
 });
