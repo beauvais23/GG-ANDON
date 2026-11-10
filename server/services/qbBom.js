@@ -42,7 +42,12 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     const st = {
         replaceItems: db.prepare("DELETE FROM qb_items"),
-        insertItem: db.prepare("INSERT OR REPLACE INTO qb_items (full_name, type, description, uom, active, on_hand, time_modified, on_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+        insertItem: db.prepare(`INSERT OR REPLACE INTO qb_items (full_name, type, description, uom, active, on_hand, time_modified, on_order,
+            part_number, purchase_description, preferred_vendor, on_sales_order, reorder_point, item_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+        replaceBomAll: db.prepare("DELETE FROM qb_bom_all"),
+        insertBomAll: db.prepare("INSERT OR REPLACE INTO qb_bom_all (assembly, line, component, qty, uom) VALUES (?, ?, ?, ?, ?)"),
+        countBomAll: db.prepare("SELECT COUNT(*) AS n FROM qb_bom_all"),
+        parents: db.prepare("SELECT assembly, qty FROM qb_bom_all WHERE component = ? ORDER BY assembly, line"),
         allItems: db.prepare("SELECT * FROM qb_items"),
         clearSo: db.prepare("DELETE FROM qb_open_so_lines"),
         insertSo: db.prepare("INSERT INTO qb_open_so_lines (so, line, customer, item, ordered, shipped, ship_date, hold) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
@@ -100,7 +105,7 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
         itemsRunning = logged("items", async () => {
 
             const rows = await cdata.queryAll(
-                `SELECT FullName, Type, Description, UnitOfMeasure, IsActive, QuantityOnHand, TimeModified, QuantityOnOrder FROM ${s}.[Company_Items] ORDER BY FullName`,
+                `SELECT FullName, Type, Description, UnitOfMeasure, IsActive, QuantityOnHand, TimeModified, QuantityOnOrder, PartNumber, PurchaseDescription, PreferredVendor, QuantityOnSalesOrder, ReorderPoint, Class FROM ${s}.[Company_Items] ORDER BY FullName`,
                 query
             );
 
@@ -118,11 +123,15 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
                     st.insertItem.run(r.FullName, r.Type || null, r.Description || null, r.UnitOfMeasure || null,
                         bool(r.IsActive) ? 1 : 0, r.QuantityOnHand === null || r.QuantityOnHand === undefined ? null : Number(r.QuantityOnHand),
-                        r.TimeModified || null, num(r.QuantityOnOrder));
+                        r.TimeModified || null, num(r.QuantityOnOrder),
+                        r.PartNumber || null, r.PurchaseDescription || null, r.PreferredVendor || null,
+                        num(r.QuantityOnSalesOrder), num(r.ReorderPoint), r.Class || null);
 
                 }
 
             })();
+
+            itemsVersion++;
 
             return rows.length;
 
@@ -131,6 +140,62 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
         return itemsRunning;
 
     }
+
+    //--------------------------------------------------
+    // Every BOM line (Company_BOM, ~30,000 rows) for where used
+    // (Nov 10 2026): pulled whole, replaced in one transaction;
+    // a failed pull keeps the last good copy.
+    //--------------------------------------------------
+
+    let bomAllRunning = null;
+
+    function refreshAllBoms() {
+
+        if (bomAllRunning)
+            return bomAllRunning;
+
+        bomAllRunning = logged("bom_all", async () => {
+
+            const rows = await cdata.queryAll(
+                `SELECT Assembly, LineItemNumber, Component, QtyPerAssembly, LineItemUnitOfMeasure FROM ${s}.[Company_BOM] ORDER BY Assembly, LineItemNumber`,
+                query
+            );
+
+            if (!rows.length)
+                throw new Error("QuickBooks returned no BOM lines; kept the last copy.");
+
+            db.transaction(() => {
+
+                st.replaceBomAll.run();
+
+                for (const r of rows)
+                    if (r.Assembly && r.Component)
+                        st.insertBomAll.run(r.Assembly, Number(r.LineItemNumber) || 0, r.Component, num(r.QtyPerAssembly), r.LineItemUnitOfMeasure || null);
+
+            })();
+
+            return rows.length;
+
+        }).finally(() => { bomAllRunning = null; });
+
+        return bomAllRunning;
+
+    }
+
+    // Search index, rebuilt only after the item list changes.
+    let itemsVersion = 0;
+    let indexed = { version: -1, index: [] };
+
+    function searchIndex() {
+
+        if (indexed.version !== itemsVersion || !indexed.index.length)
+            indexed = { version: itemsVersion, index: require("./inventorySearch").indexItems(st.allItems.all()) };
+
+        return indexed.index;
+
+    }
+
+    const parentsOf = component => st.parents.all(component);
 
     // Fetch level-1 lines of these assemblies (stored per assembly;
     // one assembly's lines are replaced together).
@@ -437,7 +502,10 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
             items: st.countItems.get().n,
             itemsOk: st.lastOk.get("items") || null,
             itemsLast: st.last.get("items") || null,
-            bomLast: st.last.get("bom") || null
+            bomLast: st.last.get("bom") || null,
+            bomAll: st.countBomAll.get().n,
+            bomAllOk: st.lastOk.get("bom_all") || null,
+            bomAllLast: st.last.get("bom_all") || null
         };
 
     }
@@ -468,22 +536,37 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
         }
 
+        const stale = kind => {
+
+            const ok = st.lastOk.get(kind);
+
+            return !ok || now() - ok.finished_at >= ITEMS_MAX_AGE_MS;
+
+        };
+
         const tick = () => {
 
-            const ok = st.lastOk.get("items");
+            if (stale("items"))
+                refreshItems().then(
+                    n => console.log(`QuickBooks items refreshed: ${n}`),
+                    err => {
 
-            if (ok && now() - ok.finished_at < ITEMS_MAX_AGE_MS)
-                return;
+                        console.error(`QuickBooks item refresh failed: ${err.message}`);
+                        warnSystem(`⚠️ ManufacturingOS could not read QuickBooks (item list): ${String(err.message).slice(0, 300)}. BOM viewer, Inventory search and Material check show the last good data. Check the CData connection.`);
 
-            refreshItems().then(
-                n => console.log(`QuickBooks items refreshed: ${n}`),
-                err => {
+                    }
+                );
 
-                    console.error(`QuickBooks item refresh failed: ${err.message}`);
-                    warnSystem(`⚠️ ManufacturingOS could not read QuickBooks (item list): ${String(err.message).slice(0, 300)}. BOM viewer and Material check show the last good data. Check the CData connection.`);
+            if (stale("bom_all"))
+                refreshAllBoms().then(
+                    n => console.log(`QuickBooks BOM lines refreshed (where used): ${n}`),
+                    err => {
 
-                }
-            );
+                        console.error(`QuickBooks BOM refresh failed: ${err.message}`);
+                        warnSystem(`⚠️ ManufacturingOS could not read QuickBooks (BOM lines for where used): ${String(err.message).slice(0, 300)}. Inventory search shows the last good copy.`);
+
+                    }
+                );
 
         };
 
@@ -493,13 +576,13 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
         timer.unref();
 
-        console.log("QuickBooks BOM viewer: items refreshed when older than 20 h (checked every 10 min); BOMs fetched on open, kept 1 h");
+        console.log("QuickBooks BOM viewer: items and all BOM lines (where used) refreshed when older than 20 h (checked every 10 min); BOMs fetched on open, kept 1 h");
 
         return timer;
 
     }
 
-    return { refreshItems, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf, warnSystem };
+    return { refreshItems, refreshAllBoms, searchIndex, itemOf, parentsOf, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf, warnSystem };
 
 }
 

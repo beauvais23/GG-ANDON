@@ -7,6 +7,7 @@ export const PAGES = [
     { path: "/bom", name: "BOM viewer", title: "BOM viewer" },
     { path: "/bom/requests", name: "BOM requests", title: "BOM requests" },
     { path: "/mrp", name: "Material check", title: "Material check" },
+    { path: "/inventory", name: "Inventory search", title: "Inventory search" },
     { path: "/wallboard", name: "TV Wallboard", title: "Wallboard" },
     { path: "/executive", name: "Executive Dashboard", title: "Executive" },
     { path: "/admin", name: "Admin", title: "Administration" }
