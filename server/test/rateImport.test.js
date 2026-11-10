@@ -64,7 +64,7 @@ test("check: cycle seconds → units/hr, family vs SKU, header skipped, tabs or 
 
 test("errors: unknown key, accessory, bad number, bad date, duplicate; save refused and nothing written", async () => {
 
-    const text = "WPX4\t17\nRRX8\t115\nWPX-JMP-4\t30\nGPX4\tfast\nVPX2\t60\tsoon\nWPX4\t20\nFPX2-3P-DIALITE\t118";
+    const text = "WPX4\t17\nQQX8\t115\nWPX-JMP-4\t30\nGPX4\tfast\nVPX2\t60\tsoon\nWPX4\t20\nFPX2-3P-DIALITE\t118";
 
     const r = await imp({ text, unit: "perHour", save: true });
 
