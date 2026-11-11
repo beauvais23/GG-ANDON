@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const request = require("supertest");
 
 const { loadApp } = require("./helpers");
-const { buildBacklog, recoveryStatus } = require("../services/backlog");
+const { buildBacklog, recoveryStatus, channelOf } = require("../services/backlog");
 
 //------------------------------------------------------
 // Backlog & delivery risk (Director, Nov 10 2026): stock and POs
@@ -124,6 +124,36 @@ test("recovery status: none → NEEDS DATE, passed → MISSED, future → ON PLA
 
 });
 
+test("channel (Director, Nov 11 2026): WMT part → Walmart, SpaceX customer → SpaceX, else the rep key (Car Wash / Industrial); unknown rep → Unassigned; PCB Coating is never a line here", () => {
+
+    const key = new Map([["GG-CW", "Car Wash"], ["GG-DI", "Industrial - Direct"], ["ALE", "Industrial - Rep"]]);
+    const ch = (lines) => channelOf(lines.map(l => ({ customer: "Acme", ...l })), key);
+
+    assert.deepEqual(ch([{ item: "VPX4-40K-277V-WMT", rep: "GG-DI" }]), { channel: "Walmart", channelDetail: null });
+    assert.equal(ch([{ item: "TERA1", customer: "SpaceX - Texas", rep: "GG-DI" }]).channel, "SpaceX");
+    assert.deepEqual(ch([{ item: "VAC6", rep: "gg-cw" }]), { channel: "Car Wash", channelDetail: "Car Wash" }, "rep match ignores case");
+    assert.deepEqual(ch([{ item: "GPX4", rep: "ALE" }]), { channel: "Industrial", channelDetail: "Industrial - Rep" });
+    assert.equal(ch([{ item: "GPX4", rep: "NEW1" }]).channel, "Unassigned");
+
+    const r = buildBacklog({
+        soLines: [so("C1", "RESALE", 1, "2026-12-30", { sales_rep: "GG-CW" }), so("P1", "RESALE", 1, "2026-12-30")],
+        poLines: [], items, childrenOf, today: TODAY, repChannels: key,
+        lineGroupOf: () => "PCB Coating"
+    });
+
+    assert.equal(r.sos.find(x => x.so === "C1").channel, "Car Wash");
+    assert.equal(r.sos.find(x => x.so === "P1").lineGroup, "Other", "PCB Coating isn't a line on this page");
+
+    const loeb = buildBacklog({
+        soLines: [so("L1", "VPX4-40K-277V-WMT", 1, "2026-12-30", { customer: "Loeb Electric" }), so("L2", "RESALE", 1, "2026-12-30", { customer: "Loeb Electric", project: "Plant 4" })],
+        poLines: [], items, childrenOf, today: TODAY
+    });
+
+    assert.equal(loeb.sos.find(x => x.so === "L1").kind, "BLANKET", "a WMT part on a Loeb order is a Walmart blanket even without the project");
+    assert.equal(loeb.sos.find(x => x.so === "L2").kind, "DATED", "other Loeb orders are normal orders");
+
+});
+
 //------------------------------------------------------
 // Routes
 //------------------------------------------------------
@@ -160,6 +190,8 @@ test("routes: GET /backlog answers with the SO, channel and rep; notes need a na
     const row = first.body.sos.find(s => s.so === "52680");
 
     assert.equal(row.industry, "Car Wash");
+    assert.equal(row.channel, "Industrial", "GG-DI → Industrial - Direct (seeded rep key)");
+    assert.equal(row.channelDetail, "Industrial - Direct");
     assert.equal(row.rep, "GG-DI");
     assert.equal(row.openValue, 500);
     assert.equal(row.recoveryStatus, "NEEDS DATE");
@@ -204,5 +236,24 @@ test("import (admin): SO / recovery date / comment rows, all or none; floor logi
     const notes = db.prepare("SELECT so, recovery_date, ops_comment FROM backlog_notes WHERE so IN ('52976', '52679') ORDER BY so").all();
 
     assert.deepEqual(notes.map(x => [x.so, x.recovery_date, x.ops_comment]), [["52679", null, "In final test"], ["52976", "2026-11-18", "Waiting on XPT boards"]]);
+
+});
+
+test("rep key (admin): paste replaces the whole key, header skipped, bad rows refuse all; floor can read, not write", async () => {
+
+    await request(app).put("/admin/backlog/rep-channels").set(floor).send({ by: "x", text: "A\tCar Wash" }).expect(403);
+    await request(app).put("/admin/backlog/rep-channels").set(admin).send({ by: "Bill", text: "Rep\tChannel\nGG-DI\tSomething else" }).expect(400);
+
+    const ok = await request(app).put("/admin/backlog/rep-channels").set(admin).send({ by: "Bill", text: "Rep\tChannel\nGG-DI\tCar Wash\nALE\tIndustrial - Rep" }).expect(200);
+
+    assert.equal(ok.body.reps, 2);
+
+    const list = await request(app).get("/backlog/rep-channels").set(floor).expect(200);
+
+    assert.deepEqual(list.body.reps.map(r => [r.rep, r.channel]), [["ALE", "Industrial - Rep"], ["GG-DI", "Car Wash"]]);
+
+    const row = (await request(app).get("/backlog").set(floor)).body.sos.find(s => s.so === "52680");
+
+    assert.equal(row.channel, "Car Wash", "the new key is used at once");
 
 });

@@ -62,7 +62,10 @@ function backlogRoutes(qbBom, db) {
             sales_note = @sales_note, updated_by = @updated_by, updated_at = @updated_at`),
         remove: db.prepare("DELETE FROM backlog_notes WHERE so = ?"),
         log: db.prepare("INSERT INTO backlog_note_log (so, field, old_value, new_value, changed_by, changed_at) VALUES (?, ?, ?, ?, ?, ?)"),
-        history: db.prepare("SELECT field, old_value, new_value, changed_by, changed_at FROM backlog_note_log WHERE so = ? ORDER BY id DESC LIMIT 200")
+        history: db.prepare("SELECT field, old_value, new_value, changed_by, changed_at FROM backlog_note_log WHERE so = ? ORDER BY id DESC LIMIT 200"),
+        repChannels: db.prepare("SELECT rep, channel, updated_by, updated_at FROM rep_channels ORDER BY rep"),
+        clearReps: db.prepare("DELETE FROM rep_channels"),
+        addRep: db.prepare("INSERT OR REPLACE INTO rep_channels (rep, channel, updated_by, updated_at) VALUES (?, ?, ?, ?)")
     };
 
     // Applies changes for one SO; returns { note } or { errors }.
@@ -132,6 +135,8 @@ function backlogRoutes(qbBom, db) {
 
         const inputs = await qbBom.backlogInputs({ force: req.query.refresh === "1" });
         const notes = new Map(st.notes.all().map(n => [n.so, n]));
+        const repRows = st.repChannels.all();
+        const repChannels = new Map(repRows.map(r => [r.rep.trim().toUpperCase(), r.channel]));
 
         const result = buildBacklog({
             soLines: inputs.soLines,
@@ -140,10 +145,13 @@ function backlogRoutes(qbBom, db) {
             childrenOf: inputs.childrenOf,
             today: dateNY(Date.now()),
             notes,
-            lineGroupOf: qbBom.lineGroupOf
+            lineGroupOf: qbBom.lineGroupOf,
+            repChannels
         });
 
-        res.json({ ...result, asOf: inputs.asOf, error: inputs.error, status: qbBom.status() });
+        const unmappedReps = [...new Set(result.sos.filter(s => s.channel === "Unassigned" && s.rep).map(s => s.rep))].sort();
+
+        res.json({ ...result, repKey: { count: repRows.length, updatedAt: Math.max(0, ...repRows.map(r => r.updated_at || 0)) || null, unmappedReps }, asOf: inputs.asOf, error: inputs.error, status: qbBom.status() });
 
     });
 
@@ -236,6 +244,63 @@ function backlogRoutes(qbBom, db) {
         })();
 
         res.json({ success: true, rows: parsed.length, saved });
+
+    });
+
+    // Rep → channel key (admin): paste the two columns of the
+    // "Assigned Rep to Sales Channel" sheet (Rep, Channel); replaces the
+    // whole key, all rows or none.
+    router.get("/backlog/rep-channels", authenticateToken, (req, res) => {
+
+        res.json({ success: true, reps: st.repChannels.all() });
+
+    });
+
+    router.put("/admin/backlog/rep-channels", authenticateToken, requireAdmin, (req, res) => {
+
+        const by = nameOf(req.body?.by);
+        const rows = String(req.body?.text || "").split(/\r?\n/).map(l => l.split("\t").map(c => c.trim())).filter(c => c.some(Boolean));
+        const errors = [];
+        const parsed = new Map();
+
+        if (!by)
+            return res.status(400).json({ success: false, message: "Your name is required." });
+
+        rows.forEach((c, i) => {
+
+            if (i === 0 && /^rep$/i.test(c[0]))
+                return;
+
+            const rep = (c[0] || "").toUpperCase();
+            const channel = c[1] || "";
+
+            if (!rep || !/^(car\s*wash|industrial)/i.test(channel))
+                errors.push(`Row ${i + 1}: "${c.join(" | ")}" needs a rep and a channel starting with Car Wash or Industrial`);
+            else if (parsed.has(rep))
+                errors.push(`Row ${i + 1}: ${rep} is listed twice`);
+            else
+                parsed.set(rep, channel);
+
+        });
+
+        if (!parsed.size && !errors.length)
+            errors.push("Nothing to save.");
+
+        if (errors.length)
+            return res.status(400).json({ success: false, message: `${errors.length} problem(s). Nothing was saved.`, errors });
+
+        const now = Date.now();
+
+        db.transaction(() => {
+
+            st.clearReps.run();
+
+            for (const [rep, channel] of parsed)
+                st.addRep.run(rep, channel, by, now);
+
+        })();
+
+        res.json({ success: true, reps: parsed.size });
 
     });
 

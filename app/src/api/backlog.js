@@ -41,3 +41,5 @@ export const saveBacklogNote = (so, body) => call(`/backlog/notes/${encodeURICom
 export const clearBacklogNote = (so, by) => call(`/backlog/notes/${encodeURIComponent(so)}`, { method: "DELETE", body: { by } });
 export const getBacklogHistory = so => call(`/backlog/notes/${encodeURIComponent(so)}/history`);
 export const importBacklogNotes = (text, by) => call("/admin/backlog/notes/import", { method: "POST", body: { text, by } });
+export const getRepChannels = () => call("/backlog/rep-channels");
+export const saveRepChannels = (text, by) => call("/admin/backlog/rep-channels", { method: "PUT", body: { text, by } });
