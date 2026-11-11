@@ -94,6 +94,52 @@ async function slackApi(method, body, token, post = axios.post) {
 const ICONS = { QUALITY: "🔴", MAINTENANCE: "🟧", MATERIAL: "🟨", SUPERVISOR: "🟦", SAFETY: "🟩", DOWNTIME: "🟪", NEAR_MISS: "⚠️" };
 const STATUS = { ACTIVE: "🚨 *ACTIVE*", ACKNOWLEDGED: "👷 *ACKNOWLEDGED*", RESOLVED: "✅ *RESOLVED*", CANCELLED: "✖️ *CANCELLED*" };
 
+// Look (Director, Nov 11 2026, mockup approved): every message sits in an
+// attachment whose left bar is coloured by status; footer has the G&G mark.
+const COLOR = { red: "#E01E5A", amber: "#F2A33A", green: "#2EB67D", grey: "#8B96A3", blue: "#237EB5" };
+const ALERT_COLOR = { ACTIVE: COLOR.red, ACKNOWLEDGED: COLOR.amber, RESOLVED: COLOR.green, CANCELLED: COLOR.grey };
+const BOM_COLOR = { OPEN: COLOR.blue, DONE: COLOR.green, CANCELLED: COLOR.grey };
+
+// PNG served by the frontend (Slack can't show SVG): app/public/slack/gg-mark.png.
+function logoUrl() {
+
+    try { return `${new URL(supervisorUrl).origin}/slack/gg-mark.png`; }
+
+    catch { return null; }
+
+}
+
+function footer(text) {
+
+    const logo = logoUrl();
+
+    return { type: "context", elements: [...(logo ? [{ type: "image", image_url: logo, alt_text: "G&G" }] : []), { type: "mrkdwn", text }] };
+
+}
+
+// chat.update with blocks: [] clears the top-level blocks of messages
+// posted before the new look; if Slack refuses the empty list, retry
+// without it (the attachment still replaces the old content's look).
+async function updateMessage(body, token, post) {
+
+    try { return await slackApi("chat.update", body, token, post); }
+
+    catch (err) {
+
+        if (!/invalid_blocks|no_text|invalid_arguments/i.test(String(err.message)))
+            throw err;
+
+        const { blocks, ...rest } = body;
+
+        return slackApi("chat.update", rest, token, post);
+
+    }
+
+}
+
+// Message body: fallback text + one coloured attachment holding the blocks.
+const asAttachment = (text, color, blocks) => ({ text, attachments: [{ color, fallback: text, blocks }] });
+
 const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const clock = ms => new Date(Number(ms)).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
@@ -130,19 +176,14 @@ function nearMissBlocks(alert) {
     const cancelled = alert.status === "CANCELLED";
 
     const blocks = [
-        { type: "header", text: { type: "plain_text", text: `⚠️ NEAR MISS REPORTED #${alert.id}`, emoji: true } },
-        { type: "section", text: { type: "mrkdwn", text: cancelled ? "✖️ *VOIDED*" : "📝 *LOGGED*: fill out the Near Miss & Safety Incident form" } },
-        { type: "section", fields: [
-            { type: "mrkdwn", text: `*Line*\n${esc(alert.production_line)}` },
-            { type: "mrkdwn", text: `*Work center*\n${esc(alert.work_center)}` },
-            { type: "mrkdwn", text: `*Reported*\n${clock(alert.requested)}` }
-        ] }
+        { type: "header", text: { type: "plain_text", text: `⚠️ NEAR MISS #${alert.id} · ${alert.production_line} / ${alert.work_center}`.slice(0, 150), emoji: true } },
+        { type: "section", text: { type: "mrkdwn", text: cancelled ? `✖️ *VOIDED* · logged ${clock(alert.requested)}` : `📝 *LOGGED* ${clock(alert.requested)} · fill out the Near Miss & Safety Incident form` } }
     ];
 
     if (cancelled && alert.resolution_notes)
         blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Reason*\n${esc(alert.resolution_notes).slice(0, 2500)}` } });
 
-    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: "G&G ManufacturingOS · near misses are logged, not answered" }] });
+    blocks.push(footer("G&G ManufacturingOS · near misses are logged, not answered"));
 
     return blocks;
 
@@ -154,36 +195,64 @@ function alertBlocks(alert, now = Date.now()) {
         return nearMissBlocks(alert);
 
     const end = endOf(alert);
-    const fields = [
-        `*Line*\n${esc(alert.production_line)}`,
-        `*Work center*\n${esc(alert.work_center)}`,
-        `*Raised*\n${clock(alert.requested)}`,
-        `*${end ? "Duration" : "Open for"}*\n${span(alert.requested, end || now)}`
-    ];
+    const timing = alert.status === "RESOLVED" ? "took" : alert.status === "CANCELLED" ? "after" : "open";
+    const fields = [];
 
     if (alert.acknowledged_by)
-        fields.push(`*Acknowledged*\n${esc(alert.acknowledged_by)} · ${alert.acknowledged ? clock(alert.acknowledged) : ""}`);
+        fields.push(`*Acknowledged by*\n${esc(alert.acknowledged_by)}${alert.acknowledged ? ` · ${clock(alert.acknowledged)} (${span(alert.requested, alert.acknowledged)})` : ""}`);
 
     if (alert.status === "RESOLVED" && alert.resolved_by)
-        fields.push(`*Resolved by*\n${esc(alert.resolved_by)}`);
+        fields.push(`*Resolved by*\n${esc(alert.resolved_by)}${alert.resolved ? ` · ${clock(alert.resolved)}` : ""}`);
 
     const blocks = [
-        { type: "header", text: { type: "plain_text", text: `${ICONS[alert.type] || "⚪"} ${label(alert.type)} ALERT #${alert.id}`, emoji: true } },
-        { type: "section", text: { type: "mrkdwn", text: STATUS[alert.status] || `*${esc(alert.status)}*` } },
-        { type: "section", fields: fields.map(text => ({ type: "mrkdwn", text })) }
+        { type: "header", text: { type: "plain_text", text: `${ICONS[alert.type] || "⚪"} ${label(alert.type)} #${alert.id} · ${alert.production_line} / ${alert.work_center}`.slice(0, 150), emoji: true } },
+        { type: "section", text: { type: "mrkdwn", text: `${STATUS[alert.status] || `*${esc(alert.status)}*`} · ${timing} *${span(alert.requested, end || now)}* · raised ${clock(alert.requested)}` } }
     ];
 
+    if (fields.length)
+        blocks.push({ type: "section", fields: fields.map(text => ({ type: "mrkdwn", text })) });
+
     if (alert.resolution_notes && (alert.status === "RESOLVED" || alert.status === "CANCELLED"))
-        blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${alert.status === "CANCELLED" ? "Cancel reason" : "Resolution"}*\n${esc(alert.resolution_notes).slice(0, 2500)}` } });
+        blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${alert.status === "CANCELLED" ? "Cancel reason" : "What fixed it"}*\n${esc(alert.resolution_notes).slice(0, 2500)}` } });
 
     const buttons = alertButtons(alert);
 
-    if (buttons.length && signingSecret())
+    if (buttons.length && signingSecret()) {
+
+        blocks.push({ type: "divider" });
         blocks.push({ type: "actions", block_id: "alert_actions", elements: buttons });
 
-    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `<${supervisorUrl}|Open the Response Center> · G&G ManufacturingOS` }] });
+    }
+
+    blocks.push(footer(`<${supervisorUrl}|Open the Response Center> · G&G ManufacturingOS`));
 
     return blocks;
+
+}
+
+// Whole Slack message for an alert (text + coloured attachment).
+function alertMessage(alert, now = Date.now()) {
+
+    const color = alert.type === "NEAR_MISS" ? (alert.status === "CANCELLED" ? COLOR.grey : COLOR.amber) : ALERT_COLOR[alert.status] || COLOR.grey;
+
+    return asAttachment(summary(alert), color, alertBlocks(alert, now));
+
+}
+
+// Cancel is red and asks first (Slack's own confirm), then the reason box.
+function cancelButton(alert) {
+
+    return {
+        type: "button", action_id: "cancel", style: "danger", value: String(alert.id),
+        text: { type: "plain_text", text: "Cancel" },
+        confirm: {
+            title: { type: "plain_text", text: `Cancel alert #${alert.id}?` },
+            text: { type: "mrkdwn", text: `${esc(label(alert.type))} · ${esc(alert.production_line)} / ${esc(alert.work_center)} is still open. Cancelled alerts don't count toward response times.` },
+            confirm: { type: "plain_text", text: "Yes, cancel" },
+            deny: { type: "plain_text", text: "Keep it open" },
+            style: "danger"
+        }
+    };
 
 }
 
@@ -196,13 +265,13 @@ function alertButtons(alert) {
     if (alert.status === "ACTIVE")
         return [
             { type: "button", action_id: "ack", text: { type: "plain_text", text: "👷 Acknowledge" }, style: "primary", value: id },
-            { type: "button", action_id: "cancel", text: { type: "plain_text", text: "Cancel" }, value: id }
+            cancelButton(alert)
         ];
 
     if (alert.status === "ACKNOWLEDGED")
         return [
             { type: "button", action_id: "resolve", text: { type: "plain_text", text: "✅ Resolve" }, style: "primary", value: id },
-            { type: "button", action_id: "cancel", text: { type: "plain_text", text: "Cancel" }, value: id }
+            cancelButton(alert)
         ];
 
     return [];
@@ -312,7 +381,7 @@ async function postAlertToSlack(alert, post) {
         return null;
 
     const text = nearMiss ? `⚠️ Near miss reported #${alert.id} · ${alert.production_line} / ${alert.work_center}` : summary(alert);
-    const r = await slackApi("chat.postMessage", { channel: cfg.channel, text, blocks: alertBlocks(alert), unfurl_links: false }, cfg.token, post);
+    const r = await slackApi("chat.postMessage", { channel: cfg.channel, ...alertMessage(alert), text, unfurl_links: false }, cfg.token, post);
 
     db().db.prepare("UPDATE alerts SET slack_channel = ?, slack_ts = ? WHERE id = ?").run(r.channel, r.ts, alert.id);
 
@@ -342,7 +411,7 @@ async function updateAlertInSlack(alert, { step = true, post } = {}) {
     // A logged near miss changes only when undone / voided.
     step = step && !(latest.type === "NEAR_MISS" && latest.status !== "CANCELLED");
 
-    await slackApi("chat.update", { channel: latest.slack_channel, ts: latest.slack_ts, text: summary(latest), blocks: alertBlocks(latest) }, cfg.token, post);
+    await updateMessage({ channel: latest.slack_channel, ts: latest.slack_ts, ...alertMessage(latest), blocks: [] }, cfg.token, post);
 
     const reply = step ? stepText(latest) : null;
 
@@ -376,15 +445,21 @@ function bomLine(l) {
 
 function bomBlocks(req, lines, url) {
 
-    const status = req.status === "DONE" ? `✅ *DONE in QuickBooks* by ${esc(req.closed_by)}` : req.status === "CANCELLED" ? `✖️ *CANCELLED* by ${esc(req.closed_by)}` : "🟦 *OPEN*";
+    const when = req.closed_at ? ` · ${clock(req.closed_at)}` : "";
+    const status = req.status === "DONE" ? `✅ *DONE in QuickBooks* by ${esc(req.closed_by)}${when}`
+        : req.status === "CANCELLED" ? `✖️ *CANCELLED* by ${esc(req.closed_by)}${when}`
+        : `🟦 *OPEN* · ${esc(req.line_group || "Other")} · ${lines.length} change${lines.length === 1 ? "" : "s"}`;
     const details = [["Reason", req.reason], ["NCM / ECO", req.reference], ["Requested by", req.requested_by]].filter(([, v]) => v);
 
     const blocks = [
-        { type: "header", text: { type: "plain_text", text: `🧾 BOM CHANGE REQUEST ${req.code}`, emoji: true } },
-        { type: "section", text: { type: "mrkdwn", text: `${status}\n*${esc(req.sku)}* · ${esc(req.line_group || "Other")}${req.sku_description ? `\n${esc(req.sku_description).slice(0, 150)}` : ""}` } },
-        { type: "section", text: { type: "mrkdwn", text: lines.map(bomLine).join("\n").slice(0, 2900) } },
-        { type: "section", fields: details.map(([k, v]) => ({ type: "mrkdwn", text: `*${k}*\n${esc(v)}` })) }
+        { type: "header", text: { type: "plain_text", text: `🧾 ${req.code} · ${req.sku}`.slice(0, 150), emoji: true } },
+        { type: "section", text: { type: "mrkdwn", text: `${status}${req.sku_description ? `\n${esc(req.sku_description).slice(0, 150)}` : ""}` } }
     ];
+
+    if (details.length)
+        blocks.push({ type: "section", fields: details.map(([k, v]) => ({ type: "mrkdwn", text: `*${k}*\n${esc(v)}` })) });
+
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: lines.map(bomLine).join("\n").slice(0, 2900) || "_no change lines_" } });
 
     if (req.note)
         blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Note*\n${esc(req.note).slice(0, 1000)}` } });
@@ -392,11 +467,13 @@ function bomBlocks(req, lines, url) {
     if (req.close_note && req.status !== "OPEN")
         blocks.push({ type: "section", text: { type: "mrkdwn", text: `*${req.status === "DONE" ? "Done note" : "Cancel reason"}*\n${esc(req.close_note).slice(0, 1000)}` } });
 
-    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `<${url}|Open ${req.code}> · G&G ManufacturingOS` }] });
+    blocks.push(footer(`<${url}|Open ${req.code}> · G&G ManufacturingOS`));
 
     return blocks;
 
 }
+
+const bomMessage = (req, lines, url, text) => asAttachment(text, BOM_COLOR[req.status] || COLOR.grey, bomBlocks(req, lines, url));
 
 // New request → message (ts saved on the request); Done / Cancelled →
 // message redrawn + a reply in its thread.
@@ -407,7 +484,7 @@ async function postBomToSlack(req, lines, url, post) {
     if (!cfg)
         return null;
 
-    const r = await slackApi("chat.postMessage", { channel: cfg.channel, text: `BOM change request ${req.code}: ${req.sku} (${lines.length} change${lines.length === 1 ? "" : "s"})`, blocks: bomBlocks(req, lines, url), unfurl_links: false }, cfg.token, post);
+    const r = await slackApi("chat.postMessage", { channel: cfg.channel, ...bomMessage(req, lines, url, `BOM change request ${req.code}: ${req.sku} (${lines.length} change${lines.length === 1 ? "" : "s"})`), unfurl_links: false }, cfg.token, post);
 
     db().db.prepare("UPDATE bom_requests SET slack_channel = ?, slack_ts = ? WHERE id = ?").run(r.channel, r.ts, req.id);
 
@@ -425,7 +502,7 @@ async function updateBomInSlack(req, lines, url, post) {
     if (!cfg || !latest || !latest.slack_ts)
         return false;
 
-    await slackApi("chat.update", { channel: latest.slack_channel, ts: latest.slack_ts, text: `BOM change request ${latest.code}: ${latest.status}`, blocks: bomBlocks(latest, lines, url) }, cfg.token, post);
+    await updateMessage({ channel: latest.slack_channel, ts: latest.slack_ts, ...bomMessage(latest, lines, url, `BOM change request ${latest.code}: ${latest.status}`), blocks: [] }, cfg.token, post);
 
     const reply = latest.status === "DONE"
         ? `✅ ${latest.code} done in QuickBooks by *${esc(latest.closed_by)}*${latest.close_note ? `: ${esc(latest.close_note)}` : ""}`
@@ -513,4 +590,4 @@ async function postEscalationToSlack(alert, items, post) {
 
 }
 
-module.exports = { postEscalationToSlack, escalationText, describeSlack, postBomToSlack, updateBomInSlack, bomBlocks, postSystemToSlack, slackConfig, signingSecret, slackApi, alertBlocks, alertButtons, stepText, postAlertToSlack, updateAlertInSlack, span, resolveModal, cancelModal, openModal, tellUser, CANCEL_REASONS };
+module.exports = { alertMessage, bomMessage, logoUrl, COLOR, postEscalationToSlack, escalationText, describeSlack, postBomToSlack, updateBomInSlack, bomBlocks, postSystemToSlack, slackConfig, signingSecret, slackApi, alertBlocks, alertButtons, stepText, postAlertToSlack, updateAlertInSlack, span, resolveModal, cancelModal, openModal, tellUser, CANCEL_REASONS };
