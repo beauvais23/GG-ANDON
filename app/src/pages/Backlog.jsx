@@ -11,7 +11,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import useClock from "../hooks/useClock";
 
-import { clearBacklogNote, getBacklog, getBacklogHistory, getRepChannels, importBacklogNotes, saveBacklogNote, saveRepChannels } from "../api/backlog";
+import { clearBacklogNote, getBacklog, getBacklogHistory, getRepChannels, importBacklogNotes, postWalmartDemand, saveBacklogNote, saveRepChannels } from "../api/backlog";
 import { downloadCsv } from "../utils/csv";
 import { labelSx, tokens } from "../theme/theme";
 
@@ -211,6 +211,14 @@ function Detail({ s, onClose, onSaved }) {
                         <Box>{num(l.open)} open · {money(l.open * l.price)}</Box>
                     </Box>
                     <Box sx={{ color: tokens.muted, fontSize: 12.5 }}>{l.description || "—"} · ship {md(l.date)}{l.fromStock ? ` · ${num(l.fromStock)} from stock` : ""}{l.poEta ? ` · PO ETA ${md(l.poEta)}${l.latePo ? " (late PO)" : ""}` : ""}</Box>
+                    {l.release && (
+                        <Box sx={{ color: tokens.muted, fontSize: 12.5 }}>
+                            {l.line || "Walmart"}{l.release.immediate ? " · immediate need" : ""}
+                            {l.release.commitQty != null ? ` · Loeb commitment ${num(l.release.commitQty)}${l.release.commitDate ? ` on ${md(l.release.commitDate)}` : ""}` : ""}
+                            {` · blanket ${l.release.blanketSos.length ? `SO ${l.release.blanketSos.join(", ")}` : "none open"}`}
+                            {l.release.notes ? <Box sx={{ color: tokens.text }}>Notes: {l.release.notes}</Box> : null}
+                        </Box>
+                    )}
                     {l.shortParts.map(p => (
                         <Box key={p.part} sx={{ color: "#F85149", fontSize: 12.5 }}>
                             {p.short > 0 ? `Short ${p.part} × ${num(p.short)}` : `${p.part}: waiting on PO ${p.po} due ${md(p.poEta)}`}
@@ -328,6 +336,100 @@ function RepKeyDialog({ open, onClose, onDone, unmapped }) {
 
 }
 
+// Walmart release schedule (Director, Nov 11 2026): paste Krystal's
+// "G&G INVENTORY DEMAND" grid, check the preview, then save. A save
+// replaces the whole schedule.
+function WalmartDialog({ open, onClose, onDone, current }) {
+
+    const [text, setText] = useState("");
+    const [label, setLabel] = useState("");
+    const [by, setBy] = useState(storedName());
+    const [preview, setPreview] = useState(null);
+    const [msg, setMsg] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const send = async save => {
+
+        setMsg(null);
+        setBusy(true);
+
+        try {
+
+            const r = await postWalmartDemand({ text, fileLabel: label.trim(), by: by.trim(), save });
+
+            setPreview(r);
+
+            if (save) {
+
+                rememberName(by.trim());
+                setMsg({ ok: true, text: `Saved ${r.releases.length} releases (${num(r.units)} units). The backlog now shows them.` });
+                onDone();
+
+            }
+
+        }
+
+        catch (err) {
+
+            if (err.data?.releases) setPreview(err.data);
+            setMsg({ ok: false, text: err.message });
+
+        }
+
+        setBusy(false);
+
+    };
+
+    const canSave = preview && !preview.saved && !preview.errors?.length && !preview.unmatched?.length && preview.releases?.length > 0;
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+            <DialogTitle>Walmart demand schedule</DialogTitle>
+            <DialogContent>
+                <Box sx={{ color: tokens.muted, fontSize: 13.5, mb: 1 }}>
+                    Open Krystal's <b>G&amp;G INVENTORY DEMAND MM.DD.YYYY</b> file, select from the <b>EID</b> header row down to the last SKU row (all month columns), copy and paste below.
+                    Each SKU × month with a quantity becomes a release row due on the 1st of that month (or the Loeb commitment date). <b>Saving replaces the current schedule.</b>
+                </Box>
+                {current && <Alert severity="info" sx={{ mb: 1 }}>Current schedule: {current.fileLabel || "no file name"} · {current.releases} releases · {num(current.units)} units · saved by {current.importedBy}, {when(current.importedAt)}</Alert>}
+                <TextField multiline minRows={6} fullWidth value={text} onChange={e => { setText(e.target.value); setPreview(null); }} placeholder="EID	Description	SKU #	…" slotProps={{ htmlInput: { style: { fontFamily: tokens.mono, fontSize: 13 } } }} />
+                <Box sx={{ display: "flex", gap: 1.5, mt: 1.5, flexWrap: "wrap" }}>
+                    <TextField label="File date (e.g. 11.09.2026)" size="small" value={label} onChange={e => setLabel(e.target.value)} />
+                    <TextField label="Your name" size="small" value={by} onChange={e => setBy(e.target.value)} />
+                </Box>
+                {msg && <Alert severity={msg.ok ? "success" : "error"} sx={{ mt: 1.5 }}>{msg.text}</Alert>}
+                {preview?.errors?.length > 0 && !msg && <Alert severity="error" sx={{ mt: 1.5 }}>{preview.errors.join(" ")}</Alert>}
+                {preview?.unmatched?.length > 0 && (
+                    <Alert severity="warning" sx={{ mt: 1.5 }}>
+                        {preview.unmatched.length} row(s) don't match a QuickBooks item. Fix the SKU # column in the paste, then check again:
+                        {preview.unmatched.map(u => <Box key={u.eid + u.description} sx={{ fontFamily: tokens.mono, fontSize: 12.5 }}>EID {u.eid} · {u.description} · tried {u.tried.join(", ") || "—"} · {num(u.qty)} units</Box>)}
+                    </Alert>
+                )}
+                {preview?.releases?.length > 0 && (
+                    <Box sx={{ mt: 1.5 }}>
+                        <Box sx={{ ...labelSx, fontSize: 11 }}>Preview · {preview.releases.length} releases · {num(preview.units)} units · months {preview.months.map(m => md(m)).join(", ")}</Box>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "70px 1fr 90px 70px 90px", gap: 0.5, fontSize: 13, mt: 0.5, maxHeight: 260, overflowY: "auto" }}>
+                            {["EID", "SKU", "Month", "Qty", "Due"].map(h => <Box key={h} sx={{ color: tokens.muted, fontWeight: 700 }}>{h}</Box>)}
+                            {preview.releases.map((r, i) => [
+                                <Box key={`e${i}`} sx={{ fontFamily: tokens.mono }}>{r.eid}</Box>,
+                                <Box key={`s${i}`} sx={{ fontFamily: tokens.mono }}>{r.sku}</Box>,
+                                <Box key={`m${i}`}>{r.immediate ? "Immediate" : md(r.month)}</Box>,
+                                <Box key={`q${i}`}>{num(r.qty)}</Box>,
+                                <Box key={`d${i}`}>{md(r.due)}</Box>
+                            ])}
+                        </Box>
+                    </Box>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Close</Button>
+                <Button disabled={!text.trim() || busy} onClick={() => send(false)}>Check</Button>
+                <Button variant="contained" disabled={!canSave || !by.trim() || busy} onClick={() => send(true)}>Save schedule</Button>
+            </DialogActions>
+        </Dialog>
+    );
+
+}
+
 function Backlog() {
 
     const clock = useClock();
@@ -345,6 +447,7 @@ function Backlog() {
     const [open, setOpen] = useState(null);
     const [importing, setImporting] = useState(false);
     const [repKeyOpen, setRepKeyOpen] = useState(false);
+    const [walmartOpen, setWalmartOpen] = useState(false);
     const [customer, setCustomer] = useState(null);
     const [withSpaceX, setWithSpaceX] = useState(true);
     const [withWalmart, setWithWalmart] = useState(true);
@@ -450,6 +553,9 @@ function Backlog() {
                             <Box sx={{ flex: 1 }} />
                             <Box sx={{ color: tokens.muted, fontSize: 12.5 }}>QuickBooks orders as of {when(data.asOf.orders)} · today {md(data.today)} · amber = due within {data.amberDays} days</Box>
                             <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />} disabled={loading} onClick={() => load(true)}>Refresh</Button>
+                            <Button size="small" startIcon={<UploadIcon />} onClick={() => setWalmartOpen(true)} title={data.walmartDemand ? `Walmart schedule ${data.walmartDemand.fileLabel || ""} saved ${when(data.walmartDemand.importedAt)} by ${data.walmartDemand.importedBy}` : "No Walmart schedule saved yet"}>
+                                Walmart demand{data.walmartDemand?.fileLabel ? ` (${data.walmartDemand.fileLabel})` : data.walmartDemand ? "" : " (none)"}
+                            </Button>
                             {isAdmin && <Button size="small" startIcon={<UploadIcon />} onClick={() => setImporting(true)}>Import notes</Button>}
                             {isAdmin && <Button size="small" onClick={() => setRepKeyOpen(true)}>Rep key{data.repKey?.unmappedReps?.length ? ` (${data.repKey.unmappedReps.length} missing)` : ""}</Button>}
                         </Box>
@@ -522,6 +628,7 @@ function Backlog() {
             </Drawer>
 
             <ImportDialog open={importing} onClose={() => setImporting(false)} onDone={() => load(false)} />
+            <WalmartDialog open={walmartOpen} onClose={() => setWalmartOpen(false)} onDone={() => load(false)} current={data?.walmartDemand} />
             <RepKeyDialog open={repKeyOpen} onClose={() => setRepKeyOpen(false)} onDone={() => load(false)} unmapped={data?.repKey?.unmappedReps} />
 
             <Footer />

@@ -154,6 +154,38 @@ test("channel (Director, Nov 11 2026): WMT part → Walmart, SpaceX customer →
 
 });
 
+test("Walmart releases (Nov 11 2026): one row per release month with its own RAG; blanket stays grey; price from the blanket; over the blanket → reason", () => {
+
+    const wItems = new Map([...items, ["V4-WMT", { full_name: "V4-WMT", type: "Inventory", description: "VPX4 Walmart", on_hand: 60 }]]);
+    const soLines = [
+        so("BL1", "V4-WMT", 100, null, { customer: "Loeb Electric", project: "Walmart", sales_rep: "GG-DI", unit_price: 200 })
+    ];
+    const releases = [
+        { eid: "1", sku: "V4-WMT", month: "2026-11-01", immediate: true, qty: 50, due: "2026-11-01" },
+        { eid: "1", sku: "V4-WMT", month: "2026-12-01", qty: 30, due: "2026-12-01" },
+        { eid: "1", sku: "V4-WMT", month: "2027-01-01", qty: 40, due: "2027-01-01" }
+    ];
+
+    const r = buildBacklog({ soLines, poLines: [], items: wItems, childrenOf, today: TODAY, releases });
+
+    assert.equal(find(r, "BL1").rag, "GREY", "blanket SO itself stays grey");
+
+    const nov = find(r, "WMT 11/26");
+    const dec = find(r, "WMT 12/26");
+    const jan = find(r, "WMT 1/27");
+
+    assert.equal(nov.release, true);
+    assert.equal(nov.channel, "Walmart");
+    assert.equal(nov.customer, "Loeb Electric");
+    assert.equal(nov.openValue, 50 * 200, "price from the blanket line");
+    assert.equal(nov.status, "LATE", "immediate need is due the 1st");
+    assert.equal(dec.rag, "RED", "only 10 left after November's 50 of 60 on hand, no PO");
+    assert.deepEqual(nov.lines[0].release.blanketSos, ["BL1"]);
+    assert.ok(jan.reasons.some(x => /V4-WMT: 20 more than the open Loeb blanket/.test(x)), jan.reasons.join("; "));
+    assert.ok(!dec.reasons.some(x => /blanket/.test(x)));
+
+});
+
 //------------------------------------------------------
 // Routes
 //------------------------------------------------------
@@ -255,5 +287,45 @@ test("rep key (admin): paste replaces the whole key, header skipped, bad rows re
     const row = (await request(app).get("/backlog").set(floor)).body.sos.find(s => s.so === "52680");
 
     assert.equal(row.channel, "Car Wash", "the new key is used at once");
+
+});
+
+test("Walmart demand paste: preview shows releases and unmatched; save needs a name and no unmatched rows, replaces the schedule, and adds release rows to /backlog", async () => {
+
+    const fs = require("node:fs");
+    const grid = fs.readFileSync(require("node:path").join(__dirname, "fixtures", "walmart_demand_11-09-2026.tsv"), "utf8");
+
+    await request(app).post("/backlog/walmart-demand").send({ text: grid }).expect(401);
+
+    const pre = await request(app).post("/backlog/walmart-demand").set(floor).send({ text: grid }).expect(200);
+
+    assert.equal(pre.body.saved, false);
+    assert.equal(pre.body.unmatched.length, 4, "no WMT items in this DB yet");
+
+    await request(app).post("/backlog/walmart-demand").set(floor).send({ text: grid, by: "Bill", save: true }).expect(400);
+
+    const add = db.prepare("INSERT OR REPLACE INTO qb_items (full_name, type, description, active, on_hand) VALUES (?, 'InventoryAssembly', ?, 1, 0)");
+
+    for (const sku of ["VPX4-40K-120V-WMT", "VPX4-40K-277V-WMT", "VPX8-40K-277V-WMT", "VPX8-40K-120V-WMT"])
+        add.run(sku, sku);
+
+    await request(app).post("/backlog/walmart-demand").set(floor).send({ text: grid, save: true }).expect(400);
+
+    const ok = await request(app).post("/backlog/walmart-demand").set(floor).send({ text: grid, by: "Bill", fileLabel: "11.09.2026", save: true }).expect(200);
+
+    assert.equal(ok.body.releases.length, 5);
+    assert.equal(ok.body.units, 220);
+    assert.equal(ok.body.current.fileLabel, "11.09.2026");
+
+    const again = await request(app).post("/backlog/walmart-demand").set(floor).send({ text: grid, by: "Bill", save: true }).expect(200);
+
+    assert.equal(again.body.releases.length, 5);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM walmart_releases").get().n, 5, "a new paste replaces, not adds");
+
+    const b = (await request(app).get("/backlog").set(floor).expect(200)).body;
+
+    assert.deepEqual(b.sos.filter(s => s.release).map(s => s.so).sort(), ["WMT 11/26", "WMT 12/26"]);
+    assert.equal(b.walmartDemand.importedBy, "Bill");
+    assert.equal(b.sos.find(s => s.so === "WMT 12/26").openQty, 133);
 
 });

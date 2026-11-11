@@ -3,6 +3,7 @@ const express = require("express");
 const { authenticateToken, requireAdmin } = require("../middleware/auth");
 const { buildBacklog } = require("../services/backlog");
 const { dateNY } = require("../services/nyTime");
+const { parseDemandGrid } = require("../services/walmartDemand");
 
 //------------------------------------------------------
 // Backlog & delivery risk (Director, Nov 10 2026). Any login
@@ -65,7 +66,13 @@ function backlogRoutes(qbBom, db) {
         history: db.prepare("SELECT field, old_value, new_value, changed_by, changed_at FROM backlog_note_log WHERE so = ? ORDER BY id DESC LIMIT 200"),
         repChannels: db.prepare("SELECT rep, channel, updated_by, updated_at FROM rep_channels ORDER BY rep"),
         clearReps: db.prepare("DELETE FROM rep_channels"),
-        addRep: db.prepare("INSERT OR REPLACE INTO rep_channels (rep, channel, updated_by, updated_at) VALUES (?, ?, ?, ?)")
+        addRep: db.prepare("INSERT OR REPLACE INTO rep_channels (rep, channel, updated_by, updated_at) VALUES (?, ?, ?, ?)"),
+        releases: db.prepare("SELECT eid, description, sku, month, immediate, qty, commit_qty AS commitQty, commit_date AS commitDate, due, notes FROM walmart_releases ORDER BY due, sku"),
+        lastImport: db.prepare("SELECT id, file_label AS fileLabel, imported_by AS importedBy, imported_at AS importedAt, releases, units FROM walmart_demand_imports ORDER BY id DESC LIMIT 1"),
+        addImport: db.prepare("INSERT INTO walmart_demand_imports (file_label, imported_by, imported_at, releases, units) VALUES (?, ?, ?, ?, ?)"),
+        clearReleases: db.prepare("DELETE FROM walmart_releases"),
+        addRelease: db.prepare(`INSERT INTO walmart_releases (import_id, eid, description, sku, month, immediate, qty, commit_qty, commit_date, due, notes)
+            VALUES (@importId, @eid, @description, @sku, @month, @immediate, @qty, @commitQty, @commitDate, @due, @notes)`)
     };
 
     // Applies changes for one SO; returns { note } or { errors }.
@@ -146,12 +153,13 @@ function backlogRoutes(qbBom, db) {
             today: dateNY(Date.now()),
             notes,
             lineGroupOf: qbBom.lineGroupOf,
-            repChannels
+            repChannels,
+            releases: st.releases.all()
         });
 
         const unmappedReps = [...new Set(result.sos.filter(s => s.channel === "Unassigned" && s.rep).map(s => s.rep))].sort();
 
-        res.json({ ...result, repKey: { count: repRows.length, updatedAt: Math.max(0, ...repRows.map(r => r.updated_at || 0)) || null, unmappedReps }, asOf: inputs.asOf, error: inputs.error, status: qbBom.status() });
+        res.json({ ...result, walmartDemand: st.lastImport.get() || null, repKey: { count: repRows.length, updatedAt: Math.max(0, ...repRows.map(r => r.updated_at || 0)) || null, unmappedReps }, asOf: inputs.asOf, error: inputs.error, status: qbBom.status() });
 
     });
 
@@ -301,6 +309,57 @@ function backlogRoutes(qbBom, db) {
         })();
 
         res.json({ success: true, reps: parsed.size });
+
+    });
+
+    //--------------------------------------------------
+    // Walmart release schedule (Director, Nov 11 2026): paste
+    // Krystal's demand grid. save=false previews; save=true replaces
+    // the whole schedule (all or none) and logs the import. Any login
+    // with a name, like notes.
+    //--------------------------------------------------
+
+    router.get("/backlog/walmart-demand", authenticateToken, (req, res) => {
+
+        res.json({ success: true, current: st.lastImport.get() || null, releases: st.releases.all() });
+
+    });
+
+    router.post("/backlog/walmart-demand", authenticateToken, (req, res) => {
+
+        const by = nameOf(req.body?.by);
+        const fileLabel = String(req.body?.fileLabel ?? "").trim().slice(0, 120) || null;
+        const save = req.body?.save === true;
+
+        if (save && !by)
+            return res.status(400).json({ success: false, message: "Your name is required." });
+
+        const parsed = parseDemandGrid(String(req.body?.text || ""), { itemExists: n => Boolean(qbBom.itemOf(n)) });
+
+        if (!parsed.errors.length && !parsed.releases.length)
+            parsed.errors.push("No release quantities found.");
+
+        const units = parsed.releases.reduce((a, r) => a + r.qty, 0);
+        const out = { ...parsed, units };
+
+        if (!save)
+            return res.json({ success: true, saved: false, ...out });
+
+        if (parsed.errors.length || parsed.unmatched.length)
+            return res.status(400).json({ success: false, message: parsed.errors.length ? parsed.errors.join(" ") : `${parsed.unmatched.length} row(s) don't match a QuickBooks item. Nothing was saved.`, ...out });
+
+        db.transaction(() => {
+
+            const importId = st.addImport.run(fileLabel, by, Date.now(), parsed.releases.length, units).lastInsertRowid;
+
+            st.clearReleases.run();
+
+            for (const r of parsed.releases)
+                st.addRelease.run({ ...r, importId, immediate: r.immediate ? 1 : 0, commitQty: r.commitQty ?? null, commitDate: r.commitDate || null, notes: r.notes || null });
+
+        })();
+
+        res.json({ success: true, saved: true, current: st.lastImport.get(), ...out });
 
     });
 

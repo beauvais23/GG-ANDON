@@ -19,8 +19,15 @@
 //   AMBER  relies on a PO that is already late, or due within 5
 //          days and still waiting on a PO
 //   GREEN  covered
-//   GREY   HOLD (not SpaceX: Director, Nov 10 2026), BLANKET (Loeb / Walmart; release rows come with
-//          PR 2) or UNSCHEDULED (no date / 12/31/2027 placeholder)
+//   GREY   HOLD (not SpaceX: Director, Nov 10 2026), BLANKET (Loeb / Walmart)
+//          or UNSCHEDULED (no date / 12/31/2027 placeholder)
+//
+// Walmart releases (Director, Nov 11 2026): the pasted demand
+// schedule (walmart_releases) adds one row per release month
+// ("WMT 11/26") with its own RAG; its lines are allocated stock like
+// any dated order. Price, customer and rep come from the open Loeb
+// blanket lines of the same SKU. A release that takes a SKU past the
+// open blanket balance gets a reason ("needs a new Loeb PO").
 //------------------------------------------------------
 
 const AMBER_DAYS = 5;
@@ -84,7 +91,7 @@ function channelOf(lines, repChannels) {
 
 }
 
-function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new Map(), lineGroupOf = () => null, repChannels = new Map(), amberDays = AMBER_DAYS }) {
+function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new Map(), lineGroupOf = () => null, repChannels = new Map(), releases = [], amberDays = AMBER_DAYS }) {
 
     //--------------------------------------------------
     // 1. Open lines
@@ -107,6 +114,58 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
         lines.push({
             so: String(l.so), line: l.line, customer: l.customer, project: l.project || null, industry: l.industry || null, rep: l.sales_rep || null,
             item, description: it?.description || null, type: it?.type || null, open, price: Number(l.unit_price) || 0, date, kind,
+            fromStock: 0, fromPo: 0, short: 0, poEta: null, latePo: false, shortParts: []
+        });
+
+    }
+
+    //--------------------------------------------------
+    // 1b. Walmart release rows (one SO per release month)
+    //--------------------------------------------------
+
+    const blanketBySku = new Map();
+
+    for (const l of lines.filter(x => x.kind === "BLANKET")) {
+
+        const e = blanketBySku.get(l.item) || { open: 0, price: l.price, customer: l.customer, rep: l.rep, sos: new Set() };
+
+        e.open = r4(e.open + l.open);
+        e.sos.add(l.so);
+        blanketBySku.set(l.item, e);
+
+    }
+
+    const anyBlanket = [...blanketBySku.values()][0] || null;
+    const releaseUse = new Map();
+    const overBlanket = new Map();
+
+    for (const r of releases.filter(x => x && x.sku && x.due && x.month).sort((a, b) => a.due.localeCompare(b.due) || a.sku.localeCompare(b.sku))) {
+
+        const qty = Number(r.qty) || 0;
+
+        if (!r.sku || qty <= 0 || !r.due)
+            continue;
+
+        const so = `WMT ${Number(r.month.slice(5, 7))}/${r.month.slice(2, 4)}`;
+        const b = blanketBySku.get(r.sku);
+        const it = items.get(r.sku);
+        const used = r4((releaseUse.get(r.sku) || 0) + qty);
+
+        releaseUse.set(r.sku, used);
+
+        if (used > (b?.open || 0)) {
+
+            const list = overBlanket.get(so) || [];
+
+            list.push({ sku: r.sku, over: r4(Math.min(qty, used - (b?.open || 0))) });
+            overBlanket.set(so, list);
+
+        }
+
+        lines.push({
+            so, line: r.eid ? `EID ${r.eid}` : null, customer: b?.customer || anyBlanket?.customer || "Loeb Electric", project: "Walmart release", industry: null, rep: b?.rep || anyBlanket?.rep || null,
+            item: r.sku, description: it?.description || r.description || null, type: it?.type || null, open: qty, price: b?.price || 0, date: r.due, kind: "DATED",
+            release: { month: r.month, immediate: Boolean(r.immediate), commitQty: r.commitQty ?? null, commitDate: r.commitDate || null, notes: r.notes || null, blanketSos: b ? [...b.sos] : [] },
             fromStock: 0, fromPo: 0, short: 0, poEta: null, latePo: false, shortParts: []
         });
 
@@ -345,6 +404,9 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
             if (hardShort.length > 3)
                 reasons.push(`+${hardShort.length - 3} more short parts`);
 
+            for (const o of overBlanket.get(so) || [])
+                reasons.push(`${o.sku}: ${o.over} more than the open Loeb blanket (needs a new Loeb PO)`);
+
         }
 
         // PCB Coating isn't a product line here: coated boards feed all
@@ -354,6 +416,7 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
 
         sos.push({
             so,
+            release: Boolean(first.release),
             customer: first.customer,
             project: first.project,
             industry: first.industry,
@@ -371,7 +434,7 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
             openQty: r4(ls.reduce((s, l) => s + l.open, 0)),
             recoveryStatus: status === "LATE" ? recoveryStatus(note, today) : null,
             note,
-            lines: ls.map(l => ({ line: l.line, item: l.item, description: l.description, open: l.open, price: l.price, date: l.date, fromStock: l.fromStock, poEta: l.poEta, latePo: l.latePo, shortParts: l.shortParts })),
+            lines: ls.map(l => ({ line: l.line, release: l.release || null, item: l.item, description: l.description, open: l.open, price: l.price, date: l.date, fromStock: l.fromStock, poEta: l.poEta, latePo: l.latePo, shortParts: l.shortParts })),
             shortParts: hardShort
         });
 
