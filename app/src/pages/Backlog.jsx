@@ -51,7 +51,7 @@ const CHANNELS = ["All", "Car Wash", "Industrial", "SpaceX", "Walmart", "Unassig
 function channelTest(channel, withSpaceX, withWalmart) {
 
     if (channel === "All")
-        return () => true;
+        return s => (withSpaceX || s.channel !== "SpaceX") && (withWalmart || s.channel !== "Walmart");
 
     if (channel === "Industrial")
         return s => s.channel === "Industrial" || (withSpaceX && s.channel === "SpaceX") || (withWalmart && s.channel === "Walmart");
@@ -249,7 +249,7 @@ function ImportDialog({ open, onClose, onDone }) {
 
             const r = await importBacklogNotes(text, by.trim());
 
-            setMsg({ ok: true, text: `${r.saved} of ${r.rows} rows saved.` });
+            setMsg({ ok: true, text: [`${r.saved} SO${r.saved === 1 ? "" : "s"} updated (${r.rows} with notes, columns ${r.columns}).`, r.notOpen ? `${r.notOpen} skipped: not open in QuickBooks.` : "", ...(r.warnings || []).slice(0, 10)].filter(Boolean).join(" · ") });
             onDone();
 
         }
@@ -262,7 +262,7 @@ function ImportDialog({ open, onClose, onDone }) {
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
             <DialogTitle>Import notes</DialogTitle>
             <DialogContent>
-                <Box sx={{ color: tokens.muted, fontSize: 13.5, mb: 1 }}>Paste rows: SO# <i>tab</i> recovery date <i>tab</i> comment (e.g. from the Ship Report). A header row is skipped; blanks never overwrite. All rows or none.</Box>
+                <Box sx={{ color: tokens.muted, fontSize: 13.5, mb: 1 }}>Paste a whole sheet (select all, copy): the SO, recovery date and comment / notes columns are found by their headers. Or paste three columns: SO# <i>tab</i> recovery date <i>tab</i> comment. Only SOs open in QuickBooks are imported; blanks never overwrite; a date that can't be read is skipped and listed.</Box>
                 <TextField multiline minRows={8} fullWidth value={text} onChange={e => setText(e.target.value)} slotProps={{ htmlInput: { style: { fontFamily: tokens.mono, fontSize: 13 } } }} />
                 <TextField label="Your name" size="small" value={by} onChange={e => setBy(e.target.value)} sx={{ mt: 1.5 }} />
                 {msg && <Alert severity={msg.ok ? "success" : "error"} sx={{ mt: 1.5 }}>{msg.text}</Alert>}
@@ -465,7 +465,7 @@ function Backlog() {
                                     <TextField select size="small" label="Channel" value={channel} onChange={e => setChannel(e.target.value)} sx={{ minWidth: 160 }}>
                                         {channels.map(c => <MenuItem key={c} value={c}>{c === "SpaceX" || c === "Walmart" ? `${c} (Industrial)` : c}</MenuItem>)}
                                     </TextField>
-                                    {channel === "Industrial" && (
+                                    {(channel === "All" || channel === "Industrial") && (
                                         <>
                                             <FormControlLabel control={<Switch size="small" checked={withSpaceX} onChange={e => setWithSpaceX(e.target.checked)} />} label="+ SpaceX" />
                                             <FormControlLabel control={<Switch size="small" checked={withWalmart} onChange={e => setWithWalmart(e.target.checked)} />} label="+ Walmart (blanket)" />

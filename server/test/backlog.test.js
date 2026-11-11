@@ -222,20 +222,57 @@ test("routes: GET /backlog answers with the SO, channel and rep; notes need a na
 
 });
 
-test("import (admin): SO / recovery date / comment rows, all or none; floor login refused", async () => {
+test("import (admin): three columns or a whole sheet with headers; only open SOs; unreadable date skipped with a warning; floor refused", async () => {
+
+    const add = db.prepare("INSERT INTO qb_open_so_lines (so, line, customer, item, ordered, shipped, ship_date, hold, unit_price) VALUES (?, '1', 'Acme', 'RESALE', 5, ?, '2026-11-01', 0, 10)");
+
+    add.run("52976", 0);
+    add.run("52679", 0);
+    add.run("51111", 5); // fully shipped: not open
 
     const text = "SO#\tRECOVERY DATE\tCOMMENTS\n52976\t11/18/2026\tWaiting on XPT boards\n52679\t\tIn final test";
 
     await request(app).post("/admin/backlog/notes/import").set(floor).send({ by: "x", text }).expect(403);
-    await request(app).post("/admin/backlog/notes/import").set(admin).send({ by: "Bill", text: "52976\t13/45/2026\tx" }).expect(400);
 
     const r = await request(app).post("/admin/backlog/notes/import").set(admin).send({ by: "Bill", text }).expect(200);
 
     assert.equal(r.body.saved, 2);
 
-    const notes = db.prepare("SELECT so, recovery_date, ops_comment FROM backlog_notes WHERE so IN ('52976', '52679') ORDER BY so").all();
+    const notes = () => db.prepare("SELECT so, recovery_date, ops_comment FROM backlog_notes WHERE so IN ('52976', '52679', '51111', '99999') ORDER BY so").all().map(x => [x.so, x.recovery_date, x.ops_comment]);
 
-    assert.deepEqual(notes.map(x => [x.so, x.recovery_date, x.ops_comment]), [["52679", null, "In final test"], ["52976", "2026-11-18", "Waiting on XPT boards"]]);
+    assert.deepEqual(notes(), [["52679", null, "In final test"], ["52976", "2026-11-18", "Waiting on XPT boards"]]);
+
+    // A whole sheet: title rows, extra columns, columns found by header.
+    const sheet = [
+        "G&G SHIP REPORT\t\t\t\t\t",
+        "\t\t\t\t\t",
+        "CUSTOMER\tSO #\tSHIP DATE\tQTY\tRECOVERY DATE\tNOTES",
+        "Acme\t52976\t11/1/2026\t5\t11/20/2026\tBoards in coating",
+        "Acme\t51111\t11/1/2026\t5\t11/20/2026\tShipped already",
+        "Acme\t99999\t11/1/2026\t5\t\tNot in QuickBooks",
+        "Acme\t52679\t11/1/2026\t5\tTBD\tWaiting on customer",
+        "Acme\t52680\t11/1/2026\t5\t\t"
+    ].join("\n");
+
+    const w = await request(app).post("/admin/backlog/notes/import").set(admin).send({ by: "Bill", text: sheet }).expect(200);
+
+    assert.equal(w.body.columns, "by header");
+    assert.equal(w.body.notOpen, 2);
+    assert.equal(w.body.saved, 2);
+    assert.match(w.body.warnings[0], /52679: date "TBD" not read/);
+    assert.deepEqual(notes(), [["52679", null, "Waiting on customer"], ["52976", "2026-11-20", "Boards in coating"]]);
+
+    await request(app).post("/admin/backlog/notes/import").set(admin).send({ by: "Bill", text: "SO\tSHIP DATE\n52976\t1/1/2026" }).expect(400);
+
+});
+
+test("a paste over 2 MB gets a JSON 413, not an HTML page; up to 2 MB is accepted", async () => {
+
+    const big = await request(app).post("/admin/backlog/notes/import").set(admin).send({ by: "Bill", text: "x".repeat(2.1 * 1024 * 1024) }).expect(413);
+
+    assert.match(big.body.message, /Too much pasted/);
+
+    await request(app).post("/admin/backlog/notes/import").set(admin).send({ by: "Bill", text: `SO\tRECOVERY DATE\tCOMMENTS\n${"\t\t\n".repeat(200000)}` }).expect(200);
 
 });
 

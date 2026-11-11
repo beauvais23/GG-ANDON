@@ -27,7 +27,7 @@ async function call(path, { method = "GET", body } = {}) {
 
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({ message: `The server answered ${response.status} ${response.statusText || ""}`.trim() }));
 
     if (!response.ok)
         throw Object.assign(new Error(data.message || "Request failed."), { data });
