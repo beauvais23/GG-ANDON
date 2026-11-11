@@ -163,7 +163,7 @@ test("Acknowledge → recorded under the linked responder (Responding); the Slac
 
     const update = calls.find(c => c.url.endsWith("chat.update"));
 
-    assert.match(JSON.stringify(update.body.blocks), /"action_id":"resolve"/, "acknowledged message offers Resolve");
+    assert.match(JSON.stringify(update.body.attachments), /"action_id":"resolve"/, "acknowledged message offers Resolve");
 
     calls.length = 0;
     await signed(press("ack", id)).expect(200);
