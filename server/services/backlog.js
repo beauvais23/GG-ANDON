@@ -36,7 +36,9 @@ const md = d => (d && d !== "9999" ? `${Number(d.slice(5, 7))}/${Number(d.slice(
 
 const isShipping = item => /^S&H/i.test(item);
 const isReturns = customer => /returns\s*&\s*warranty/i.test(customer || "");
-const isBlanket = l => /loeb/i.test(l.customer || "") && /walmart/i.test(l.project || "");
+// Loeb's only blanket orders are Walmart's (Director, Nov 11 2026): project
+// Walmart, or a WMT part number. Other Loeb orders are normal orders.
+const isBlanket = l => /loeb/i.test(l.customer || "") && (/walmart/i.test(l.project || "") || /WMT/i.test(l.item || ""));
 
 // SpaceX marks scheduled orders HOLD in QuickBooks; the Director counts
 // them as real orders (Nov 10 2026). Other customers' HOLDs stay grey.
@@ -51,7 +53,38 @@ function recoveryStatus(note, today) {
 
 }
 
-function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new Map(), lineGroupOf = () => null, amberDays = AMBER_DAYS }) {
+//------------------------------------------------------
+// Sales channel (Director, Nov 11 2026): one per SO, in this order:
+//   Walmart   any line's part number contains WMT
+//   SpaceX    customer contains SpaceX
+//   Car Wash / Industrial   from the rep (QuickBooks SalesRep) via the
+//             "Assigned Rep to Sales Channel" key (rep_channels);
+//             channelDetail keeps the key's value (e.g. Industrial - Direct)
+//   Unassigned   rep missing from the key
+//------------------------------------------------------
+
+function channelOf(lines, repChannels) {
+
+    if (lines.some(l => /WMT/i.test(l.item)))
+        return { channel: "Walmart", channelDetail: null };
+
+    if (lines.some(l => /spacex/i.test(l.customer || "")))
+        return { channel: "SpaceX", channelDetail: null };
+
+    const rep = lines.find(l => l.rep)?.rep || null;
+    const raw = rep ? repChannels.get(rep.trim().toUpperCase()) : null;
+
+    if (raw && /^car\s*wash/i.test(raw))
+        return { channel: "Car Wash", channelDetail: raw };
+
+    if (raw && /^industrial/i.test(raw))
+        return { channel: "Industrial", channelDetail: raw };
+
+    return { channel: "Unassigned", channelDetail: raw || (rep ? `${rep} not in the rep key` : "no rep") };
+
+}
+
+function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new Map(), lineGroupOf = () => null, repChannels = new Map(), amberDays = AMBER_DAYS }) {
 
     //--------------------------------------------------
     // 1. Open lines
@@ -314,13 +347,18 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
 
         }
 
-        const groups = ls.map(l => lineGroupOf(l.item)).filter(g => g && g !== "Other");
+        // PCB Coating isn't a product line here: coated boards feed all
+        // three lines (Director, Nov 11 2026).
+        const groups = ls.map(l => lineGroupOf(l.item)).filter(g => g && g !== "Other" && g !== "PCB Coating");
+        const { channel, channelDetail } = channelOf(ls, repChannels);
 
         sos.push({
             so,
             customer: first.customer,
             project: first.project,
             industry: first.industry,
+            channel,
+            channelDetail,
             rep: first.rep,
             lineGroup: groups[0] || "Other",
             promise,
@@ -396,4 +434,4 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
 
 }
 
-module.exports = { buildBacklog, recoveryStatus, isBlanket, AMBER_DAYS, STALE_PO_DAYS, PLACEHOLDER };
+module.exports = { channelOf, buildBacklog, recoveryStatus, isBlanket, AMBER_DAYS, STALE_PO_DAYS, PLACEHOLDER };

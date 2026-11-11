@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, MenuItem, TextField } from "@mui/material";
+import { Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, MenuItem, TextField } from "@mui/material";
 
 import RefreshIcon from "@mui/icons-material/Refresh";
 import DownloadIcon from "@mui/icons-material/FileDownloadOutlined";
@@ -11,7 +11,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import useClock from "../hooks/useClock";
 
-import { clearBacklogNote, getBacklog, getBacklogHistory, importBacklogNotes, saveBacklogNote } from "../api/backlog";
+import { clearBacklogNote, getBacklog, getBacklogHistory, getRepChannels, importBacklogNotes, saveBacklogNote, saveRepChannels } from "../api/backlog";
 import { downloadCsv } from "../utils/csv";
 import { labelSx, tokens } from "../theme/theme";
 
@@ -39,7 +39,22 @@ const VIEWS = [
     { key: "every", label: "Everything", test: () => true }
 ];
 
-const LINES = ["All", "Team A", "Team B", "SpaceX", "PCB Coating", "Other"];
+// PCB Coating isn't a line here: coated boards feed all three lines (Director, Nov 11 2026).
+const LINES = ["All", "Team A", "Team B", "SpaceX", "Other"];
+
+// Channel filter (Director, Nov 11 2026). Each SO has one channel:
+// Walmart (WMT part), SpaceX (customer), else Car Wash / Industrial from the rep key.
+const CHANNELS = [
+    { key: "All", test: () => true },
+    { key: "Car Wash", test: s => s.channel === "Car Wash" },
+    { key: "Industrial (w/ SpaceX)", test: s => s.channel === "Industrial" || s.channel === "SpaceX" },
+    { key: "Industrial (no SpaceX)", test: s => s.channel === "Industrial" },
+    { key: "SpaceX", test: s => s.channel === "SpaceX" },
+    { key: "Walmart", test: s => s.channel === "Walmart" },
+    { key: "Unassigned", test: s => s.channel === "Unassigned" }
+];
+
+const channelLabel = s => (s.channelDetail && s.channel === "Industrial" ? s.channelDetail.replace(/^Industrial\s*-\s*/i, "Industrial · ") : s.channel || "—");
 
 const money = v => (v === null || v === undefined ? "—" : Number(v).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }));
 const num = v => (v === null || v === undefined ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }));
@@ -96,7 +111,7 @@ function OrderRow({ s, onOpen }) {
                 {s.project && <Box sx={{ color: tokens.muted, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.project}</Box>}
             </Box>
             <Box sx={{ display: { xs: "none", lg: "block" } }}>{s.lineGroup}</Box>
-            <Box sx={{ display: { xs: "none", lg: "block" }, color: tokens.muted }}>{s.industry || "—"}</Box>
+            <Box sx={{ display: { xs: "none", lg: "block" }, color: s.channel === "Unassigned" ? "#F2A33A" : tokens.muted, fontSize: 13 }} title={s.channelDetail || ""}>{channelLabel(s)}</Box>
             <Box sx={{ display: { xs: "none", lg: "block" }, color: tokens.muted, fontFamily: tokens.mono, fontSize: 12.5 }}>{s.rep || "—"}</Box>
             <Box sx={{ display: { xs: "none", lg: "block" } }}>{md(s.promise)}</Box>
             <Box sx={{ display: { xs: "none", lg: "block" }, color: s.daysTo < 0 && s.rag !== "GREY" ? "#F85149" : s.rag === "GREY" ? tokens.muted : tokens.text }}>{s.daysTo === null ? "—" : s.daysTo < 0 ? `${-s.daysTo} late` : `${s.daysTo} d`}</Box>
@@ -160,7 +175,7 @@ function Detail({ s, onClose, onSaved }) {
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ fontFamily: tokens.mono, fontSize: 20, fontWeight: 700 }}>SO {s.so}</Box>
                     <Box>{s.customer}{s.project ? ` · ${s.project}` : ""}</Box>
-                    <Box sx={{ color: tokens.muted, fontSize: 13 }}>{s.lineGroup} · {s.industry || "no channel"} · {s.rep || "no rep"} · promise {md(s.promise)} · {money(s.openValue)} open</Box>
+                    <Box sx={{ color: tokens.muted, fontSize: 13 }}>{s.lineGroup} · {channelLabel(s)} · {s.rep || "no rep"} · promise {md(s.promise)} · {money(s.openValue)} open</Box>
                     <Box sx={{ mt: 0.75, fontSize: 13.5 }}><b style={{ color: RAG[s.rag]?.color }}>{s.status}</b>{s.reasons.length ? ` · ${s.reasons.join(" · ")}` : ""}</Box>
                 </Box>
                 <IconButton aria-label="Close" onClick={onClose} sx={{ color: tokens.muted }}><CloseIcon /></IconButton>
@@ -254,6 +269,58 @@ function ImportDialog({ open, onClose, onDone }) {
 
 }
 
+function RepKeyDialog({ open, onClose, onDone, unmapped }) {
+
+    const [text, setText] = useState("");
+    const [by, setBy] = useState(storedName());
+    const [reps, setReps] = useState([]);
+    const [msg, setMsg] = useState(null);
+
+    useEffect(() => { if (open) getRepChannels().then(r => setReps(r.reps)).catch(() => setReps([])); }, [open]);
+
+    const run = async () => {
+
+        setMsg(null);
+
+        try {
+
+            const r = await saveRepChannels(text, by.trim());
+
+            setMsg({ ok: true, text: `Saved ${r.reps} reps.` });
+            setReps((await getRepChannels()).reps);
+            onDone();
+
+        }
+
+        catch (err) { setMsg({ ok: false, text: [err.message, ...(err.data?.errors || []).slice(0, 8)].join(" · ") }); }
+
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+            <DialogTitle>Rep → sales channel</DialogTitle>
+            <DialogContent>
+                <Box sx={{ color: tokens.muted, fontSize: 13.5, mb: 1 }}>
+                    Copy the Rep and Channel columns from the <b>Assigned Rep to Sales Channel</b> sheet (header included) and paste below. This <b>replaces the whole key</b>. Channel must start with Car Wash or Industrial. WMT orders are Walmart and SpaceX customers are SpaceX regardless of rep.
+                </Box>
+                {unmapped?.length > 0 && <Alert severity="warning" sx={{ mb: 1 }}>Reps on open orders but not in the key (shown as Unassigned): {unmapped.join(", ")}</Alert>}
+                <TextField multiline minRows={6} fullWidth value={text} onChange={e => setText(e.target.value)} placeholder={"Rep\tChannel\nGG-CW\tCar Wash\nGG-DI\tIndustrial - Direct"} slotProps={{ htmlInput: { style: { fontFamily: tokens.mono, fontSize: 13 } } }} />
+                <TextField label="Your name" size="small" value={by} onChange={e => setBy(e.target.value)} sx={{ mt: 1.5 }} />
+                {msg && <Alert severity={msg.ok ? "success" : "error"} sx={{ mt: 1.5 }}>{msg.text}</Alert>}
+                <Box sx={{ ...labelSx, fontSize: 11, mt: 2 }}>Current key ({reps.length})</Box>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 0.5, fontSize: 13, mt: 0.5, maxHeight: 220, overflowY: "auto" }}>
+                    {reps.map(r => <Box key={r.rep}><b style={{ fontFamily: tokens.mono }}>{r.rep}</b> <span style={{ color: tokens.muted }}>{r.channel}</span></Box>)}
+                </Box>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Close</Button>
+                <Button variant="contained" disabled={!text.trim() || !by.trim()} onClick={run}>Replace key</Button>
+            </DialogActions>
+        </Dialog>
+    );
+
+}
+
 function Backlog() {
 
     const clock = useClock();
@@ -270,6 +337,8 @@ function Backlog() {
     const [tab, setTab] = useState("orders");
     const [open, setOpen] = useState(null);
     const [importing, setImporting] = useState(false);
+    const [repKeyOpen, setRepKeyOpen] = useState(false);
+    const [customer, setCustomer] = useState(null);
 
     const load = useCallback(async refresh => {
 
@@ -285,32 +354,53 @@ function Backlog() {
 
     useEffect(() => { load(false); }, [load]);
 
-    const channels = useMemo(() => ["All", ...new Set((data?.sos || []).map(s => s.industry).filter(Boolean))], [data]);
+    const customers = useMemo(() => [...new Set((data?.sos || []).map(s => s.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [data]);
+    const channels = useMemo(() => CHANNELS.filter(c => c.key !== "Unassigned" || (data?.sos || []).some(s => s.channel === "Unassigned")), [data]);
     const reps = useMemo(() => ["All", ...[...new Set((data?.sos || []).map(s => s.rep).filter(Boolean))].sort()], [data]);
 
-    const rows = useMemo(() => {
+    // Everything but the view (Late / at risk / …): drives the tiles, so they
+    // follow the line, channel, rep, customer and search filters.
+    const base = useMemo(() => {
 
         if (!data)
             return [];
 
-        const v = VIEWS.find(x => x.key === view);
+        const ch = CHANNELS.find(c => c.key === channel) || CHANNELS[0];
         const term = q.trim().toLowerCase();
 
-        return data.sos.filter(s => v.test(s)
-            && (line === "All" || s.lineGroup === line)
-            && (channel === "All" || s.industry === channel)
+        return data.sos.filter(s => (line === "All" || s.lineGroup === line)
+            && ch.test(s)
             && (rep === "All" || s.rep === rep)
+            && (!customer || s.customer === customer)
             && (!term || [s.so, s.customer, s.project, ...s.lines.map(l => l.item)].some(x => String(x || "").toLowerCase().includes(term))));
 
-    }, [data, view, line, channel, rep, q]);
+    }, [data, line, channel, rep, customer, q]);
+
+    const rows = useMemo(() => base.filter(VIEWS.find(x => x.key === view).test), [base, view]);
+
+    const t = useMemo(() => {
+
+        const sum = xs => ({ count: xs.length, value: xs.reduce((a, s) => a + s.openValue, 0) });
+        const late = base.filter(s => s.status === "LATE");
+
+        return {
+            late: sum(late),
+            red: sum(base.filter(s => s.rag === "RED")),
+            amber: sum(base.filter(s => s.rag === "AMBER")),
+            green: sum(base.filter(s => s.rag === "GREEN")),
+            needsDate: late.filter(s => s.recoveryStatus === "NEEDS DATE").length,
+            missed: late.filter(s => s.recoveryStatus === "MISSED").length,
+            scheduledValue: base.filter(s => s.kind === "DATED").reduce((a, s) => a + s.openValue, 0)
+        };
+
+    }, [base]);
 
     const current = data?.sos.find(s => s.so === open) || null;
-    const t = data?.totals;
     const pct = t && t.scheduledValue ? Math.round(((t.red.value + t.amber.value) / t.scheduledValue) * 1000) / 10 : 0;
 
     const exportCsv = () => downloadCsv(`backlog-${data.today}.csv`, [
         { label: "RAG", key: "rag" }, { label: "Status", key: "status" }, { label: "SO#", key: "so" }, { label: "Customer", key: "customer" }, { label: "Project", key: "project" },
-        { label: "Line", key: "lineGroup" }, { label: "Channel", key: "industry" }, { label: "Rep", key: "rep" }, { label: "Promise date", key: "promise" },
+        { label: "Line", key: "lineGroup" }, { label: "Channel", key: "channel" }, { label: "Channel detail", key: "channelDetail" }, { label: "Rep", key: "rep" }, { label: "Promise date", key: "promise" },
         { label: "Days to promise", key: "daysTo" }, { label: "Open $", key: "openValue" }, { label: "Reason", value: r => r.reasons.join("; ") },
         { label: "Recovery date", value: r => r.note?.recovery_date || "" }, { label: "Recovery status", key: "recoveryStatus" },
         { label: "Material clear date", value: r => r.note?.material_clear_date || "" }, { label: "Ops comment", value: r => r.note?.ops_comment || "" },
@@ -352,6 +442,7 @@ function Backlog() {
                             <Box sx={{ color: tokens.muted, fontSize: 12.5 }}>QuickBooks orders as of {when(data.asOf.orders)} · today {md(data.today)} · amber = due within {data.amberDays} days</Box>
                             <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />} disabled={loading} onClick={() => load(true)}>Refresh</Button>
                             {isAdmin && <Button size="small" startIcon={<UploadIcon />} onClick={() => setImporting(true)}>Import notes</Button>}
+                            {isAdmin && <Button size="small" onClick={() => setRepKeyOpen(true)}>Rep key{data.repKey?.unmappedReps?.length ? ` (${data.repKey.unmappedReps.length} missing)` : ""}</Button>}
                         </Box>
 
                         {tab === "orders" && (
@@ -362,9 +453,11 @@ function Backlog() {
                                     {LINES.map(l => <Chip key={l} active={line === l} onClick={() => setLine(l)}>{l}</Chip>)}
                                 </Box>
                                 <Box sx={{ p: 1.5, display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center", borderBottom: `1px solid ${tokens.line}` }}>
-                                    <TextField select size="small" label="Channel" value={channel} onChange={e => setChannel(e.target.value)} sx={{ minWidth: 150 }}>
-                                        {channels.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                                    <TextField select size="small" label="Channel" value={channel} onChange={e => setChannel(e.target.value)} sx={{ minWidth: 210 }}>
+                                        {channels.map(c => <MenuItem key={c.key} value={c.key}>{c.key}</MenuItem>)}
                                     </TextField>
+                                    <Autocomplete size="small" options={customers} value={customer} onChange={(e, v) => setCustomer(v)} sx={{ minWidth: 260 }}
+                                        renderInput={params => <TextField {...params} label="Customer" placeholder="All customers" />} />
                                     <TextField select size="small" label="Rep" value={rep} onChange={e => setRep(e.target.value)} sx={{ minWidth: 150 }}>
                                         {reps.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                                     </TextField>
@@ -414,6 +507,7 @@ function Backlog() {
             </Drawer>
 
             <ImportDialog open={importing} onClose={() => setImporting(false)} onDone={() => load(false)} />
+            <RepKeyDialog open={repKeyOpen} onClose={() => setRepKeyOpen(false)} onDone={() => load(false)} unmapped={data?.repKey?.unmappedReps} />
 
             <Footer />
 
