@@ -77,16 +77,18 @@ test("message: header, status, line / work center / times, resolution or cancel 
     const active = alertBlocks({ ...base, status: "ACTIVE" }, base.requested + 12 * 60000);
     const text = JSON.stringify(active);
 
-    assert.match(active[0].text.text, /QUALITY ALERT #7/);
+    assert.equal(active[0].text.text, "🔴 QUALITY #7 · Team A / Final Test");
     assert.match(text, /ACTIVE/);
     assert.match(text, /Team A/);
-    assert.match(text, /Open for\*\\n12m/);
+    assert.match(text, /ACTIVE\* · open \*12m\* · raised/);
 
     const resolved = { ...base, status: "RESOLVED", acknowledged: base.requested + 3 * 60000, acknowledged_by: "Lead One", resolved: base.requested + 75 * 60000, resolved_by: "Lead One", resolution_notes: "Replaced <fixture>" };
     const rText = JSON.stringify(alertBlocks(resolved));
 
     assert.match(rText, /RESOLVED/);
-    assert.match(rText, /Duration\*\\n1h 15m/);
+    assert.match(rText, /RESOLVED\* · took \*1h 15m\*/);
+    assert.match(rText, /Acknowledged by\*\\nLead One · .* \(3m\)/);
+    assert.match(rText, /What fixed it/);
     assert.match(rText, /Replaced &lt;fixture&gt;/, "user text is escaped");
     assert.match(stepText(resolved), /Resolved by \*Lead One\* after 1h 15m: Replaced/);
 
@@ -136,7 +138,8 @@ test("flow: raise → one message (ts saved) → acknowledge → message updated
     const update = calls.find(c => c.method === "chat.update");
 
     assert.equal(update.body.ts, row.slack_ts);
-    assert.match(JSON.stringify(update.body.blocks), /ACKNOWLEDGED/);
+    assert.match(JSON.stringify(update.body.attachments), /ACKNOWLEDGED/);
+    assert.deepEqual(update.body.blocks, [], "clears the old top-level blocks of messages posted before the new look");
     assert.match(calls.find(c => c.body.thread_ts).body.text, /Acknowledged by \*Lead One\*/);
 
     await request(app).patch(`/alerts/${id}/resolve`).set(floor).send({ resolvedBy: "Lead One", resolutionNotes: "Reset the drive" }).expect(200);
@@ -157,8 +160,8 @@ test("near miss (S3): one NEAR MISS REPORTED message, no buttons; a Slack error 
 
     assert.equal(calls.length, 1);
     assert.equal(calls[0].body.channel, "C_STAGING");
-    assert.match(JSON.stringify(calls[0].body.blocks), /NEAR MISS REPORTED/);
-    assert.doesNotMatch(JSON.stringify(calls[0].body.blocks), /action_id/);
+    assert.match(JSON.stringify(calls[0].body.attachments), /NEAR MISS #/);
+    assert.doesNotMatch(JSON.stringify(calls[0].body.attachments), /action_id/);
 
     failWith = "channel_not_found";
 
@@ -172,5 +175,31 @@ test("near miss (S3): one NEAR MISS REPORTED message, no buttons; a Slack error 
     await request(app).patch(`/alerts/${id}/acknowledge`).set(floor).send({ acknowledgedBy: "Lead One" }).expect(200);
 
     failWith = null;
+
+});
+
+test("look (Nov 11 2026): left bar coloured by status, red Cancel with a confirm, G&G mark in the footer; update clears old top-level blocks", () => {
+
+    const { alertMessage, bomMessage, COLOR, logoUrl } = require("../services/slack");
+    const base = { id: 9, type: "QUALITY", production_line: "Team A", work_center: "Final Test", requested: Date.parse("2026-11-09T14:00:00Z") };
+    const color = status => alertMessage({ ...base, status }).attachments[0].color;
+
+    assert.deepEqual(["ACTIVE", "ACKNOWLEDGED", "RESOLVED", "CANCELLED"].map(color), [COLOR.red, COLOR.amber, COLOR.green, COLOR.grey]);
+    assert.equal(alertMessage({ ...base, type: "NEAR_MISS", status: "RESOLVED" }).attachments[0].color, COLOR.amber, "logged near miss = amber");
+    assert.equal(alertMessage({ ...base, type: "NEAR_MISS", status: "CANCELLED" }).attachments[0].color, COLOR.grey, "voided = grey");
+    assert.match(alertMessage({ ...base, status: "ACTIVE" }).text, /QUALITY alert #9/, "fallback text for notifications");
+
+    const bom = s => bomMessage({ code: "BOM-2026-001", sku: "KIT", status: s }, [], "https://x/bom", "t").attachments[0].color;
+
+    assert.deepEqual(["OPEN", "DONE", "CANCELLED"].map(bom), [COLOR.blue, COLOR.green, COLOR.grey]);
+
+    const { alertButtons } = require("../services/slack");
+    const cancel = alertButtons({ ...base, status: "ACTIVE" }).find(b => b.action_id === "cancel");
+
+    assert.equal(cancel.style, "danger");
+    assert.equal(cancel.confirm.confirm.text, "Yes, cancel");
+    assert.equal(cancel.confirm.deny.text, "Keep it open");
+    assert.match(logoUrl(), /\/slack\/gg-mark\.png$/);
+    assert.ok(JSON.stringify(alertMessage({ ...base, status: "ACTIVE" })).includes("gg-mark.png"));
 
 });

@@ -126,7 +126,7 @@ test("near miss: one message in #safety-near-miss (not #andon-alerts); undo → 
 
     assert.equal(posts().length, 1);
     assert.equal(posts()[0].body.channel, "C_NEARMISS");
-    assert.match(JSON.stringify(posts()[0].body.blocks), /NEAR MISS REPORTED/);
+    assert.match(JSON.stringify(posts()[0].body.attachments), /NEAR MISS #/);
 
     await request(app).patch(`/alerts/${id}/cancel`).set(floor).send({ reason: "Pressed by mistake", cancelledBy: "Operator (tablet)" }).expect(200);
     await waitFor(() => slack().some(c => c.url.endsWith("chat.update")));
@@ -134,7 +134,7 @@ test("near miss: one message in #safety-near-miss (not #andon-alerts); undo → 
     const update = slack().find(c => c.url.endsWith("chat.update"));
 
     assert.equal(update.body.channel, "C_NEARMISS");
-    assert.match(JSON.stringify(update.body.blocks), /VOIDED.*Pressed by mistake/);
+    assert.match(JSON.stringify(update.body.attachments), /VOIDED.*Pressed by mistake/);
 
 });
 
@@ -159,15 +159,15 @@ test("BOM request: message in #bom-changes (ts saved); Done → message shows DO
 
     const msg = posts().find(c => c.body.channel === "C_BOM");
 
-    assert.match(JSON.stringify(msg.body.blocks), new RegExp(`BOM CHANGE REQUEST ${code}`));
-    assert.match(JSON.stringify(msg.body.blocks), /CHANGE QTY\* line 1 `20-111-A` \*4 → 6\*/);
+    assert.match(JSON.stringify(msg.body.attachments), new RegExp(`🧾 ${code} · KIT-9`));
+    assert.match(JSON.stringify(msg.body.attachments), /CHANGE QTY\* line 1 `20-111-A` \*4 → 6\*/);
 
     await request(app).post(`/bom/requests/${code}/done`).set(floor).send({ by: "QB Editor", note: "Edited" }).expect(200);
     await waitFor(() => posts().some(c => c.body.thread_ts));
 
     const ts = db.prepare("SELECT slack_ts FROM bom_requests WHERE code = ?").get(code).slack_ts;
 
-    assert.match(JSON.stringify(slack().find(c => c.url.endsWith("chat.update")).body.blocks), /DONE in QuickBooks/);
+    assert.match(JSON.stringify(slack().find(c => c.url.endsWith("chat.update")).body.attachments), /DONE in QuickBooks/);
     assert.equal(posts().find(c => c.body.thread_ts).body.thread_ts, ts);
     assert.match(posts().find(c => c.body.thread_ts).body.text, /done in QuickBooks by \*QB Editor\*: Edited/);
 
