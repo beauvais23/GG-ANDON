@@ -140,6 +140,9 @@ app.use((err, req, res, next) => {
 
 });
 
+// Google sign-in (ggled.net) + Admin → Users: routes/users.js
+app.use(require("./routes/users").usersRoutes(db));
+
 // BOM viewer (QuickBooks via CData, read only): routes/bom.js
 const qbBom = createQbBom({ db });
 
