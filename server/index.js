@@ -56,6 +56,7 @@ const { createQbBom } = require("./services/qbBom");
 const { bomRoutes } = require("./routes/bom");
 const { mrpRoutes } = require("./routes/mrp");
 const { inventoryRoutes } = require("./routes/inventory");
+const { backlogRoutes } = require("./routes/backlog");
 const { slackRoutes } = require("./routes/slack");
 const { dateNY } = require("./services/nyTime");
 const { offsiteStatus } = require("./services/offsiteBackup");
@@ -122,7 +123,22 @@ const PORT =
 
 app.use(cors());
 
-app.use(express.json());
+// 2 MB: a whole-sheet paste (e.g. the Ship Report into Backlog → Import
+// notes) runs past the 100 KB default (staging, Nov 11 2026). A body that
+// is too large or not JSON gets a JSON answer, not Express's HTML page.
+app.use(express.json({ limit: "2mb" }));
+
+app.use((err, req, res, next) => {
+
+    if (err?.type === "entity.too.large")
+        return res.status(413).json({ success: false, message: "Too much pasted at once (over 2 MB). Paste fewer rows." });
+
+    if (err?.type === "entity.parse.failed")
+        return res.status(400).json({ success: false, message: "The request was not valid JSON." });
+
+    next(err);
+
+});
 
 // BOM viewer (QuickBooks via CData, read only): routes/bom.js
 const qbBom = createQbBom({ db });
@@ -132,6 +148,7 @@ app.use(bomRoutes(qbBom, db));
 // Material check (open orders × BOM explosion): routes/mrp.js
 app.use(mrpRoutes(qbBom));
 app.use(inventoryRoutes(qbBom));
+app.use(backlogRoutes(qbBom, db));
 
 // Slack buttons (S2): signed requests only; routes/slack.js
 app.use(slackRoutes({ statements, releaseResponders, queueNotification, notifyAcknowledged, notifyResolved, notifyCancelled }));
