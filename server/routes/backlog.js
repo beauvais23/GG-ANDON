@@ -191,9 +191,38 @@ function backlogRoutes(qbBom, db) {
 
     });
 
-    // One-time import (admin): paste "SO <tab> recovery date <tab> comment" rows,
-    // e.g. from the Ship Report. Comments go to Ops comment; nothing is
-    // overwritten with blank. All rows or none.
+    // One-time import (admin). Paste either three columns (SO <tab>
+    // recovery date <tab> comment) or a whole sheet with a header row:
+    // the SO, recovery date and comment / notes columns are found by
+    // their headers (Nov 11 2026: a Ship Report paste ran past the body
+    // limit). Only SOs open in QuickBooks are imported; blanks never
+    // overwrite; a date that can't be read is skipped (comment kept)
+    // and listed. Comments go to Ops comment.
+    const openSos = db.prepare("SELECT DISTINCT so FROM qb_open_so_lines WHERE ordered > shipped");
+
+    function importColumns(rows) {
+
+        for (let i = 0; i < Math.min(rows.length, 15); i++) {
+
+            const h = rows[i].map(c => c.trim().toUpperCase());
+            const so = h.findIndex(c => /^(SO|S\.O\.|SALES ORDER|SO\s*(#|NO\.?|NUMBER))$/.test(c));
+
+            if (so < 0)
+                continue;
+
+            return {
+                headerAt: i,
+                so,
+                date: h.findIndex(c => /RECOVER/.test(c)),
+                comments: h.map((c, j) => (/COMMENT|NOTE/.test(c) ? j : -1)).filter(j => j >= 0)
+            };
+
+        }
+
+        return { headerAt: -1, so: 0, date: 1, comments: null };
+
+    }
+
     router.post("/admin/backlog/notes/import", authenticateToken, requireAdmin, (req, res) => {
 
         const by = nameOf(req.body?.by);
@@ -202,28 +231,50 @@ function backlogRoutes(qbBom, db) {
         if (!by)
             return res.status(400).json({ success: false, message: "Your name is required." });
 
-        const rows = text.split(/\r?\n/).map(l => l.split("\t")).filter(c => c.some(x => x.trim()));
-        const errors = [];
+        const rows = text.split(/\r?\n/).map(l => l.split("\t"));
+        const cols = importColumns(rows);
+        const open = new Set(openSos.all().map(r => String(r.so)));
+        const warnings = [];
         const parsed = [];
+        let notOpen = 0;
+
+        if (cols.headerAt >= 0 && cols.date < 0 && !cols.comments.length)
+            return res.status(400).json({ success: false, message: "Found the SO column but no recovery date or comment / notes column. Nothing was saved." });
 
         rows.forEach((c, i) => {
 
-            const so = String(c[0] || "").trim();
-
-            if (!so || /^so/i.test(so) && i === 0)
+            if (i <= cols.headerAt || !c.some(x => x.trim()))
                 return;
 
-            const d = parseDate(c[1]);
+            const so = String(c[cols.so] || "").trim().replace(/^SO\s*#?\s*/i, "");
 
-            if (d === null)
-                errors.push(`Row ${i + 1} (${so}): bad date "${c[1]}"`);
-            else
-                parsed.push({ so, recoveryDate: d, opsComment: String(c.slice(2).join(" ") || "").trim() });
+            if (!so || (cols.headerAt < 0 && i === 0 && /^so/i.test(String(c[0]).trim())))
+                return;
+
+            const comment = (cols.comments ? cols.comments.map(j => c[j]) : c.slice(2)).map(x => String(x || "").trim()).filter(Boolean).join(" ");
+            const rawDate = cols.date >= 0 ? c[cols.date] : "";
+            let recoveryDate = parseDate(rawDate);
+
+            if (!recoveryDate && !comment)
+                return;
+
+            if (!open.has(so)) {
+
+                notOpen++;
+                return;
+
+            }
+
+            if (recoveryDate === null) {
+
+                warnings.push(`${so}: date "${String(rawDate).trim()}" not read (use M/D/YYYY); comment kept`);
+                recoveryDate = "";
+
+            }
+
+            parsed.push({ so, recoveryDate, opsComment: comment });
 
         });
-
-        if (errors.length)
-            return res.status(400).json({ success: false, message: `${errors.length} row(s) have a problem. Nothing was saved.`, errors });
 
         let saved = 0;
 
@@ -234,7 +285,7 @@ function backlogRoutes(qbBom, db) {
                 const body = {};
 
                 if (p.recoveryDate) body.recoveryDate = p.recoveryDate;
-                if (p.opsComment) body.opsComment = p.opsComment;
+                if (p.opsComment) body.opsComment = p.opsComment.slice(0, MAX_TEXT);
 
                 if (Object.keys(body).length && saveNote(p.so, body, by).changed)
                     saved++;
@@ -243,7 +294,7 @@ function backlogRoutes(qbBom, db) {
 
         })();
 
-        res.json({ success: true, rows: parsed.length, saved });
+        res.json({ success: true, rows: parsed.length, saved, notOpen, warnings, columns: cols.headerAt >= 0 ? "by header" : "SO / date / comment" });
 
     });
 
