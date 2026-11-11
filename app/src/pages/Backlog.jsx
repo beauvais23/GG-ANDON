@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, MenuItem, TextField } from "@mui/material";
+import { Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, FormControlLabel, IconButton, MenuItem, Switch, TextField } from "@mui/material";
 
 import RefreshIcon from "@mui/icons-material/Refresh";
 import DownloadIcon from "@mui/icons-material/FileDownloadOutlined";
@@ -43,18 +43,25 @@ const VIEWS = [
 const LINES = ["All", "Team A", "Team B", "SpaceX", "Other"];
 
 // Channel filter (Director, Nov 11 2026). Each SO has one channel:
-// Walmart (WMT part), SpaceX (customer), else Car Wash / Industrial from the rep key.
-const CHANNELS = [
-    { key: "All", test: () => true },
-    { key: "Car Wash", test: s => s.channel === "Car Wash" },
-    { key: "Industrial (w/ SpaceX)", test: s => s.channel === "Industrial" || s.channel === "SpaceX" },
-    { key: "Industrial (no SpaceX)", test: s => s.channel === "Industrial" },
-    { key: "SpaceX", test: s => s.channel === "SpaceX" },
-    { key: "Walmart", test: s => s.channel === "Walmart" },
-    { key: "Unassigned", test: s => s.channel === "Unassigned" }
-];
+// Walmart (WMT part), SpaceX (customer), else Car Wash / Industrial from
+// the rep key. Walmart and SpaceX are Industrial; under Industrial two
+// switches add or leave them out (Walmart is a blanket order).
+const CHANNELS = ["All", "Car Wash", "Industrial", "SpaceX", "Walmart", "Unassigned"];
 
-const channelLabel = s => (s.channelDetail && s.channel === "Industrial" ? s.channelDetail.replace(/^Industrial\s*-\s*/i, "Industrial · ") : s.channel || "—");
+function channelTest(channel, withSpaceX, withWalmart) {
+
+    if (channel === "All")
+        return () => true;
+
+    if (channel === "Industrial")
+        return s => s.channel === "Industrial" || (withSpaceX && s.channel === "SpaceX") || (withWalmart && s.channel === "Walmart");
+
+    return s => s.channel === channel;
+
+}
+
+const channelLabel = s => (s.channel === "SpaceX" || s.channel === "Walmart" ? `Industrial · ${s.channel}`
+    : s.channelDetail && s.channel === "Industrial" ? s.channelDetail.replace(/^Industrial\s*-\s*/i, "Industrial · ") : s.channel || "—");
 
 const money = v => (v === null || v === undefined ? "—" : Number(v).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }));
 const num = v => (v === null || v === undefined ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }));
@@ -339,6 +346,8 @@ function Backlog() {
     const [importing, setImporting] = useState(false);
     const [repKeyOpen, setRepKeyOpen] = useState(false);
     const [customer, setCustomer] = useState(null);
+    const [withSpaceX, setWithSpaceX] = useState(true);
+    const [withWalmart, setWithWalmart] = useState(true);
 
     const load = useCallback(async refresh => {
 
@@ -355,7 +364,7 @@ function Backlog() {
     useEffect(() => { load(false); }, [load]);
 
     const customers = useMemo(() => [...new Set((data?.sos || []).map(s => s.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [data]);
-    const channels = useMemo(() => CHANNELS.filter(c => c.key !== "Unassigned" || (data?.sos || []).some(s => s.channel === "Unassigned")), [data]);
+    const channels = useMemo(() => CHANNELS.filter(c => c !== "Unassigned" || (data?.sos || []).some(s => s.channel === "Unassigned")), [data]);
     const reps = useMemo(() => ["All", ...[...new Set((data?.sos || []).map(s => s.rep).filter(Boolean))].sort()], [data]);
 
     // Everything but the view (Late / at risk / …): drives the tiles, so they
@@ -365,16 +374,16 @@ function Backlog() {
         if (!data)
             return [];
 
-        const ch = CHANNELS.find(c => c.key === channel) || CHANNELS[0];
+        const chTest = channelTest(channel, withSpaceX, withWalmart);
         const term = q.trim().toLowerCase();
 
         return data.sos.filter(s => (line === "All" || s.lineGroup === line)
-            && ch.test(s)
+            && chTest(s)
             && (rep === "All" || s.rep === rep)
             && (!customer || s.customer === customer)
             && (!term || [s.so, s.customer, s.project, ...s.lines.map(l => l.item)].some(x => String(x || "").toLowerCase().includes(term))));
 
-    }, [data, line, channel, rep, customer, q]);
+    }, [data, line, channel, withSpaceX, withWalmart, rep, customer, q]);
 
     const rows = useMemo(() => base.filter(VIEWS.find(x => x.key === view).test), [base, view]);
 
@@ -453,9 +462,15 @@ function Backlog() {
                                     {LINES.map(l => <Chip key={l} active={line === l} onClick={() => setLine(l)}>{l}</Chip>)}
                                 </Box>
                                 <Box sx={{ p: 1.5, display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center", borderBottom: `1px solid ${tokens.line}` }}>
-                                    <TextField select size="small" label="Channel" value={channel} onChange={e => setChannel(e.target.value)} sx={{ minWidth: 210 }}>
-                                        {channels.map(c => <MenuItem key={c.key} value={c.key}>{c.key}</MenuItem>)}
+                                    <TextField select size="small" label="Channel" value={channel} onChange={e => setChannel(e.target.value)} sx={{ minWidth: 160 }}>
+                                        {channels.map(c => <MenuItem key={c} value={c}>{c === "SpaceX" || c === "Walmart" ? `${c} (Industrial)` : c}</MenuItem>)}
                                     </TextField>
+                                    {channel === "Industrial" && (
+                                        <>
+                                            <FormControlLabel control={<Switch size="small" checked={withSpaceX} onChange={e => setWithSpaceX(e.target.checked)} />} label="+ SpaceX" />
+                                            <FormControlLabel control={<Switch size="small" checked={withWalmart} onChange={e => setWithWalmart(e.target.checked)} />} label="+ Walmart (blanket)" />
+                                        </>
+                                    )}
                                     <Autocomplete size="small" options={customers} value={customer} onChange={(e, v) => setCustomer(v)} sx={{ minWidth: 260 }}
                                         renderInput={params => <TextField {...params} label="Customer" placeholder="All customers" />} />
                                     <TextField select size="small" label="Rep" value={rep} onChange={e => setRep(e.target.value)} sx={{ minWidth: 150 }}>
