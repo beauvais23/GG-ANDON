@@ -350,6 +350,8 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
         // PCB Coating isn't a product line here: coated boards feed all
         // three lines (Director, Nov 11 2026).
         const groups = ls.map(l => lineGroupOf(l.item)).filter(g => g && g !== "Other" && g !== "PCB Coating");
+        // A line set on the SO (detail drawer) wins (Director, Nov 12 2026).
+        const lineOverride = note?.line_override || null;
         const { channel, channelDetail } = channelOf(ls, repChannels);
 
         sos.push({
@@ -360,7 +362,9 @@ function buildBacklog({ soLines, poLines, items, childrenOf, today, notes = new 
             channel,
             channelDetail,
             rep: first.rep,
-            lineGroup: groups[0] || "Other",
+            lineGroup: lineOverride || groups[0] || "Other",
+            lineAuto: groups[0] || "Other",
+            lineOverride,
             promise,
             daysTo,
             kind,

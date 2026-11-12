@@ -16,8 +16,12 @@ const FIELDS = {
     recoveryDate: "recovery_date",
     materialClearDate: "material_clear_date",
     opsComment: "ops_comment",
-    salesNote: "sales_note"
+    salesNote: "sales_note",
+    lineOverride: "line_override"
 };
+
+// Lines an SO or an accessory prefix can be set to (Nov 12 2026).
+const LINES = ["Team A", "Team B", "SpaceX", "Other"];
 
 const DATE_FIELDS = ["recoveryDate", "materialClearDate"];
 const MAX_TEXT = 1000;
@@ -57,10 +61,13 @@ function backlogRoutes(qbBom, db, { fetchShipReport = readSheet } = {}) {
     const st = {
         notes: db.prepare("SELECT * FROM backlog_notes"),
         note: db.prepare("SELECT * FROM backlog_notes WHERE so = ?"),
-        upsert: db.prepare(`INSERT INTO backlog_notes (so, recovery_date, material_clear_date, ops_comment, sales_note, updated_by, updated_at)
-            VALUES (@so, @recovery_date, @material_clear_date, @ops_comment, @sales_note, @updated_by, @updated_at)
+        upsert: db.prepare(`INSERT INTO backlog_notes (so, recovery_date, material_clear_date, ops_comment, sales_note, line_override, updated_by, updated_at)
+            VALUES (@so, @recovery_date, @material_clear_date, @ops_comment, @sales_note, @line_override, @updated_by, @updated_at)
             ON CONFLICT(so) DO UPDATE SET recovery_date = @recovery_date, material_clear_date = @material_clear_date, ops_comment = @ops_comment,
-            sales_note = @sales_note, updated_by = @updated_by, updated_at = @updated_at`),
+            sales_note = @sales_note, line_override = @line_override, updated_by = @updated_by, updated_at = @updated_at`),
+        prefixes: db.prepare("SELECT prefix, line_group, updated_by, updated_at FROM line_prefix_key ORDER BY prefix"),
+        clearPrefixes: db.prepare("DELETE FROM line_prefix_key"),
+        addPrefix: db.prepare("INSERT INTO line_prefix_key (prefix, line_group, updated_by, updated_at) VALUES (?, ?, ?, ?)"),
         remove: db.prepare("DELETE FROM backlog_notes WHERE so = ?"),
         log: db.prepare("INSERT INTO backlog_note_log (so, field, old_value, new_value, changed_by, changed_at) VALUES (?, ?, ?, ?, ?, ?)"),
         history: db.prepare("SELECT field, old_value, new_value, changed_by, changed_at FROM backlog_note_log WHERE so = ? ORDER BY id DESC LIMIT 200"),
@@ -73,7 +80,7 @@ function backlogRoutes(qbBom, db, { fetchShipReport = readSheet } = {}) {
     function saveNote(so, body, by) {
 
         const errors = [];
-        const before = st.note.get(so) || { so, recovery_date: null, material_clear_date: null, ops_comment: null, sales_note: null };
+        const before = st.note.get(so) || { so, recovery_date: null, material_clear_date: null, ops_comment: null, sales_note: null, line_override: null };
         const after = { ...before };
 
         for (const [key, col] of Object.entries(FIELDS)) {
@@ -89,6 +96,17 @@ function backlogRoutes(qbBom, db, { fetchShipReport = readSheet } = {}) {
                     errors.push(`${key}: use YYYY-MM-DD or M/D/YYYY`);
                 else
                     after[col] = d || null;
+
+            }
+
+            else if (key === "lineOverride") {
+
+                const v = String(body[key] ?? "").trim();
+
+                if (v && !LINES.includes(v))
+                    errors.push(`lineOverride: one of ${LINES.join(", ")} (blank = automatic)`);
+                else
+                    after[col] = v || null;
 
             }
 
@@ -132,6 +150,28 @@ function backlogRoutes(qbBom, db, { fetchShipReport = readSheet } = {}) {
 
     const nameOf = v => String(v ?? "").trim().slice(0, 60);
 
+    // Fixture SKU / family first (qbBom); an accessory that matches no
+    // family takes the longest matching prefix in the Line key.
+    function lineGroupWithKey(prefixRows) {
+
+        const rows = [...prefixRows].sort((a, b) => b.prefix.length - a.prefix.length);
+
+        return item => {
+
+            const g = qbBom.lineGroupOf(item);
+
+            if (g && g !== "Other")
+                return g;
+
+            const up = String(item || "").toUpperCase();
+            const hit = rows.find(r => up.startsWith(r.prefix.toUpperCase()));
+
+            return hit ? hit.line_group : g;
+
+        };
+
+    }
+
     // Ship Report → notes (Nov 12 2026): see services/shipReport.js.
     const shipReport = createShipReportSync({ db, saveNote, fetchRows: fetchShipReport });
 
@@ -152,7 +192,7 @@ function backlogRoutes(qbBom, db, { fetchShipReport = readSheet } = {}) {
             childrenOf: inputs.childrenOf,
             today: dateNY(Date.now()),
             notes,
-            lineGroupOf: qbBom.lineGroupOf,
+            lineGroupOf: lineGroupWithKey(st.prefixes.all()),
             repChannels
         });
 
@@ -359,6 +399,62 @@ function backlogRoutes(qbBom, db, { fetchShipReport = readSheet } = {}) {
         })();
 
         res.json({ success: true, reps: parsed.size });
+
+    });
+
+    // Accessory line key (Nov 12 2026): GET for anyone, PUT (admin) pastes
+    // "prefix <tab> line" rows and replaces the whole key, all or none.
+    router.get("/backlog/line-key", authenticateToken, (req, res) => {
+
+        res.json({ success: true, lines: LINES, prefixes: st.prefixes.all() });
+
+    });
+
+    router.put("/admin/backlog/line-key", authenticateToken, requireAdmin, (req, res) => {
+
+        const by = nameOf(req.body?.by);
+        const rows = String(req.body?.text || "").split(/\r?\n/).map(l => l.split(/\t|,/).map(c => c.trim())).filter(c => c.some(Boolean));
+        const errors = [];
+        const parsed = new Map();
+
+        if (!by)
+            return res.status(400).json({ success: false, message: "Your name is required." });
+
+        rows.forEach((c, i) => {
+
+            if (i === 0 && /^prefix$/i.test(c[0]))
+                return;
+
+            const prefix = (c[0] || "").toUpperCase();
+            const line = LINES.find(l => l.toLowerCase() === String(c[1] || "").toLowerCase());
+
+            if (!prefix || !line)
+                errors.push(`Row ${i + 1}: "${c.join(" | ")}" needs a prefix and one of ${LINES.join(", ")}`);
+            else if (parsed.has(prefix))
+                errors.push(`Row ${i + 1}: ${prefix} is listed twice`);
+            else
+                parsed.set(prefix, line);
+
+        });
+
+        if (!parsed.size && !errors.length)
+            errors.push("Nothing to save.");
+
+        if (errors.length)
+            return res.status(400).json({ success: false, message: `${errors.length} problem(s). Nothing was saved.`, errors });
+
+        const now = Date.now();
+
+        db.transaction(() => {
+
+            st.clearPrefixes.run();
+
+            for (const [prefix, line] of parsed)
+                st.addPrefix.run(prefix, line, by, now);
+
+        })();
+
+        res.json({ success: true, prefixes: parsed.size });
 
     });
 
