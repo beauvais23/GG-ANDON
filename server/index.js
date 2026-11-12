@@ -151,7 +151,9 @@ app.use(bomRoutes(qbBom, db));
 // Material check (open orders × BOM explosion): routes/mrp.js
 app.use(mrpRoutes(qbBom));
 app.use(inventoryRoutes(qbBom));
-app.use(backlogRoutes(qbBom, db));
+const backlogRouter = backlogRoutes(qbBom, db);
+
+app.use(backlogRouter);
 
 // Slack buttons (S2): signed requests only; routes/slack.js
 app.use(slackRoutes({ statements, releaseResponders, queueNotification, notifyAcknowledged, notifyResolved, notifyCancelled }));
@@ -3873,6 +3875,9 @@ if (require.main === module) {
 
         qbBom.start();
 
+        // Ship Report → backlog notes every 30 min (Nov 12 2026).
+        backlogRouter.shipReport.start();
+
         // Weekly "all systems OK" post in #mos-system (Director, Nov 11 2026).
         require("./services/weeklyHealth").createWeeklyHealth({
             db,
@@ -3895,7 +3900,8 @@ if (require.main === module) {
                     } : {})
                 };
             },
-            escalationMode: () => (isLive(statements) ? "LIVE in Slack" : "shadow (nothing sent)")
+            escalationMode: () => (isLive(statements) ? "LIVE in Slack" : "shadow (nothing sent)"),
+            shipReportStatus: () => backlogRouter.shipReport.status()
         }).start();
 
         console.log(require("./services/slack").describeSlack());

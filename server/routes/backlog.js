@@ -3,6 +3,7 @@ const express = require("express");
 const { authenticateToken, requireAdmin } = require("../middleware/auth");
 const { buildBacklog } = require("../services/backlog");
 const { dateNY } = require("../services/nyTime");
+const { createShipReportSync, readSheet } = require("../services/shipReport");
 
 //------------------------------------------------------
 // Backlog & delivery risk (Director, Nov 10 2026). Any login
@@ -49,7 +50,7 @@ function parseDate(v) {
 
 }
 
-function backlogRoutes(qbBom, db) {
+function backlogRoutes(qbBom, db, { fetchShipReport = readSheet } = {}) {
 
     const router = express.Router();
 
@@ -131,6 +132,12 @@ function backlogRoutes(qbBom, db) {
 
     const nameOf = v => String(v ?? "").trim().slice(0, 60);
 
+    // Ship Report → notes (Nov 12 2026): see services/shipReport.js.
+    const shipReport = createShipReportSync({ db, saveNote, fetchRows: fetchShipReport });
+
+    router.shipReport = shipReport;
+    router.saveNote = saveNote;
+
     router.get("/backlog", authenticateToken, async (req, res) => {
 
         const inputs = await qbBom.backlogInputs({ force: req.query.refresh === "1" });
@@ -151,7 +158,7 @@ function backlogRoutes(qbBom, db) {
 
         const unmappedReps = [...new Set(result.sos.filter(s => s.channel === "Unassigned" && s.rep).map(s => s.rep))].sort();
 
-        res.json({ ...result, repKey: { count: repRows.length, updatedAt: Math.max(0, ...repRows.map(r => r.updated_at || 0)) || null, unmappedReps }, asOf: inputs.asOf, error: inputs.error, status: qbBom.status() });
+        res.json({ ...result, shipReport: shipReport.status(), repKey: { count: repRows.length, updatedAt: Math.max(0, ...repRows.map(r => r.updated_at || 0)) || null, unmappedReps }, asOf: inputs.asOf, error: inputs.error, status: qbBom.status() });
 
     });
 
@@ -352,6 +359,14 @@ function backlogRoutes(qbBom, db) {
         })();
 
         res.json({ success: true, reps: parsed.size });
+
+    });
+
+    router.post("/admin/backlog/ship-report/pull", authenticateToken, requireAdmin, async (req, res) => {
+
+        const r = await shipReport.run("admin");
+
+        res.status(r.ok ? 200 : r.skipped ? 409 : 502).json({ success: r.ok, ...r, status: shipReport.status() });
 
     });
 

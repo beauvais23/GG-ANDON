@@ -7,6 +7,7 @@
 //   - off-site backup: newest copy in Google Drive ≤ 26 h old
 //   - QuickBooks item list: last good refresh ≤ 26 h old
 //   - QuickBooks BOM pull: last good pull ≤ 26 h old
+//   - Ship Report → backlog notes: last good read ≤ 26 h (when set up)
 //   - notifications: Slack andon / near miss / BOM / system and the
 //     Telegram ANDON channel + groups set up (production)
 // plus last week's alert counts and escalation LIVE / SHADOW (info).
@@ -55,7 +56,7 @@ const age = (at, now) => {
 const n = v => Number(v || 0).toLocaleString("en-US");
 
 // Pure: inputs → { ok, problems, text }.
-function buildHealthReport({ now, offsite, qb, notify, week }) {
+function buildHealthReport({ now, offsite, qb, notify, week, shipReport = null }) {
 
     const checks = [];
     const fresh = at => Boolean(at) && now - at <= STALE_HOURS * HOUR;
@@ -73,6 +74,9 @@ function buildHealthReport({ now, offsite, qb, notify, week }) {
         checks.push({ ok: fresh(qb.bomAllAt), text: `QuickBooks BOMs: ${n(qb.bomAll)} lines, pulled ${age(qb.bomAllAt, now)}` });
 
     }
+
+    if (shipReport?.enabled)
+        checks.push({ ok: fresh(shipReport.lastOkAt), text: `Ship Report → backlog notes: last read ${age(shipReport.lastOkAt, now)}${shipReport.lastOk === false && shipReport.lastError ? ` · ${shipReport.lastError}` : ""}` });
 
     const missing = Object.entries(notify.channels).filter(([, on]) => !on).map(([k]) => k);
 
@@ -92,7 +96,7 @@ function buildHealthReport({ now, offsite, qb, notify, week }) {
 
 }
 
-function createWeeklyHealth({ db, qbBom, offsiteStatus, postSystem, channels, escalationMode, nowFn = Date.now }) {
+function createWeeklyHealth({ db, qbBom, offsiteStatus, postSystem, channels, escalationMode, shipReportStatus = () => null, nowFn = Date.now }) {
 
     const st = {
         sent: db.prepare("SELECT 1 FROM system_reports WHERE kind = ? AND period = ?"),
@@ -115,7 +119,8 @@ function createWeeklyHealth({ db, qbBom, offsiteStatus, postSystem, channels, es
             offsite: offsiteStatus(now),
             qb: { configured: q.configured, items: q.items, itemsAt: q.itemsOk?.finished_at, bomAll: q.bomAll, bomAllAt: q.bomAllOk?.finished_at },
             notify: { channels: channels(), escalation: escalationMode() },
-            week: st.week.get(now - 7 * 24 * HOUR)
+            week: st.week.get(now - 7 * 24 * HOUR),
+            shipReport: shipReportStatus()
         });
 
     }
