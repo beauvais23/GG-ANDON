@@ -29,7 +29,7 @@ Read this file fully before changing anything.
 |---|---|---|
 | Backend | `server/index.js` (~2,470 lines, all routes inline) | Express 5, JWT auth, better-sqlite3. Exports `app`; listens only when run directly |
 | DB layer | `server/database.js` | Opens the DB, runs `restoreIfRequested` then `migrateUp`, seeds empty tables, prepares statements. Registers SQL function `ny_month()` |
-| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved`, `0005_archive_lines_responders`, `0006_escalation_shadow`, `0007_hourly_board`, `0008_sku_list`, `0009_hourly_actuals`, `0010_count_corrections`, `0011_failures`, `0012_pcb_test_reports`, `0013_pcb_parts`, `0014_bom_cache`, `0015_bom_requests`, `0016_mrp_cache`, `0017_slack_messages`, `0018_responder_slack_id`, `0019_bom_slack`, `0020_escalation_live`, `0021_telegram_groups`, `0022_rrx_team_a`, `0023_inventory_search`, `0024_backlog_notes`, `0025_rep_channels`, `0026_system_reports` |
+| Migrations | `server/migrations/` | `runner.js` (up/down, backups, retention), `restore.js` (`RESTORE_BACKUP`), `0001_baseline`, `0002_alerts_cancelled_at`, `0003_normalize_availability`, `0004_cancel_clears_resolved`, `0005_archive_lines_responders`, `0006_escalation_shadow`, `0007_hourly_board`, `0008_sku_list`, `0009_hourly_actuals`, `0010_count_corrections`, `0011_failures`, `0012_pcb_test_reports`, `0013_pcb_parts`, `0014_bom_cache`, `0015_bom_requests`, `0016_mrp_cache`, `0017_slack_messages`, `0018_responder_slack_id`, `0019_bom_slack`, `0020_escalation_live`, `0021_telegram_groups`, `0022_rrx_team_a`, `0023_inventory_search`, `0024_backlog_notes`, `0025_rep_channels`, `0026_system_reports`, `0027_users` |
 | Auth middleware | `server/middleware/auth.js` | `authenticateToken`, `requireAdmin` (applied to all config-change and backup routes) |
 | Notifications | `server/services/` | `notificationManager.js` fans out to `telegram.js` / `telegramUpdate.js` (ANDON channel), `telegramGroups.js` (Near Miss and BOM groups) and `slack.js`; Google Chat removed Nov 9 2026; all gated by `appEnv.js` (`notificationsEnabled()`) |
 | Other services | `server/services/` | `nyTime.js` (America/New_York day/month math), `workingTime.js` (working minutes for MTTA/MTTR), `availability.js` (responder enum), `dailyBackup.js`, `offsiteBackup.js` (Google Drive copy of every backup), `notificationQueue.js` (background notifications, per-alert order, time limit), `network.js` (outbound connect settings, loaded first in `index.js`) |
@@ -53,6 +53,9 @@ The Railway plan has **no volume backups** (Hobby). Backups are written to the s
 | Service | Variable | Required | Notes |
 |---|---|---|---|
 | Backend | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `PRODUCTION_USERNAME`, `PRODUCTION_PASSWORD`, `AUTH_SECRET` | yes | Different values per environment |
+| Backend | `GOOGLE_CLIENT_ID` | yes (for Google sign-in) | OAuth **Web** client ID (`…apps.googleusercontent.com`, public, not a secret) from Google Cloud → APIs & Services → Credentials, consent screen **Internal**; Authorized JavaScript origins = that environment's frontend URL. Same client may serve both environments (both origins listed). Missing → login page shows only the password form (as before) |
+| Backend | `ADMIN_EMAILS` | yes (for Google sign-in) | Comma-separated ggled.net emails that are **always admin** (can't be demoted or blocked in Admin → Users). At least the Director's |
+| Backend | `ALLOWED_EMAIL_DOMAIN` | no | Default `ggled.net`: Google accounts must be verified and in this Workspace domain (`hd`) |
 | Backend | `DATABASE_PATH` | yes | `/data/andon.db` |
 | Backend | `APP_ENV` | yes | `production` only in production. Anything else disables all Telegram traffic and `setWebhook` |
 | Backend | `TELEGRAM_WEBHOOK_SECRET` | production | 1–256 chars `A-Z a-z 0-9 _ -`. Missing/invalid → webhook rejects every call (Telegram buttons dead) |
@@ -101,6 +104,14 @@ The Railway plan has **no volume backups** (Hobby). Backups are written to the s
 6. Smoke test **on the production URL** (not staging, which never notifies): tablet alert → Telegram + Slack #andon-alerts delivered → **Telegram Acknowledge** works → duplicate banner → cancel the test alert (tablet CANCEL REQUEST → **Test**, or CANCEL on `/supervisor` with a reason; cancelled alerts are excluded from MTTR).
 
 Incident record, Oct 27 2026: Phase 0.5 was merged to `react-v2` at 14:36 ET without `APP_ENV`/`TELEGRAM_WEBHOOK_SECRET` set. Production ran 16 minutes with notifications disabled and one live alert (#48) unannounced. Steps 2 and 3 above exist because of this.
+
+## Sign-in (Director, Nov 11 2026; migration `0027_users`)
+
+- **Google sign-in, ggled.net only** (`routes/users.js`, `services/googleAuth.js`, `pages/Login.jsx`): Google Identity Services button (script `accounts.google.com/gsi/client`, client ID from `GET /auth/config`, no build variable); `POST /auth/google` verifies the ID token with Google's public keys (JWKS cached, RS256, audience `GOOGLE_CLIENT_ID`, issuer accounts.google.com, `email_verified`, `hd` = `ALLOWED_EMAIL_DOMAIN`; no new library) and issues the usual JWT (`role` admin / production + `email`, `name`).
+- **Users** (`users`: email, name, role user/admin, active, last sign-in, count): created at the first sign-in as **user** (= the old production access) or admin when in `ADMIN_EMAILS`. **Admin → Users** (`UsersPanel.jsx`; `GET /admin/users`, `PUT /admin/users/:email {role, active}`, admin only): Make admin / Remove admin / Block / Unblock, effective at once (`authenticateToken` re-reads the row: blocked → 401, admin removed → production). Refused: changing an `ADMIN_EMAILS` person, removing your own admin or blocking yourself.
+- **Floor tablets** sign in with **production@ggled.net** (Director). `auto_select`: when a tablet's session ends, Google signs it straight back in; **Sign out** sets `localStorage gsiNoAuto` so a chosen sign-out isn't undone. Blocking production@ signs out every tablet (the panel warns).
+- **Backup:** the `ADMIN_USERNAME` / `PRODUCTION_USERNAME` password logins stay, behind **Other sign-in**.
+- After a Google sign-in, the "Your name" boxes (backlog notes, BOM requests, count corrections) are filled with the person's name when empty (not for production@); the PAGES menu shows who is signed in.
 
 ## Plant model
 

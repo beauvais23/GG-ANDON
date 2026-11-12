@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
     useNavigate,
@@ -33,6 +33,191 @@ export default function Login() {
 
     const [loading, setLoading] =
         useState(false);
+
+    // Google sign-in (ggled.net, Nov 11 2026). Password form stays as a
+    // backup behind "Other sign-in".
+    const [google, setGoogle] = useState(null);
+    const [showPassword, setShowPassword] = useState(false);
+    const googleButton = useRef(null);
+
+    //------------------------------------------------------
+    // After either sign-in: store the session, go on
+    //------------------------------------------------------
+
+    const finishLogin = useCallback(data => {
+
+        //--------------------------------------------------
+        // Store Authentication
+        //--------------------------------------------------
+
+        localStorage.setItem(
+
+            "authToken",
+
+            data.token
+
+        );
+
+        localStorage.setItem(
+
+            "userRole",
+
+            data.role
+
+        );
+
+        // Google sign-in: remember who, and fill the "Your name" boxes
+        // (backlog notes, BOM requests, count corrections) when empty.
+        if (data.email) {
+
+            localStorage.setItem("userName", data.name || data.email);
+            localStorage.setItem("userEmail", data.email);
+
+            if (!/^production@/i.test(data.email))
+                for (const key of ["backlogBy", "bomRequestedBy", "correctedBy"])
+                    if (!localStorage.getItem(key))
+                        localStorage.setItem(key, data.name || data.email);
+
+        }
+
+        else {
+
+            localStorage.removeItem("userName");
+            localStorage.removeItem("userEmail");
+
+        }
+
+        //--------------------------------------------------
+        // Determine Destination
+        //--------------------------------------------------
+
+        const requestedPath =
+            location.state?.from?.pathname;
+
+        //--------------------------------------------------
+        // Admin User
+        //--------------------------------------------------
+
+        if (data.role === "admin") {
+
+            navigate(
+
+                requestedPath || "/admin",
+
+                {
+                    replace: true
+                }
+
+            );
+
+            return;
+
+        }
+
+        //--------------------------------------------------
+        // Production User
+        //--------------------------------------------------
+
+        navigate(
+
+            requestedPath &&
+            requestedPath !== "/admin"
+                ? requestedPath
+                : "/",
+
+            {
+                replace: true
+            }
+
+        );
+
+    }, [location, navigate]);
+
+    //------------------------------------------------------
+    // Google sign-in
+    //------------------------------------------------------
+
+    const onGoogle = useCallback(async ({ credential }) => {
+
+        setError("");
+        setLoading(true);
+
+        try {
+
+            const response = await fetch(`${config.apiBaseUrl}/auth/google`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ credential })
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok || !data.token) {
+
+                setError(data.message || "Google sign-in failed.");
+                return;
+
+            }
+
+            try { localStorage.removeItem("gsiNoAuto"); } catch { /* storage blocked */ }
+
+            finishLogin(data);
+
+        }
+
+        catch { setError("Unable to connect to the authentication server."); }
+
+        finally { setLoading(false); }
+
+    }, [finishLogin]);
+
+    useEffect(() => {
+
+        let cancelled = false;
+
+        fetch(`${config.apiBaseUrl}/auth/config`).then(r => r.json()).then(c => {
+
+            if (cancelled || !c.googleClientId)
+                return setShowPassword(true);
+
+            setGoogle(c);
+
+            const start = () => {
+
+                if (cancelled || !window.google?.accounts?.id)
+                    return;
+
+                let noAuto = false;
+
+                try { noAuto = localStorage.getItem("gsiNoAuto") === "1"; } catch { /* storage blocked */ }
+
+                // auto_select: a tablet already signed in to Google comes
+                // straight back in when its session ends (Nov 11 2026).
+                window.google.accounts.id.initialize({ client_id: c.googleClientId, callback: onGoogle, auto_select: !noAuto, cancel_on_tap_outside: false });
+
+                if (googleButton.current)
+                    window.google.accounts.id.renderButton(googleButton.current, { theme: "filled_blue", size: "large", shape: "rectangular", text: "signin_with", width: 340 });
+
+                if (!noAuto)
+                    window.google.accounts.id.prompt();
+
+            };
+
+            if (window.google?.accounts?.id)
+                return start();
+
+            const script = document.createElement("script");
+
+            script.src = "https://accounts.google.com/gsi/client";
+            script.async = true;
+            script.onload = start;
+            script.onerror = () => { setError("Couldn't load Google sign-in. Use Other sign-in."); setShowPassword(true); };
+            document.head.appendChild(script);
+
+        }).catch(() => setShowPassword(true));
+
+        return () => { cancelled = true; };
+
+    }, [onGoogle]);
 
     //------------------------------------------------------
     // Login
@@ -97,69 +282,7 @@ export default function Login() {
 
             }
 
-            //--------------------------------------------------
-            // Store Authentication
-            //--------------------------------------------------
-
-            localStorage.setItem(
-
-                "authToken",
-
-                data.token
-
-            );
-
-            localStorage.setItem(
-
-                "userRole",
-
-                data.role
-
-            );
-
-            //--------------------------------------------------
-            // Determine Destination
-            //--------------------------------------------------
-
-            const requestedPath =
-                location.state?.from?.pathname;
-
-            //--------------------------------------------------
-            // Admin User
-            //--------------------------------------------------
-
-            if (data.role === "admin") {
-
-                navigate(
-
-                    requestedPath || "/admin",
-
-                    {
-                        replace: true
-                    }
-
-                );
-
-                return;
-
-            }
-
-            //--------------------------------------------------
-            // Production User
-            //--------------------------------------------------
-
-            navigate(
-
-                requestedPath &&
-                requestedPath !== "/admin"
-                    ? requestedPath
-                    : "/",
-
-                {
-                    replace: true
-                }
-
-            );
+            finishLogin(data);
 
         }
 
@@ -241,6 +364,21 @@ export default function Login() {
                     </Box>
                 </Box>
 
+                {google && (
+                    <Box sx={{ px: 3.5, pt: 3, pb: showPassword ? 0 : 3.5 }}>
+                        <Box sx={{ color: tokens.muted, fontSize: 14, mb: 1.5 }}>Sign in with your {google.domain} Google account.</Box>
+                        <Box ref={googleButton} sx={{ minHeight: 44, display: "flex", justifyContent: "center" }} />
+                        {loading && <Box sx={{ color: tokens.muted, fontSize: 13, mt: 1, textAlign: "center" }}>Signing in…</Box>}
+                        {error && !showPassword && <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>}
+                        {!showPassword && (
+                            <Box sx={{ textAlign: "center", mt: 2 }}>
+                                <Button size="small" color="inherit" sx={{ color: tokens.muted, fontSize: 12, letterSpacing: "1px" }} onClick={() => setShowPassword(true)}>Other sign-in</Button>
+                            </Box>
+                        )}
+                    </Box>
+                )}
+
+                {showPassword && (
                 <Box component="form" onSubmit={handleSubmit} sx={{ px: 3.5, pt: 2, pb: 3.5 }}>
 
                     {error && (
@@ -256,7 +394,7 @@ export default function Login() {
                         onChange={(event) => setUsername(event.target.value)}
                         margin="normal"
                         autoComplete="username"
-                        autoFocus
+                        autoFocus={!google}
                     />
 
                     <TextField
@@ -281,11 +419,12 @@ export default function Login() {
                     </Button>
 
                 </Box>
+                )}
 
             </Box>
 
             <Box sx={{ ...labelSx, fontSize: 11 }}>
-                Floor tablets and screens use the production login
+                {google ? `Floor tablets sign in with production@${google.domain}` : "Floor tablets and screens use the production login"}
             </Box>
 
         </Box>

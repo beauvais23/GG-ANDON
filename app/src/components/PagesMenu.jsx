@@ -28,6 +28,14 @@ function signOut() {
 
     localStorage.removeItem("authToken");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userEmail");
+
+    // A chosen sign-out must not be undone by Google's automatic sign-in
+    // on the login page (Nov 11 2026); the next manual sign-in clears it.
+    localStorage.setItem("gsiNoAuto", "1");
+
+    try { window.google?.accounts?.id?.disableAutoSelect(); } catch { /* not loaded */ }
 
 }
 
@@ -127,8 +135,13 @@ export default function PagesMenu() {
 
                 <Divider />
 
-                <MenuItem onClick={handleSignOut} sx={{ py: 1.5, color: tokens.muted }}>
-                    Sign out
+                <MenuItem onClick={handleSignOut} sx={{ py: 1.5, color: tokens.muted, display: "flex", justifyContent: "space-between", gap: 2 }}>
+                    <span>Sign out</span>
+                    {localStorage.getItem("userName") && (
+                        <Box component="span" sx={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {localStorage.getItem("userName")}
+                        </Box>
+                    )}
                 </MenuItem>
 
             </Menu>

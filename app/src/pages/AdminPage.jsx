@@ -12,6 +12,7 @@ import NearMissesPanel from "../components/admin/NearMissesPanel";
 import EscalationPanel from "../components/admin/EscalationPanel";
 import ProductsPanel from "../components/admin/ProductsPanel";
 import FailureCodesPanel from "../components/admin/FailureCodesPanel";
+import UsersPanel from "../components/admin/UsersPanel";
 
 import useClock from "../hooks/useClock";
 
@@ -26,6 +27,7 @@ import { tokens } from "../theme/theme";
 //------------------------------------------------------
 
 const SECTIONS = [
+    { value: "users", label: "Users", Panel: UsersPanel },
     { value: "responders", label: "Responders", Panel: RespondersPanel },
     { value: "productionLines", label: "Production lines", Panel: ProductionLinesPanel },
     { value: "products", label: "Products & rates", Panel: ProductsPanel },
