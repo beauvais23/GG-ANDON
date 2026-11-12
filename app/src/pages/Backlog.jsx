@@ -11,7 +11,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import useClock from "../hooks/useClock";
 
-import { clearBacklogNote, getBacklog, getBacklogHistory, getRepChannels, importBacklogNotes, saveBacklogNote, saveRepChannels } from "../api/backlog";
+import { clearBacklogNote, getBacklog, pullShipReport, getBacklogHistory, getRepChannels, importBacklogNotes, saveBacklogNote, saveRepChannels } from "../api/backlog";
 import { downloadCsv } from "../utils/csv";
 import { labelSx, tokens } from "../theme/theme";
 
@@ -19,7 +19,7 @@ import { labelSx, tokens } from "../theme/theme";
 // Backlog & delivery risk (Director, Nov 10 2026). Every open
 // sales order by promise date, RAG from date + material (stock
 // and POs allocated in promise-date order), and notes kept per
-// SO across refreshes: recovery date, material clear date, ops
+// SO across refreshes: recovery date, ops
 // comment, sales note, last updated by / when. Any login edits
 // with a typed name (remembered per browser).
 //------------------------------------------------------
@@ -151,7 +151,7 @@ function Detail({ s, onClose, onSaved }) {
 
     const n = s.note || {};
     const [by, setBy] = useState(storedName());
-    const [form, setForm] = useState({ recoveryDate: n.recovery_date || "", materialClearDate: n.material_clear_date || "", opsComment: n.ops_comment || "", salesNote: n.sales_note || "" });
+    const [form, setForm] = useState({ recoveryDate: n.recovery_date || "", opsComment: n.ops_comment || "", salesNote: n.sales_note || "" });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [history, setHistory] = useState([]);
@@ -190,9 +190,9 @@ function Detail({ s, onClose, onSaved }) {
 
             <Box sx={{ px: 2.5, py: 2, borderBottom: `1px solid ${tokens.line}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
                 <TextField label="Recovery date" type="date" size="small" value={form.recoveryDate} onChange={set("recoveryDate")} slotProps={{ inputLabel: { shrink: true } }} />
-                <TextField label="Material clear date" type="date" size="small" value={form.materialClearDate} onChange={set("materialClearDate")} slotProps={{ inputLabel: { shrink: true } }} />
-                <TextField label="Ops comment" size="small" multiline minRows={2} value={form.opsComment} onChange={set("opsComment")} sx={{ gridColumn: "1 / -1" }} slotProps={{ htmlInput: { maxLength: 1000 } }} />
-                <TextField label="Sales note (customer view)" size="small" multiline minRows={2} value={form.salesNote} onChange={set("salesNote")} sx={{ gridColumn: "1 / -1" }}
+                <Box sx={{ color: tokens.muted, fontSize: 12, alignSelf: "center" }}>Comments, recovery date and SO note come from the Ship Report when they change there; edits here stay until the sheet changes again.</Box>
+                <TextField label="Ops comment (Ship Report comments)" size="small" multiline minRows={2} value={form.opsComment} onChange={set("opsComment")} sx={{ gridColumn: "1 / -1" }} slotProps={{ htmlInput: { maxLength: 1000 } }} />
+                <TextField label="Sales note (customer view · Ship Report SO note)" size="small" multiline minRows={2} value={form.salesNote} onChange={set("salesNote")} sx={{ gridColumn: "1 / -1" }}
                     placeholder="e.g. Stocking order, customer OK until 12/1 · Holding installation, need ASAP" slotProps={{ htmlInput: { maxLength: 1000 } }} />
                 <TextField label="Your name" size="small" value={by} onChange={e => setBy(e.target.value)} slotProps={{ htmlInput: { maxLength: 60 } }} />
                 <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", alignItems: "center" }}>
@@ -328,6 +328,45 @@ function RepKeyDialog({ open, onClose, onDone, unmapped }) {
 
 }
 
+// Ship Report sync (Nov 12 2026): last read, changes, errors; admin pull.
+function ShipReportStatus({ sr, isAdmin, onPulled }) {
+
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState("");
+
+    if (!sr)
+        return null;
+
+    if (!sr.enabled)
+        return isAdmin ? <Box sx={{ color: tokens.muted, fontSize: 12.5 }} title={sr.reason || ""}>Ship Report sync off</Box> : null;
+
+    const pull = async () => {
+
+        setBusy(true);
+        setMsg("");
+
+        try { const r = await pullShipReport(); setMsg(`${r.changed} SO${r.changed === 1 ? "" : "s"} updated`); onPulled(); }
+
+        catch (err) { setMsg(err.message); }
+
+        setBusy(false);
+
+    };
+
+    const bad = sr.lastOk === false;
+
+    return (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ fontSize: 12.5, color: bad ? "#F85149" : tokens.muted }} title={bad ? sr.lastError || "" : (sr.warnings || []).join("\n")}>
+                {bad ? `Ship Report read failed ${when(sr.lastRunAt)}` : `Ship Report read ${when(sr.lastOkAt)}${sr.lastChanged ? ` · ${sr.lastChanged} updated` : ""}`}
+                {msg && ` · ${msg}`}
+            </Box>
+            {isAdmin && <Button size="small" startIcon={busy ? <CircularProgress size={14} /> : <RefreshIcon />} disabled={busy} onClick={pull}>Pull from Ship Report</Button>}
+        </Box>
+    );
+
+}
+
 function Backlog() {
 
     const clock = useClock();
@@ -450,6 +489,7 @@ function Backlog() {
                             <Box sx={{ flex: 1 }} />
                             <Box sx={{ color: tokens.muted, fontSize: 12.5 }}>QuickBooks orders as of {when(data.asOf.orders)} · today {md(data.today)} · amber = due within {data.amberDays} days</Box>
                             <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />} disabled={loading} onClick={() => load(true)}>Refresh</Button>
+                            <ShipReportStatus sr={data.shipReport} isAdmin={isAdmin} onPulled={() => load(false)} />
                             {isAdmin && <Button size="small" startIcon={<UploadIcon />} onClick={() => setImporting(true)}>Import notes</Button>}
                             {isAdmin && <Button size="small" onClick={() => setRepKeyOpen(true)}>Rep key{data.repKey?.unmappedReps?.length ? ` (${data.repKey.unmappedReps.length} missing)` : ""}</Button>}
                         </Box>
