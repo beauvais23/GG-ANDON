@@ -46,6 +46,11 @@ test("report: all OK → one ✅ header; stale backup, old QuickBooks pull and a
     assert.match(r.text, /⚠️ Notifications: not set up: Telegram ANDON/);
     assert.match(r.text, /✅ QuickBooks item list/);
 
+    const sr = buildHealthReport({ ...good(MON_0700), shipReport: { enabled: true, lastOk: false, lastOkAt: MON_0700 - 40 * H, lastError: "Ship Report read failed: 403" } });
+
+    assert.equal(sr.problems, 1);
+    assert.match(sr.text, /⚠️ Ship Report → backlog notes: last read 40 h ago · Ship Report read failed: 403/);
+
     const off = buildHealthReport({ ...good(MON_0700), offsite: { enabled: false, reason: "GDRIVE_BACKUP_FOLDER_ID not set" }, qb: { configured: false } });
 
     assert.equal(off.problems, 2);

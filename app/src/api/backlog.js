@@ -43,3 +43,4 @@ export const getBacklogHistory = so => call(`/backlog/notes/${encodeURIComponent
 export const importBacklogNotes = (text, by) => call("/admin/backlog/notes/import", { method: "POST", body: { text, by } });
 export const getRepChannels = () => call("/backlog/rep-channels");
 export const saveRepChannels = (text, by) => call("/admin/backlog/rep-channels", { method: "PUT", body: { text, by } });
+export const pullShipReport = () => call("/admin/backlog/ship-report/pull", { method: "POST", body: {} });
