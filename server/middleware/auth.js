@@ -1,5 +1,19 @@
 const jwt = require("jsonwebtoken");
 
+let userStmt = null;
+
+function userRow(email) {
+
+    try {
+
+        userStmt ||= require("../database").db.prepare("SELECT role, active FROM users WHERE email = ?");
+
+        return userStmt.get(email) || null;
+
+    } catch { return null; }
+
+}
+
 //------------------------------------------------------
 // Authenticate Token
 //------------------------------------------------------
@@ -37,6 +51,16 @@ function authenticateToken(req, res, next) {
             );
 
         req.user = decoded;
+
+        // Google sign-in sessions follow Admin → Users at once (Nov 11
+        // 2026): blocked → signed out; admin removed → normal access.
+        const u = decoded.email ? userRow(decoded.email) : null;
+
+        if (u && !u.active)
+            return res.status(401).json({ success: false, message: "Your account is blocked in ManufacturingOS." });
+
+        if (u && u.role !== "admin" && decoded.role === "admin")
+            req.user = { ...decoded, role: "production" };
 
         next();
 
