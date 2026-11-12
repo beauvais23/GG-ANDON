@@ -294,3 +294,43 @@ test("rep key (admin): paste replaces the whole key, header skipped, bad rows re
     assert.equal(row.channel, "Car Wash", "the new key is used at once");
 
 });
+
+test("lines (Nov 12 2026): accessory-only orders take the Line key (WPX- → Team B, PLL-/FBL- → Team A); a line set on the SO wins and is logged; admin replaces the key, bad rows refuse all", async () => {
+
+    const add = db.prepare(`INSERT INTO qb_open_so_lines (so, line, customer, item, ordered, shipped, ship_date, hold, unit_price)
+        VALUES (?, ?, 'Acme Wash', ?, 2, 0, '2026-11-20', 0, 10)`);
+
+    add.run("60001", "1", "WPX-LDR-25");
+    add.run("60001", "2", "WPX-CAP");
+    add.run("60002", "1", "PLL-4-HL-CW");
+    add.run("60002", "2", "FBL-CBL-20");
+    add.run("60003", "1", "20-71013-A");
+
+    const line = async so => (await request(app).get("/backlog").set(floor).expect(200)).body.sos.find(s => s.so === so);
+
+    assert.equal((await line("60001")).lineGroup, "Team B");
+    assert.equal((await line("60002")).lineGroup, "Team A");
+    assert.equal((await line("60003")).lineGroup, "Other", "loose parts match no prefix");
+
+    await request(app).put("/backlog/notes/60003").set(floor).send({ by: "Bill", lineOverride: "Team Z" }).expect(400);
+    await request(app).put("/backlog/notes/60003").set(floor).send({ by: "Bill", lineOverride: "Team B" }).expect(200);
+
+    const set = await line("60003");
+
+    assert.equal(set.lineGroup, "Team B");
+    assert.equal(set.lineAuto, "Other");
+    assert.equal(set.lineOverride, "Team B");
+    assert.ok((await request(app).get("/backlog/notes/60003/history").set(floor)).body.history.some(h => h.field === "line_override" && h.new_value === "Team B"));
+
+    await request(app).put("/backlog/notes/60003").set(floor).send({ by: "Bill", lineOverride: "" }).expect(200);
+    assert.equal((await line("60003")).lineGroup, "Other", "blank = back to automatic");
+
+    await request(app).put("/admin/backlog/line-key").set(floor).send({ by: "x", text: "WPX-\tTeam A" }).expect(403);
+    await request(app).put("/admin/backlog/line-key").set(admin).send({ by: "Bill", text: "Prefix\tLine\nWPX-\tTeam Q" }).expect(400);
+    await request(app).put("/admin/backlog/line-key").set(admin).send({ by: "Bill", text: "Prefix\tLine\nWPX-\tTeam A\n20-\tTeam B" }).expect(200);
+
+    assert.equal((await line("60001")).lineGroup, "Team A", "the new key applies at once");
+    assert.equal((await line("60003")).lineGroup, "Team B");
+    assert.equal((await line("60002")).lineGroup, "Other", "PLL- and FBL- are no longer in the key");
+
+});

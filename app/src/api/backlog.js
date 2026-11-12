@@ -44,3 +44,5 @@ export const importBacklogNotes = (text, by) => call("/admin/backlog/notes/impor
 export const getRepChannels = () => call("/backlog/rep-channels");
 export const saveRepChannels = (text, by) => call("/admin/backlog/rep-channels", { method: "PUT", body: { text, by } });
 export const pullShipReport = () => call("/admin/backlog/ship-report/pull", { method: "POST", body: {} });
+export const getLineKey = () => call("/backlog/line-key");
+export const saveLineKey = (text, by) => call("/admin/backlog/line-key", { method: "PUT", body: { text, by } });

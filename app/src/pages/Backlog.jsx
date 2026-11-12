@@ -11,7 +11,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import useClock from "../hooks/useClock";
 
-import { clearBacklogNote, getBacklog, pullShipReport, getBacklogHistory, getRepChannels, importBacklogNotes, saveBacklogNote, saveRepChannels } from "../api/backlog";
+import { clearBacklogNote, getBacklog, getLineKey, pullShipReport, saveLineKey, getBacklogHistory, getRepChannels, importBacklogNotes, saveBacklogNote, saveRepChannels } from "../api/backlog";
 import { downloadCsv } from "../utils/csv";
 import { labelSx, tokens } from "../theme/theme";
 
@@ -145,13 +145,13 @@ function OrderRow({ s, onOpen }) {
 
 }
 
-const FIELD_LABEL = { recovery_date: "Recovery date", material_clear_date: "Material clear date", ops_comment: "Ops comment", sales_note: "Sales note" };
+const FIELD_LABEL = { line_override: "Line", recovery_date: "Recovery date", material_clear_date: "Material clear date", ops_comment: "Ops comment", sales_note: "Sales note" };
 
 function Detail({ s, onClose, onSaved }) {
 
     const n = s.note || {};
     const [by, setBy] = useState(storedName());
-    const [form, setForm] = useState({ recoveryDate: n.recovery_date || "", opsComment: n.ops_comment || "", salesNote: n.sales_note || "" });
+    const [form, setForm] = useState({ recoveryDate: n.recovery_date || "", lineOverride: n.line_override || "", opsComment: n.ops_comment || "", salesNote: n.sales_note || "" });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [history, setHistory] = useState([]);
@@ -190,7 +190,12 @@ function Detail({ s, onClose, onSaved }) {
 
             <Box sx={{ px: 2.5, py: 2, borderBottom: `1px solid ${tokens.line}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
                 <TextField label="Recovery date" type="date" size="small" value={form.recoveryDate} onChange={set("recoveryDate")} slotProps={{ inputLabel: { shrink: true } }} />
-                <Box sx={{ color: tokens.muted, fontSize: 12, alignSelf: "center" }}>Comments, recovery date and SO note come from the Ship Report when they change there; edits here stay until the sheet changes again.</Box>
+                <TextField select label="Line" size="small" value={form.lineOverride} onChange={set("lineOverride")} helperText={form.lineOverride ? `Set by hand · automatic would be ${s.lineAuto || "Other"}` : "From the items (or the Line key)"}
+                    slotProps={{ inputLabel: { shrink: true }, select: { displayEmpty: true } }}>
+                    <MenuItem value="">Automatic ({s.lineAuto || "Other"})</MenuItem>
+                    {["Team A", "Team B", "SpaceX", "Other"].map(l => <MenuItem key={l} value={l}>{l}</MenuItem>)}
+                </TextField>
+                <Box sx={{ gridColumn: "1 / -1", color: tokens.muted, fontSize: 12 }}>Comments, recovery date and SO note come from the Ship Report when they change there; edits here stay until the sheet changes again.</Box>
                 <TextField label="Ops comment (Ship Report comments)" size="small" multiline minRows={2} value={form.opsComment} onChange={set("opsComment")} sx={{ gridColumn: "1 / -1" }} slotProps={{ htmlInput: { maxLength: 1000 } }} />
                 <TextField label="Sales note (customer view · Ship Report SO note)" size="small" multiline minRows={2} value={form.salesNote} onChange={set("salesNote")} sx={{ gridColumn: "1 / -1" }}
                     placeholder="e.g. Stocking order, customer OK until 12/1 · Holding installation, need ASAP" slotProps={{ htmlInput: { maxLength: 1000 } }} />
@@ -328,6 +333,48 @@ function RepKeyDialog({ open, onClose, onDone, unmapped }) {
 
 }
 
+// Accessory line key (Nov 12 2026): item prefix → line for orders that hold
+// only accessories / parts. Admin pastes "prefix <tab> line"; replaces all.
+function LineKeyDialog({ open, onClose, onDone }) {
+
+    const [text, setText] = useState("");
+    const [by, setBy] = useState(storedName());
+    const [rows, setRows] = useState([]);
+    const [msg, setMsg] = useState(null);
+
+    useEffect(() => { if (open) getLineKey().then(r => { setRows(r.prefixes); setText(["Prefix\tLine", ...r.prefixes.map(p => `${p.prefix}\t${p.line_group}`)].join("\n")); }).catch(() => setRows([])); }, [open]);
+
+    const run = async () => {
+
+        setMsg(null);
+
+        try { const r = await saveLineKey(text, by.trim()); setMsg({ ok: true, text: `Saved ${r.prefixes} prefixes.` }); setRows((await getLineKey()).prefixes); onDone(); }
+
+        catch (err) { setMsg({ ok: false, text: [err.message, ...(err.data?.errors || []).slice(0, 8)].join(" · ") }); }
+
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle>Accessory line key</DialogTitle>
+            <DialogContent>
+                <Box sx={{ color: tokens.muted, fontSize: 13.5, mb: 1 }}>
+                    Orders with only accessories or parts (leaders, jumpers, caps, controls) match no fixture family. An item that isn't a fixture takes the line of the <b>longest prefix</b> below. One per row: prefix <i>tab</i> line (Team A, Team B, SpaceX, Other). Saving <b>replaces the whole key</b>. A single SO can also be set in its detail drawer.
+                </Box>
+                <TextField multiline minRows={8} fullWidth value={text} onChange={e => setText(e.target.value)} slotProps={{ htmlInput: { style: { fontFamily: tokens.mono, fontSize: 13 } } }} />
+                <TextField label="Your name" size="small" value={by} onChange={e => setBy(e.target.value)} sx={{ mt: 1.5 }} />
+                {msg && <Alert severity={msg.ok ? "success" : "error"} sx={{ mt: 1.5 }}>{msg.text}</Alert>}
+                <Box sx={{ color: tokens.muted, fontSize: 12, mt: 1 }}>{rows.length} prefixes in use.</Box>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Close</Button>
+                <Button variant="contained" disabled={!text.trim() || !by.trim()} onClick={run}>Replace key</Button>
+            </DialogActions>
+        </Dialog>
+    );
+
+}
+
 // Ship Report sync (Nov 12 2026): last read, changes, errors; admin pull.
 function ShipReportStatus({ sr, isAdmin, onPulled }) {
 
@@ -384,6 +431,7 @@ function Backlog() {
     const [open, setOpen] = useState(null);
     const [importing, setImporting] = useState(false);
     const [repKeyOpen, setRepKeyOpen] = useState(false);
+    const [lineKeyOpen, setLineKeyOpen] = useState(false);
     const [customer, setCustomer] = useState(null);
     const [withSpaceX, setWithSpaceX] = useState(true);
     const [withWalmart, setWithWalmart] = useState(true);
@@ -491,6 +539,7 @@ function Backlog() {
                             <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />} disabled={loading} onClick={() => load(true)}>Refresh</Button>
                             <ShipReportStatus sr={data.shipReport} isAdmin={isAdmin} onPulled={() => load(false)} />
                             {isAdmin && <Button size="small" startIcon={<UploadIcon />} onClick={() => setImporting(true)}>Import notes</Button>}
+                            {isAdmin && <Button size="small" onClick={() => setLineKeyOpen(true)}>Line key</Button>}
                             {isAdmin && <Button size="small" onClick={() => setRepKeyOpen(true)}>Rep key{data.repKey?.unmappedReps?.length ? ` (${data.repKey.unmappedReps.length} missing)` : ""}</Button>}
                         </Box>
 
@@ -562,6 +611,7 @@ function Backlog() {
             </Drawer>
 
             <ImportDialog open={importing} onClose={() => setImporting(false)} onDone={() => load(false)} />
+            <LineKeyDialog open={lineKeyOpen} onClose={() => setLineKeyOpen(false)} onDone={() => load(false)} />
             <RepKeyDialog open={repKeyOpen} onClose={() => setRepKeyOpen(false)} onDone={() => load(false)} unmapped={data?.repKey?.unmappedReps} />
 
             <Footer />
