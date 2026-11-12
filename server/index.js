@@ -3870,6 +3870,31 @@ if (require.main === module) {
 
         qbBom.start();
 
+        // Weekly "all systems OK" post in #mos-system (Director, Nov 11 2026).
+        require("./services/weeklyHealth").createWeeklyHealth({
+            db,
+            qbBom,
+            offsiteStatus: require("./services/offsiteBackup").offsiteStatus,
+            postSystem: text => require("./services/slack").postSystemToSlack(text),
+            channels: () => {
+                const slack = require("./services/slack").slackConfig;
+                const groups = require("./services/telegramGroups").groupConfig;
+                const prod = notificationsEnabled();
+                return {
+                    "Slack #andon-alerts": Boolean(slack("andon")),
+                    "Slack #safety-near-miss": Boolean(slack("nearMiss")),
+                    "Slack #bom-changes": Boolean(slack("bom")),
+                    "Slack #mos-system": Boolean(slack("system")),
+                    ...(prod ? {
+                        "Telegram ANDON": Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+                        "Telegram Near Miss": Boolean(groups("nearMiss")),
+                        "Telegram BOM": Boolean(groups("bom"))
+                    } : {})
+                };
+            },
+            escalationMode: () => (isLive(statements) ? "LIVE in Slack" : "shadow (nothing sent)")
+        }).start();
+
         console.log(require("./services/slack").describeSlack());
         console.log(require("./services/telegramGroups").describeTelegramGroups());
 
