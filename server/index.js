@@ -153,6 +153,9 @@ app.use(mrpRoutes(qbBom));
 app.use(inventoryRoutes(qbBom));
 const backlogRouter = backlogRoutes(qbBom, db);
 
+// SKU History (invoiced units by month): routes/skuHistory.js
+app.use(require("./routes/skuHistory").skuHistoryRoutes(qbBom, db));
+
 app.use(backlogRouter);
 
 // Slack buttons (S2): signed requests only; routes/slack.js

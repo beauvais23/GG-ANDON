@@ -9,6 +9,7 @@ export const PAGES = [
     { path: "/backlog", name: "Backlog Status Report", title: "Backlog Status Report" },
     { path: "/mrp", name: "Material check", title: "Material check" },
     { path: "/inventory", name: "Inventory search", title: "Inventory search" },
+    { path: "/sku-history", name: "SKU History", title: "SKU History" },
     { path: "/wallboard", name: "TV Wallboard", title: "Wallboard" },
     { path: "/executive", name: "Executive Dashboard", title: "Executive" },
     { path: "/admin", name: "Admin", title: "Administration" }
