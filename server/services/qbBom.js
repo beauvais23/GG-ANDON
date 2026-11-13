@@ -54,6 +54,10 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
         insertItem: db.prepare(`INSERT OR REPLACE INTO qb_items (full_name, type, description, uom, active, on_hand, time_modified, on_order,
             part_number, purchase_description, preferred_vendor, on_sales_order, reorder_point, item_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
         replaceBomAll: db.prepare("DELETE FROM qb_bom_all"),
+        clearInvoices: db.prepare("DELETE FROM qb_invoice_months"),
+        addInvoice: db.prepare(`INSERT INTO qb_invoice_months (customer, item, month, qty) VALUES (?, ?, ?, ?)
+            ON CONFLICT (customer, item, month) DO UPDATE SET qty = qty + excluded.qty`),
+        countInvoices: db.prepare("SELECT COUNT(*) AS n FROM qb_invoice_months"),
         insertBomAll: db.prepare("INSERT OR REPLACE INTO qb_bom_all (assembly, line, component, qty, uom) VALUES (?, ?, ?, ?, ?)"),
         countBomAll: db.prepare("SELECT COUNT(*) AS n FROM qb_bom_all"),
         parents: db.prepare("SELECT assembly, qty FROM qb_bom_all WHERE component = ? ORDER BY assembly, line"),
@@ -190,6 +194,67 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
         }).finally(() => { bomAllRunning = null; });
 
         return bomAllRunning;
+
+    }
+
+    //--------------------------------------------------
+    // SKU History (Nov 13 2026): invoiced units per customer, item
+    // and month for the last 24 months, summed by QuickBooks; replaced
+    // whole, a failed pull keeps the last copy.
+    //--------------------------------------------------
+
+    const HISTORY_MONTHS = 24;
+    let invoicesRunning = null;
+
+    function historyStart(t = now()) {
+
+        const [y, m] = new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" }).split("-").map(Number);
+        const k = y * 12 + (m - 1) - (HISTORY_MONTHS - 1);
+
+        return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}-01`;
+
+    }
+
+    function refreshInvoices() {
+
+        if (invoicesRunning)
+            return invoicesRunning;
+
+        invoicesRunning = logged("invoices", async () => {
+
+            const from = historyStart();
+            const rows = await cdata.queryAll(
+                `SELECT CustomerName, ItemName, YEAR(InvoiceDate) AS y, MONTH(InvoiceDate) AS m, SUM(QtyShipped) AS q FROM ${s}.[Company_InvoiceLines] `
+                + `WHERE InvoiceDate >= ${cdata.lit(from)} AND ItemName IS NOT NULL AND ItemName <> '' AND ItemName NOT LIKE 'S&H%' `
+                + "GROUP BY CustomerName, ItemName, YEAR(InvoiceDate), MONTH(InvoiceDate) ORDER BY CustomerName, ItemName, YEAR(InvoiceDate), MONTH(InvoiceDate)",
+                query
+            );
+
+            if (!rows.length)
+                throw new Error("QuickBooks returned no invoice lines; kept the last copy.");
+
+            db.transaction(() => {
+
+                st.clearInvoices.run();
+
+                for (const r of rows) {
+
+                    const qty = Number(r.q) || 0;
+
+                    if (!r.ItemName || !qty || /returns\s*&\s*warranty/i.test(r.CustomerName || ""))
+                        continue;
+
+                    st.addInvoice.run(String(r.CustomerName || "(no customer)"), r.ItemName, `${r.y}-${String(r.m).padStart(2, "0")}`, qty);
+
+                }
+
+            })();
+
+            return rows.length;
+
+        }).finally(() => { invoicesRunning = null; });
+
+        return invoicesRunning;
 
     }
 
@@ -517,7 +582,10 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
             bomLast: st.last.get("bom") || null,
             bomAll: st.countBomAll.get().n,
             bomAllOk: st.lastOk.get("bom_all") || null,
-            bomAllLast: st.last.get("bom_all") || null
+            bomAllLast: st.last.get("bom_all") || null,
+            invoices: st.countInvoices.get().n,
+            invoicesOk: st.lastOk.get("invoices") || null,
+            invoicesLast: st.last.get("invoices") || null
         };
 
     }
@@ -565,6 +633,17 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
                         console.error(`QuickBooks item refresh failed: ${err.message}`);
                         warnSystem(`⚠️ ManufacturingOS could not read QuickBooks (item list): ${String(err.message).slice(0, 300)}. BOM viewer, Inventory search and Material check show the last good data. Check the CData connection.`);
+
+                    }
+                );
+
+            if (stale("invoices"))
+                refreshInvoices().then(
+                    n => console.log(`QuickBooks invoice history refreshed (SKU History): ${n} rows`),
+                    err => {
+
+                        console.error(`QuickBooks invoice history refresh failed: ${err.message}`);
+                        warnSystem(`⚠️ ManufacturingOS could not read QuickBooks (invoice history for SKU History): ${String(err.message).slice(0, 300)}. SKU History shows the last good copy.`);
 
                     }
                 );
@@ -640,7 +719,7 @@ function createQbBom({ db, query = cdata.query, now = () => Date.now() }) {
 
     }
 
-    return { backlogInputs, refreshItems, refreshAllBoms, searchIndex, itemOf, parentsOf, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf, warnSystem };
+    return { backlogInputs, refreshItems, refreshAllBoms, refreshInvoices, historyStart, searchIndex, itemOf, parentsOf, refreshOrders, loadTrees, mrpInputs, getBom, assemblies, status, start, lineGroupOf, warnSystem };
 
 }
 

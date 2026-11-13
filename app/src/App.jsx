@@ -18,6 +18,7 @@ import BomViewer from "./pages/BomViewer";
 import BomRequests from "./pages/BomRequests";
 import MaterialCheck from "./pages/MaterialCheck";
 import InventorySearch from "./pages/InventorySearch";
+import SkuHistory from "./pages/SkuHistory";
 import Backlog from "./pages/Backlog";
 import StagingBanner from "./components/StagingBanner";
 import { useAlert } from "./context/AlertContext";
@@ -124,6 +125,15 @@ function App() {
                 element={
                     <ProtectedRoute>
                         <InventorySearch />
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/sku-history"
+                element={
+                    <ProtectedRoute>
+                        <SkuHistory />
                     </ProtectedRoute>
                 }
             />
