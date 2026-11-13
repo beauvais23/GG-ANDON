@@ -68,6 +68,34 @@ test("item view: direct invoices by customer + usage through shipped assemblies 
 
 });
 
+test("group view: SpaceX = GIGA/TERA/DECA + digit (no CNTL panels), Walmart = WMT anywhere; items and customers across all customers", () => {
+
+    const { groupView } = require("../services/skuHistory");
+    const rows = [
+        { customer: "SpaceX", item: "GIGA8-TRI-48K-480V", month: "2026-09", qty: 10 },
+        { customer: "SpaceX", item: "GIGA8-VERT-48K-DIM-480V", month: "2026-10", qty: 4 },
+        { customer: "Other", item: "TERA1-48K-480V", month: "2026-10", qty: 2 },
+        { customer: "SpaceX", item: "DECA8-SO-48K-480V", month: "2026-08", qty: 6 },
+        { customer: "SpaceX", item: "GIGA-CNTL-NLIGHT-PANEL", month: "2026-10", qty: 1 },
+        { customer: "SpaceX", item: "GIGABYTE-CABLE", month: "2026-10", qty: 9 },
+        { customer: "Loeb Electric", item: "VPX4-40K-277V-WMT", month: "2026-10", qty: 100 },
+        { customer: "Walmart", item: "WPX-WMT-LDR", month: "2026-09", qty: 7 },
+        { customer: "Loeb Electric", item: "VPX4-40K-277V", month: "2026-10", qty: 50 }
+    ];
+    const sx = groupView({ group: "spacex", rows, months: MONTHS, today: TODAY });
+
+    assert.deepEqual(sx.items.map(r => r.item).sort(), ["DECA8-SO-48K-480V", "GIGA8-TRI-48K-480V", "GIGA8-VERT-48K-DIM-480V", "TERA1-48K-480V"]);
+    assert.equal(sx.totals.total, 22);
+    assert.deepEqual(sx.customers.map(r => [r.customer, r.total]), [["SpaceX", 20], ["Other", 2]]);
+
+    const w = groupView({ group: "walmart", rows, months: MONTHS, today: TODAY });
+
+    assert.deepEqual(w.items.map(r => [r.item, r.total]), [["VPX4-40K-277V-WMT", 100], ["WPX-WMT-LDR", 7]]);
+    assert.deepEqual(w.customers.map(r => r.customer), ["Loeb Electric", "Walmart"]);
+    assert.equal(groupView({ group: "nope", rows, months: MONTHS, today: TODAY }), null);
+
+});
+
 const { app } = loadApp();
 const { db } = require("../database");
 let floor;
@@ -115,6 +143,13 @@ test("routes: customer list, customer and item views (any login), 13 or 24 month
     await request(app).get("/sku-history/customer").query({ name: "Nobody" }).set(floor).expect(404);
     await request(app).get("/sku-history/item").query({ name: "NOPE-123" }).set(floor).expect(404);
     await request(app).post("/admin/sku-history/refresh").set(floor).expect(403);
+
+    const g = await request(app).get("/sku-history/group").query({ name: "walmart" }).set(floor).expect(200);
+
+    assert.equal(g.body.totals.total, 155);
+    assert.deepEqual(g.body.customers.map(r => r.customer), ["Loeb Electric", "Acme Wash"]);
+    await request(app).get("/sku-history/group").query({ name: "spacex" }).set(floor).expect(200);
+    await request(app).get("/sku-history/group").query({ name: "x" }).set(floor).expect(400);
 
 });
 

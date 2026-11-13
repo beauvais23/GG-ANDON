@@ -10,7 +10,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import useClock from "../hooks/useClock";
 
-import { getCustomerHistory, getHistoryCustomers, getItemHistory, refreshSkuHistory } from "../api/skuHistory";
+import { getCustomerHistory, getGroupHistory, getHistoryCustomers, getItemHistory, refreshSkuHistory } from "../api/skuHistory";
 import { searchInventory } from "../api/inventory";
 import { downloadCsv } from "../utils/csv";
 import { labelSx, tokens } from "../theme/theme";
@@ -142,6 +142,41 @@ function CustomerView({ data, onOpenItem }) {
 
 }
 
+const GROUP_CHIPS = [{ key: "spacex", label: "SpaceX lights" }, { key: "walmart", label: "Walmart (WMT)" }];
+
+function GroupView({ data, onOpenItem, onOpenCustomer }) {
+
+    const csv = () => downloadCsv(`sku-history-${data.group}.csv`, [
+        { label: "SKU", key: "item" }, { label: "Description", key: "description" }, ...monthCols(data.months), ...statCols
+    ], [...data.items, { item: "TOTAL", ...data.totals }]);
+    const csvCustomers = () => downloadCsv(`sku-history-${data.group}-customers.csv`, [
+        { label: "Customer", key: "customer" }, ...monthCols(data.months), ...statCols
+    ], [...data.customers, { customer: "TOTAL", ...data.totals }]);
+
+    return (
+        <Box>
+            <Box sx={{ px: 2.25, py: 1.75, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 1.25 }}>
+                <Tile label="SKUs invoiced" value={data.items.length} />
+                <Tile label="Units, last 12 complete mo" value={num(data.totals.last12)} />
+                <Tile label="6-mo avg / month" value={num(data.totals.avg6)} accent={tokens.blue} />
+                <Tile label="Annualized (6-mo avg × 12)" value={num(data.totals.eau)} />
+            </Box>
+            {!data.items.length && <Box sx={{ px: 2.25, pb: 2, color: tokens.muted }}>No units invoiced in this window.</Box>}
+            {data.items.length > 0 && (
+                <>
+                    <Section title={`Invoiced units by month · ${data.label}`} note="All customers. Click a SKU for its full history." onCsv={csv}>
+                        <MonthTable months={data.months} rows={data.items} nameLabel="SKU" name={r => r.item} totals={data.totals} onOpen={onOpenItem} />
+                    </Section>
+                    <Section title="Same units by customer" onCsv={csvCustomers}>
+                        <MonthTable months={data.months} rows={data.customers} nameLabel="Customer" name={r => r.customer} totals={data.totals} onOpen={onOpenCustomer} />
+                    </Section>
+                </>
+            )}
+        </Box>
+    );
+
+}
+
 function ItemView({ data, onOpenItem, onOpenCustomer }) {
 
     const csv = () => {
@@ -209,7 +244,8 @@ export default function SkuHistory() {
 
     const customer = params.get("customer") || "";
     const item = params.get("item") || "";
-    const mode = item ? "item" : (params.get("mode") === "item" ? "item" : "customer");
+    const group = GROUP_CHIPS.some(g => g.key === params.get("group")) ? params.get("group") : "";
+    const mode = item ? "item" : group ? "group" : (["item", "group"].includes(params.get("mode")) ? params.get("mode") : "customer");
     const months = params.get("months") === "24" ? 24 : 13;
 
     const [customers, setCustomers] = useState(null);
@@ -225,9 +261,10 @@ export default function SkuHistory() {
     const setParam = useCallback(next => {
 
         const p = new URLSearchParams();
-        const merged = { mode, customer, item, months: String(months), ...next };
+        const merged = { mode, customer, item, group, months: String(months), ...next };
 
-        if (merged.mode === "item") {
+        if (merged.mode === "group") p.set("group", merged.group || "spacex");
+        else if (merged.mode === "item") {
 
             p.set("mode", "item");
             if (merged.item) p.set("item", merged.item);
@@ -237,7 +274,7 @@ export default function SkuHistory() {
         if (merged.months === "24") p.set("months", "24");
         setParams(p);
 
-    }, [mode, customer, item, months, setParams]);
+    }, [mode, customer, item, group, months, setParams]);
 
     const loadCustomers = useCallback(() => getHistoryCustomers()
         .then(r => { setCustomers(r.customers); setMeta({ asOf: r.asOf, rows: r.rows, error: r.error }); })
@@ -245,7 +282,7 @@ export default function SkuHistory() {
 
     useEffect(() => { loadCustomers(); }, [loadCustomers]);
 
-    const target = mode === "item" ? item : customer;
+    const target = mode === "item" ? item : mode === "group" ? group : customer;
 
     useEffect(() => {
 
@@ -255,7 +292,7 @@ export default function SkuHistory() {
 
         setLoading(true);
         setError("");
-        (mode === "item" ? getItemHistory(target, months) : getCustomerHistory(target, months))
+        (mode === "item" ? getItemHistory(target, months) : mode === "group" ? getGroupHistory(target, months) : getCustomerHistory(target, months))
             .then(r => { if (live) setData({ ...r, mode }); })
             .catch(e => { if (live) { setData(null); setError(e.message); } })
             .finally(() => { if (live) setLoading(false); });
@@ -309,9 +346,16 @@ export default function SkuHistory() {
                     <Box sx={{ display: "flex", gap: 1 }}>
                         <Chip label="By customer" color={mode === "customer" ? "primary" : "default"} variant={mode === "customer" ? "filled" : "outlined"} onClick={() => setParam({ mode: "customer", item: "" })} />
                         <Chip label="By part / SKU" color={mode === "item" ? "primary" : "default"} variant={mode === "item" ? "filled" : "outlined"} onClick={() => setParam({ mode: "item" })} />
+                        <Chip label="By product group" color={mode === "group" ? "primary" : "default"} variant={mode === "group" ? "filled" : "outlined"} onClick={() => setParam({ mode: "group", item: "" })} />
                     </Box>
 
-                    <Box sx={{ flex: 1, minWidth: 260, maxWidth: 560 }}>
+                    {mode === "group" && (
+                        <Box sx={{ display: "flex", gap: 1, flex: 1, minWidth: 260 }}>
+                            {GROUP_CHIPS.map(g => <Chip key={g.key} label={g.label} variant={group === g.key ? "filled" : "outlined"} color={group === g.key ? "primary" : "default"} onClick={() => setParam({ group: g.key })} />)}
+                        </Box>
+                    )}
+
+                    <Box sx={{ flex: 1, minWidth: 260, maxWidth: 560, display: mode === "group" ? "none" : "block" }}>
                         {mode === "customer"
                             ? (
                                 <Autocomplete options={customers || []} loading={!customers} value={selectedCustomer}
@@ -361,9 +405,10 @@ export default function SkuHistory() {
                 <Box component="section" aria-label="History" sx={{ bgcolor: tokens.panel, border: `1px solid ${tokens.line}`, minWidth: 0 }}>
                     {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
                     {meta && !meta.asOf && <Alert severity="info" sx={{ m: 2 }}>Invoice history hasn't loaded yet.{isAdmin ? " Press Refresh." : " An admin can press Refresh."}</Alert>}
-                    {!target && !error && <Box sx={{ p: 3, color: tokens.muted }}>{mode === "customer" ? "Pick a customer to see invoiced units by month." : "Pick a part number or SKU to see its usage by month and its Estimated Annual Usage."}</Box>}
+                    {!target && !error && <Box sx={{ p: 3, color: tokens.muted }}>{mode === "group" ? "Pick a product group." : mode === "customer" ? "Pick a customer to see invoiced units by month." : "Pick a part number or SKU to see its usage by month and its Estimated Annual Usage."}</Box>}
                     {loading && <Box sx={{ p: 3 }}><CircularProgress size={22} /></Box>}
                     {!loading && data?.mode === "customer" && <CustomerView data={data} onOpenItem={openItem} />}
+                    {!loading && data?.mode === "group" && <GroupView data={data} onOpenItem={openItem} onOpenCustomer={openCustomer} />}
                     {!loading && data?.mode === "item" && <ItemView data={data} onOpenItem={openItem} onOpenCustomer={openCustomer} />}
                 </Box>
 
