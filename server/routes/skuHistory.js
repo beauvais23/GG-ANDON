@@ -1,7 +1,7 @@
 const express = require("express");
 
 const { authenticateToken, requireAdmin } = require("../middleware/auth");
-const { customerView, itemView, monthList } = require("../services/skuHistory");
+const { customerView, itemView, monthList, groupView, GROUPS } = require("../services/skuHistory");
 const { dateNY } = require("../services/nyTime");
 
 //------------------------------------------------------
@@ -21,7 +21,8 @@ function skuHistoryRoutes(qbBom, db) {
         customers: db.prepare(`SELECT customer, SUM(qty) AS units, COUNT(DISTINCT item) AS items, MAX(month) AS last_month
             FROM qb_invoice_months GROUP BY customer ORDER BY customer`),
         ofCustomer: db.prepare("SELECT item, month, qty FROM qb_invoice_months WHERE customer = ?"),
-        ofItem: db.prepare("SELECT customer, month, qty FROM qb_invoice_months WHERE item = ?")
+        ofItem: db.prepare("SELECT customer, month, qty FROM qb_invoice_months WHERE item = ?"),
+        all: db.prepare("SELECT customer, item, month, qty FROM qb_invoice_months")
     };
 
     const window = q => (WINDOWS.includes(Number(q)) ? Number(q) : 13);
@@ -65,6 +66,20 @@ function skuHistoryRoutes(qbBom, db) {
         const view = itemView({ item: name, rowsOfItem: n => st.ofItem.all(n), parentsOf: qbBom.parentsOf, months: monthList(today, window(req.query.months)), today, describe });
 
         res.json({ success: true, ...view, onHand: it?.on_hand ?? null, onOrder: it?.on_order ?? null, type: it?.type || null, ...meta() });
+
+    });
+
+    // SpaceX lights / Walmart (WMT): every SKU in the group, all customers.
+    router.get("/sku-history/group", authenticateToken, (req, res) => {
+
+        const group = String(req.query.name || "");
+
+        if (!GROUPS[group])
+            return res.status(400).json({ success: false, message: `Group must be one of: ${Object.keys(GROUPS).join(", ")}.` });
+
+        const today = dateNY(Date.now());
+
+        res.json({ success: true, ...groupView({ group, rows: st.all.all(), months: monthList(today, window(req.query.months)), today, describe }), ...meta() });
 
     });
 

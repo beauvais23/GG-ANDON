@@ -185,4 +185,34 @@ function itemView({ item, rowsOfItem, parentsOf, months, today, describe = () =>
 
 }
 
-module.exports = { monthList, rowStats, customerView, itemView, ancestorsOf };
+// Product groups (Director, Nov 13 2026): one page per group, every
+// customer. SpaceX lights = GIGA / TERA / DECA fixture SKUs (prefix then
+// a digit, as on the hour-by-hour board, so GIGA-CNTL-… panels are out);
+// Walmart = any part number containing WMT (as on the Backlog page).
+const GROUPS = {
+    spacex: { label: "SpaceX lights (GIGA, TERA, DECA)", match: item => /^(GIGA|TERA|DECA)\d/i.test(item) && !/CNTL/i.test(item) },
+    walmart: { label: "Walmart (WMT)", match: item => /WMT/i.test(item) }
+};
+
+// Group view: items in the group across all customers, plus the same
+// units by customer.
+function groupView({ group, rows, months, today, describe = () => null }) {
+
+    const g = GROUPS[group];
+
+    if (!g)
+        return null;
+
+    const mine = rows.filter(r => g.match(r.item));
+    const byItem = customerView({ rows: mine, months, today, describe });
+    const byCustomer = customerView({ rows: mine.map(r => ({ item: r.customer, month: r.month, qty: r.qty })), months, today });
+
+    return {
+        group, label: g.label, months,
+        items: byItem.items, totals: byItem.totals,
+        customers: byCustomer.items.map(({ item, description, ...rest }) => ({ customer: item, ...rest }))
+    };
+
+}
+
+module.exports = { monthList, rowStats, customerView, itemView, ancestorsOf, groupView, GROUPS };

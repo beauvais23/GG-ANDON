@@ -40,5 +40,6 @@ const q = (name, months) => `name=${encodeURIComponent(name)}&months=${months}`;
 
 export const getHistoryCustomers = () => call("/sku-history/customers");
 export const getCustomerHistory = (name, months) => call(`/sku-history/customer?${q(name, months)}`);
+export const getGroupHistory = (name, months) => call(`/sku-history/group?${q(name, months)}`);
 export const getItemHistory = (name, months) => call(`/sku-history/item?${q(name, months)}`);
 export const refreshSkuHistory = () => call("/admin/sku-history/refresh", { method: "POST" });
